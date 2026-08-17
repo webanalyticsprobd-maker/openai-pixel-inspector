@@ -1,8 +1,8 @@
 /**
- * OpenAI Ads Pixel Inspector - Generic Parameter Validation Engine
+ * OpenAI Ads Pixel Inspector - Strict Generic Parameter Validation Engine
  * 
- * Validates individual parameters, arrays, and objects against declarative schemas.
- * Severities: 'valid' (✅), 'warning' (⚠️), 'error' (❌), 'info' (ℹ️)
+ * Validates individual parameters, arrays, and objects against official OpenAI Ads schemas.
+ * Strictly flags all violations as 'error' (❌) according to the official documentation.
  */
 
 import { ISO_CURRENCIES, CONTENT_ITEM_SCHEMA } from './schemas.js';
@@ -19,19 +19,11 @@ import { ISO_CURRENCIES, CONTENT_ITEM_SCHEMA } from './schemas.js';
 export function validateParameter(paramName, paramValue, rule = {}, allParams = {}) {
   // 1. Check for Null or Undefined
   if (paramValue === null) {
-    if (rule.required) {
-      return {
-        valid: false,
-        severity: 'error',
-        code: 'PARAM_NULL_REQUIRED',
-        message: `Required parameter "${paramName}" is null.`
-      };
-    }
     return {
       valid: false,
-      severity: 'warning',
+      severity: 'error',
       code: 'PARAM_NULL',
-      message: `Parameter "${paramName}" was provided with null value.`
+      message: `Parameter "${paramName}" cannot be null.`
     };
   }
 
@@ -52,13 +44,13 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     };
   }
 
-  // 2. Check for Unsupported / Unknown Parameter
+  // 2. Check for Unsupported / Unknown Parameter on Standard Events
   if (!rule || Object.keys(rule).length === 0) {
     return {
-      valid: true,
-      severity: 'info',
-      code: 'PARAM_UNOFFICIAL_EXTRA',
-      message: `Custom or non-standard parameter "${paramName}". Will be captured as custom payload.`
+      valid: false,
+      severity: 'warning',
+      code: 'PARAM_UNSUPPORTED',
+      message: `"${paramName}" is not a recognized standard OpenAI Ads Pixel parameter.`
     };
   }
 
@@ -70,12 +62,12 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     }
   }
 
-  // 4. Expected Fixed Value (e.g. type: 'contents')
+  // 4. Expected Fixed Value (e.g. type: 'contents', 'customer_action', 'plan_enrollment', 'custom')
   if (rule.expected !== undefined && paramValue !== rule.expected) {
     return {
       valid: false,
       severity: 'error',
-      code: 'PARAM_INVALID_EXPECTED_VALUE',
+      code: 'PARAM_INVALID_DATA_SHAPE_TYPE',
       message: `Parameter "${paramName}" must be exactly "${rule.expected}", got "${paramValue}".`
     };
   }
@@ -101,7 +93,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         };
       }
       
-      // Strictly detect and flag major unit values as errors (e.g. sending 350 for $350 instead of 35000)
+      // Strictly detect major unit values as errors (e.g. sending 350 for $350 instead of 35000)
       if (paramValue > 0 && paramValue < 1000) {
         return {
           valid: false,
@@ -116,57 +108,57 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
   // 6. String Rules & Empty Strings
   if (rule.type === 'string') {
     if (typeof paramValue === 'string' && paramValue.trim() === '') {
-      if (rule.required) {
-        return {
-          valid: false,
-          severity: 'error',
-          code: 'PARAM_EMPTY_STRING_REQUIRED',
-          message: `Required parameter "${paramName}" cannot be an empty string.`
-        };
-      }
       return {
         valid: false,
-        severity: 'warning',
+        severity: 'error',
         code: 'PARAM_EMPTY_STRING',
-        message: `Parameter "${paramName}" is an empty string.`
+        message: `Parameter "${paramName}" cannot be an empty string.`
       };
     }
   }
 
-  // 7. Format Checks (Currency, Hashes, etc.)
+  // 7. Currency Format Checks (ISO 4217)
   if (rule.format === 'currency') {
     if (typeof paramValue !== 'string') {
       return {
         valid: false,
         severity: 'error',
         code: 'PARAM_CURRENCY_INVALID_TYPE',
-        message: `Currency must be a 3-letter uppercase ISO code (e.g., "USD").`
+        message: `Currency must be a 3-letter uppercase ISO 4217 string (e.g., "USD").`
       };
     }
     const clean = paramValue.trim().toUpperCase();
     if (!ISO_CURRENCIES.has(clean)) {
       return {
         valid: false,
-        severity: 'warning',
-        code: 'PARAM_CURRENCY_UNKNOWN_CODE',
-        message: `"${paramValue}" is not a recognized ISO 4217 3-letter currency code.`
+        severity: 'error',
+        code: 'PARAM_CURRENCY_INVALID_FORMAT',
+        message: `"${paramValue}" is not a recognized 3-letter ISO 4217 currency code.`
+      };
+    }
+    if (paramValue !== clean) {
+      return {
+        valid: false,
+        severity: 'error',
+        code: 'PARAM_CURRENCY_NOT_UPPERCASE',
+        message: `Currency code "${paramValue}" must be uppercase (e.g., "${clean}").`
       };
     }
   }
 
-  // 8. Enum Validation
+  // 8. Enum Validation (e.g. content_type in ['product', 'plan', 'page', 'category', 'service'])
   if (rule.enum && Array.isArray(rule.enum)) {
     if (!rule.enum.includes(paramValue)) {
       return {
         valid: false,
-        severity: 'warning',
+        severity: 'error',
         code: 'PARAM_ENUM_INVALID',
-        message: `Value "${paramValue}" for "${paramName}" is not in standard list: [${rule.enum.join(', ')}].`
+        message: `Value "${paramValue}" for "${paramName}" is invalid. Must be one of: [${rule.enum.join(', ')}].`
       };
     }
   }
 
-  // 9. Array & Content Item Validation
+  // 9. Array & Content Item Validation (contents[])
   if (rule.type === 'array') {
     if (!Array.isArray(paramValue)) {
       return {
@@ -177,25 +169,16 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
       };
     }
 
-    if (paramValue.length === 0) {
-      return {
-        valid: true,
-        severity: 'info',
-        code: 'PARAM_ARRAY_EMPTY',
-        message: `Array "${paramName}" is empty ([]). Consider passing item details if available.`
-      };
-    }
-
     if (rule.itemSchema === 'Content') {
       const itemIssues = [];
       paramValue.forEach((item, idx) => {
-        if (!item || typeof item !== 'object') {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
           itemIssues.push(`Item #${idx + 1} must be an object.`);
         } else {
           for (const [propName, propRule] of Object.entries(CONTENT_ITEM_SCHEMA)) {
             if (item[propName] !== undefined) {
               const res = validateParameter(propName, item[propName], propRule, item);
-              if (!res.valid) {
+              if (!res.valid && res.severity === 'error') {
                 itemIssues.push(`Item #${idx + 1} "${propName}": ${res.message}`);
               }
             }
@@ -206,8 +189,8 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
       if (itemIssues.length > 0) {
         return {
           valid: false,
-          severity: 'warning',
-          code: 'PARAM_CONTENTS_ITEM_WARNING',
+          severity: 'error',
+          code: 'PARAM_CONTENTS_ITEM_ERROR',
           message: itemIssues.join(' | ')
         };
       }
@@ -224,7 +207,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
 }
 
 /**
- * Validates data type
+ * Validates data type strictly
  */
 function checkDataType(paramName, value, expectedType) {
   if (expectedType === 'integer') {
@@ -233,7 +216,7 @@ function checkDataType(paramName, value, expectedType) {
         valid: false,
         severity: 'error',
         code: 'PARAM_TYPE_NOT_INTEGER',
-        message: `Expected integer for "${paramName}", got ${typeof value === 'number' ? 'float' : typeof value}.`
+        message: `Expected integer for "${paramName}", got ${typeof value === 'number' ? 'float/decimal' : typeof value}.`
       };
     }
   } else if (expectedType === 'number') {
