@@ -100,7 +100,6 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
       }
 
       // Check currency pairing
-      const currency = (allParams.currency || 'USD').toString().trim().toUpperCase();
       if (!allParams.currency && rule.requiredCurrency !== false) {
         return {
           valid: false,
@@ -108,22 +107,6 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           code: 'PARAM_AMOUNT_MISSING_CURRENCY',
           message: `Parameter "currency" is strictly required whenever "${paramName}" is provided.`
         };
-      }
-
-      // Check item-level total sum consistency when contents[] items also provide amount
-      if (paramName === 'amount' && Array.isArray(allParams.contents) && allParams.contents.length > 0) {
-        const itemsWithAmount = allParams.contents.filter(i => typeof i.amount === 'number');
-        if (itemsWithAmount.length === allParams.contents.length) {
-          const itemsSum = allParams.contents.reduce((sum, i) => sum + (i.amount * (Number(i.quantity) || 1)), 0);
-          if (itemsSum !== paramValue) {
-            return {
-              valid: false,
-              severity: 'error',
-              code: 'PARAM_AMOUNT_TOTAL_MISMATCH',
-              message: `Event-level amount (${paramValue}) does not match sum of items in contents (${itemsSum}).`
-            };
-          }
-        }
       }
     }
   }
@@ -194,6 +177,9 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
 
     if (rule.itemSchema === 'Content') {
       const itemIssues = [];
+      let itemsTotalAmount = 0;
+      let hasItemAmounts = false;
+
       paramValue.forEach((item, idx) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
           itemIssues.push(`Item #${idx + 1} must be an object.`);
@@ -201,6 +187,11 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           // Inherit event-level currency if item-level currency omitted
           const itemContext = Object.assign({ currency: allParams.currency || 'USD' }, item);
           
+          if (typeof item.amount === 'number') {
+            hasItemAmounts = true;
+            itemsTotalAmount += item.amount * (Number(item.quantity) || 1);
+          }
+
           for (const [propName, propRule] of Object.entries(CONTENT_ITEM_SCHEMA)) {
             if (item[propName] !== undefined) {
               const res = validateParameter(propName, item[propName], propRule, itemContext);
@@ -211,6 +202,11 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           }
         }
       });
+
+      // If event amount was provided in minor units (e.g. 35000) and items sum does not match (e.g. 350)
+      if (hasItemAmounts && typeof allParams.amount === 'number' && itemsTotalAmount !== allParams.amount) {
+        itemIssues.push(`Item amount sum (${itemsTotalAmount}) does not match event amount (${allParams.amount}). Contents item amounts must also be in minor units!`);
+      }
 
       if (itemIssues.length > 0) {
         return {
