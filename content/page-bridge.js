@@ -82,7 +82,26 @@
         options: options,
         args: Array.from(args).slice(1),
         pixelId: Array.from(activePixelIds)[0] || null,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        caller: 'oaiq("measure")'
+      });
+    } else if (command === 'measureSingle') {
+      // oaiq("measureSingle", pixelId, eventName, properties, options)
+      const targetPixelId = args[1] || null;
+      const eventName = args[2] || 'unknown';
+      const properties = (args.length >= 4 && typeof args[3] === 'object') ? args[3] : {};
+      const options = (args.length >= 5 && typeof args[4] === 'object') ? args[4] : {};
+
+      if (targetPixelId) activePixelIds.add(targetPixelId);
+
+      sendToContentScript('PIXEL_EVENT_CAPTURED', {
+        name: eventName,
+        parameters: properties,
+        options: options,
+        args: Array.from(args).slice(2),
+        pixelId: targetPixelId,
+        timestamp: Date.now(),
+        caller: 'oaiq("measureSingle")'
       });
     } else if (command === 'consent') {
       sendToContentScript('PIXEL_CONSENT_DETECTED', {

@@ -37,10 +37,13 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     combinedParams.event_id = options.event_id;
   }
 
+  const displayName = (eventName === 'custom' && options.custom_event_name) ? options.custom_event_name : eventName;
+
   const normalized = {
     id: generateUUID(),
     eventId: eventId,
     name: eventName,
+    displayName: displayName,
     timestamp: timestamp,
     source: {
       type: 'pixel',

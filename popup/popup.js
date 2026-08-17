@@ -370,7 +370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="event-badge-type ${isCustom ? 'event-badge-custom' : 'event-badge-std'}">
               ${isCustom ? 'Custom' : 'Standard'}
             </span>
-            <span class="event-name">${escapeHtml(evt.name)}</span>
+            <span class="event-name">${escapeHtml(evt.displayName || evt.name)}</span>
           </div>
           <div class="event-meta-group">
             <span class="badge ${statusClass}">${evt.validation.status}</span>
