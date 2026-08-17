@@ -442,23 +442,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
         <div class="event-details-drawer">
-          <!-- 5-Stage Lifecycle Separation Card -->
+          <!-- Lifecycle Verification Box -->
           <div class="lifecycle-box">
             <div class="lifecycle-row">
               <span class="lifecycle-label">Pixel Call:</span>
               <span class="lifecycle-val" style="color:var(--color-emerald);">${lifecycle.pixelCall.label}</span>
-            </div>
-            <div class="lifecycle-row">
-              <span class="lifecycle-label">Network Request:</span>
-              <span class="lifecycle-val" style="color:${lifecycle.networkRequest.status === 'sent' ? 'var(--color-emerald)' : (lifecycle.networkRequest.status === 'pending' ? 'var(--color-amber)' : 'var(--text-muted)')};">
-                ${lifecycle.networkRequest.label}
-              </span>
-            </div>
-            <div class="lifecycle-row">
-              <span class="lifecycle-label">Server Response:</span>
-              <span class="lifecycle-val" style="color:${lifecycle.serverResponse.status === 'success' ? 'var(--color-emerald)' : (lifecycle.serverResponse.status === 'error' ? 'var(--color-rose)' : 'var(--text-muted)')};">
-                ${lifecycle.serverResponse.label}
-              </span>
             </div>
             <div class="lifecycle-row">
               <span class="lifecycle-label">Parameters:</span>
