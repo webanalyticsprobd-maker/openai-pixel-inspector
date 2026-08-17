@@ -408,11 +408,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         let displayVal = '';
         if (typeof val === 'object' && val !== null) {
           displayVal = `<div class="param-json-block">${escapeHtml(JSON.stringify(val, null, 2))}</div>`;
-        } else if (key === 'amount' && typeof val === 'number') {
-          const curr = (params.currency || 'USD').toString().toUpperCase();
-          const decimals = (curr === 'JPY' || curr === 'KRW' || curr === 'VND') ? 0 : ((curr === 'KWD' || curr === 'BHD' || curr === 'OMR') ? 3 : 2);
-          const majorEquiv = (val / Math.pow(10, decimals)).toFixed(decimals);
-          displayVal = `<code>${val}</code> <span style="font-size:10px; color:var(--text-muted); margin-left:4px;">(≡ ${majorEquiv} ${curr})</span>`;
         } else {
           displayVal = escapeHtml(String(val));
         }
