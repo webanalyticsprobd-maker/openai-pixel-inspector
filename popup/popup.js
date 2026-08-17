@@ -27,15 +27,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const themeIcon = document.getElementById('theme-icon');
   const btnSidepanel = document.getElementById('btn-sidepanel');
 
-  // Overview Tab elements
-  const nodeBridge = document.getElementById('node-bridge');
-  const nodeContent = document.getElementById('node-content');
-  const nodeWorker = document.getElementById('node-worker');
-  const bridgeStatusText = document.getElementById('bridge-status-text');
-  const contentStatusText = document.getElementById('content-status-text');
-  const workerStatusText = document.getElementById('worker-status-text');
-  const pipelineStatusBadge = document.getElementById('pipeline-status-badge');
-
   const pixelStatusBadge = document.getElementById('pixel-status-badge');
   const valPixelDetected = document.getElementById('val-pixel-detected');
   const valPixelId = document.getElementById('val-pixel-id');
@@ -193,13 +184,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================
   // 6. Diagnostics Helper
   // ==========================================
-  function setNodeStatus(nodeEl, textEl, isConnected, text) {
-    if (!nodeEl || !textEl) return;
-    nodeEl.classList.remove('node-connected', 'node-disconnected');
-    nodeEl.classList.add(isConnected ? 'node-connected' : 'node-disconnected');
-    textEl.textContent = text;
-  }
-
   async function getActiveTab() {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -220,31 +204,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       targetHostEl.textContent = activeTab.url || 'Internal page';
     }
     badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
-
-    // Background Service Worker Health
-    try {
-      const bgResp = await chrome.runtime.sendMessage({ action: 'PING_BACKGROUND' });
-      if (bgResp && bgResp.status === 'ok') {
-        setNodeStatus(nodeWorker, workerStatusText, true, 'Active');
-      }
-    } catch {
-      setNodeStatus(nodeWorker, workerStatusText, false, 'Offline');
-    }
-
-    // Content Script & Bridge Health
-    try {
-      const csResp = await chrome.tabs.sendMessage(activeTab.id, { action: 'PING_CONTENT_SCRIPT' });
-      if (csResp && csResp.status === 'ok') {
-        setNodeStatus(nodeContent, contentStatusText, true, 'Attached');
-        setNodeStatus(nodeBridge, bridgeStatusText, csResp.isBridgeConnected, csResp.isBridgeConnected ? 'Bridged' : 'Pending');
-      } else {
-        setNodeStatus(nodeContent, contentStatusText, false, 'Not injected');
-        setNodeStatus(nodeBridge, bridgeStatusText, false, 'Disconnected');
-      }
-    } catch {
-      setNodeStatus(nodeContent, contentStatusText, false, 'Reload needed');
-      setNodeStatus(nodeBridge, bridgeStatusText, false, 'Disconnected');
-    }
 
     // Get Tab State
     try {

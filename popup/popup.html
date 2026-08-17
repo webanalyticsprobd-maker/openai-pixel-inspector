@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenAI Ads Pixel Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -57,38 +60,6 @@
       
       <!-- TAB 1: OVERVIEW -->
       <div class="tab-pane active" id="pane-overview">
-        <!-- Pipeline Health Card -->
-        <section class="card diagnostic-card">
-          <div class="card-header">
-            <span class="card-title">Diagnostics Pipeline</span>
-            <span id="pipeline-status-badge" class="badge badge-neutral">Checking</span>
-          </div>
-          <div class="pipeline-grid">
-            <div class="pipeline-node" id="node-bridge">
-              <div class="node-indicator"></div>
-              <div class="node-info">
-                <span class="node-label">Page Bridge</span>
-                <span class="node-status" id="bridge-status-text">--</span>
-              </div>
-            </div>
-            <div class="pipeline-arrow">→</div>
-            <div class="pipeline-node" id="node-content">
-              <div class="node-indicator"></div>
-              <div class="node-info">
-                <span class="node-label">Content Script</span>
-                <span class="node-status" id="content-status-text">--</span>
-              </div>
-            </div>
-            <div class="pipeline-arrow">→</div>
-            <div class="pipeline-node" id="node-worker">
-              <div class="node-indicator"></div>
-              <div class="node-info">
-                <span class="node-label">Service Worker</span>
-                <span class="node-status" id="worker-status-text">--</span>
-              </div>
-            </div>
-          </div>
-        </section>
 
         <!-- Status Summary Card -->
         <section class="card summary-card">
