@@ -6,7 +6,9 @@
   "permissions": [
     "activeTab",
     "storage",
-    "tabs"
+    "tabs",
+    "cookies",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"

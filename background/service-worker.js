@@ -3,15 +3,19 @@
  * 
  * Orchestrates normalized state, validation, network request correlation,
  * event stores, badge counts, and popup messaging for all browser tabs.
+ * 
+ * Includes Browser-level Network Request Observation (chrome.webRequest)
+ * and Browser Cookie Jar Inspection (chrome.cookies) to monitor live websites.
  */
 
 import { normalizeEvent } from '../core/normalizer.js';
 import { EventStore } from '../core/event-store.js';
 import { generateAuditReport } from '../core/scanner.js';
-import { parseNetworkPayload } from '../network/request-parser.js';
+import { parseNetworkPayload, isOpenAINetworkRequest } from '../network/request-parser.js';
 
 const tabStates = new Map();
 const tabStores = new Map();
+const pendingRequests = new Map(); // requestId -> { tabId, url, method, start, payload }
 
 function getOrCreateTabStore(tabId) {
   if (!tabStores.has(tabId)) {
@@ -86,6 +90,30 @@ function updateBadge(tabId, state) {
   }
 }
 
+/**
+ * Scan browser cookie jar for __oppref
+ */
+async function scanBrowserCookiesForTab(tabId, url) {
+  if (!url || !url.startsWith('http') || typeof chrome.cookies === 'undefined') return;
+  try {
+    const cookie = await chrome.cookies.get({ url: url, name: '__oppref' });
+    const state = getOrCreateTabState(tabId);
+    if (cookie && cookie.value) {
+      state.attribution.cookieDetected = true;
+      if (!state.attribution.oppref) {
+        state.attribution.oppref = decodeURIComponent(cookie.value);
+        state.attribution.source = 'cookie';
+      }
+      state.attribution.details.cookieValue = decodeURIComponent(cookie.value);
+      state.attribution.details.expirationDate = cookie.expirationDate;
+      state.lastUpdated = Date.now();
+      updateBadge(tabId, state);
+    }
+  } catch (err) {
+    console.debug('[OpenAI Pixel Inspector] chrome.cookies scan error:', err);
+  }
+}
+
 // Tab cleanup
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStates.delete(tabId);
@@ -100,10 +128,156 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     const state = createDefaultTabState(tabId, tab.url, tab.title);
     tabStates.set(tabId, state);
     updateBadge(tabId, state);
+    scanBrowserCookiesForTab(tabId, tab.url);
   }
 });
 
-// Primary Message Router
+// =========================================================================
+// Browser-Level Network Monitoring (chrome.webRequest)
+// =========================================================================
+
+if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeRequest) {
+  // 1. Intercept outgoing request to OpenAI endpoints
+  chrome.webRequest.onBeforeRequest.addListener(
+    (details) => {
+      const { tabId, url, method, requestId, requestBody } = details;
+      if (tabId < 0) return; // Background / system requests
+
+      const state = getOrCreateTabState(tabId);
+      const store = getOrCreateTabStore(tabId);
+
+      // Check SDK Script Download (bzrcdn.openai.com)
+      if (url.includes('bzrcdn.openai.com/sdk/oaiq')) {
+        state.pixel.detected = true;
+        state.pixel.confidence = 'high';
+        if (!state.pixel.scriptSources.includes(url)) {
+          state.pixel.scriptSources.push(url);
+        }
+        state.lastUpdated = Date.now();
+        updateBadge(tabId, state);
+        return;
+      }
+
+      // Check Ingestion Endpoint (bzr.openai.com)
+      if (isOpenAINetworkRequest(url)) {
+        let parsedPayload = null;
+        if (requestBody) {
+          if (requestBody.raw && requestBody.raw.length > 0) {
+            try {
+              const decoder = new TextDecoder('utf-8');
+              const str = decoder.decode(requestBody.raw[0].bytes);
+              parsedPayload = parseNetworkPayload(str);
+            } catch {}
+          } else if (requestBody.formData) {
+            parsedPayload = requestBody.formData;
+          }
+        }
+
+        const netEntry = {
+          requestId: requestId,
+          url: url,
+          method: method,
+          status: 'pending',
+          timestamp: Date.now(),
+          payload: parsedPayload,
+          source: 'webRequest'
+        };
+
+        pendingRequests.set(requestId, {
+          tabId: tabId,
+          start: Date.now(),
+          entry: netEntry
+        });
+
+        state.network.push(netEntry);
+
+        // If the request contains an event name not yet captured via JS bridge, add it
+        if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event)) {
+          const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event;
+          const normalized = normalizeEvent({
+            name: evtName,
+            parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
+            event_id: parsedPayload.event_id,
+            pixelId: parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
+            timestamp: Date.now(),
+            caller: 'network (webRequest)'
+          }, {
+            pixelId: state.pixel.pixelIds[0] || null,
+            oppref: state.attribution.oppref || null
+          });
+
+          normalized.network.detected = true;
+          normalized.network.url = url;
+          normalized.network.method = method;
+          store.addEvent(normalized);
+          state.events = store.events;
+        } else {
+          store.correlateNetworkRequest(netEntry);
+          state.events = store.events;
+        }
+
+        state.lastUpdated = Date.now();
+        updateBadge(tabId, state);
+      }
+    },
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] },
+    ['requestBody']
+  );
+
+  // 2. Capture completed HTTP status (200, 400, etc.)
+  chrome.webRequest.onCompleted.addListener(
+    (details) => {
+      const { requestId, statusCode, tabId } = details;
+      if (pendingRequests.has(requestId)) {
+        const { entry } = pendingRequests.get(requestId);
+        entry.status = statusCode;
+        entry.ok = statusCode >= 200 && statusCode < 300;
+        entry.responseTimestamp = Date.now();
+        pendingRequests.delete(requestId);
+
+        if (tabId >= 0) {
+          const store = getOrCreateTabStore(tabId);
+          store.correlateNetworkRequest(entry);
+          const state = getOrCreateTabState(tabId);
+          state.events = store.events;
+          state.lastUpdated = Date.now();
+          updateBadge(tabId, state);
+        }
+      }
+    },
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] }
+  );
+
+  // 3. Capture network errors (e.g. adblocker net::ERR_BLOCKED_BY_CLIENT)
+  chrome.webRequest.onErrorOccurred.addListener(
+    (details) => {
+      const { requestId, error, tabId } = details;
+      if (pendingRequests.has(requestId)) {
+        const { entry } = pendingRequests.get(requestId);
+        entry.status = 0;
+        entry.ok = false;
+        entry.error = error;
+        entry.responseTimestamp = Date.now();
+        pendingRequests.delete(requestId);
+
+        if (tabId >= 0) {
+          const store = getOrCreateTabStore(tabId);
+          store.correlateNetworkRequest(entry);
+          const state = getOrCreateTabState(tabId);
+          state.events = store.events;
+          state.lastUpdated = Date.now();
+          updateBadge(tabId, state);
+        }
+      }
+    },
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] }
+  );
+}
+
+// =========================================================================
+// Primary Runtime Message Router
+// =========================================================================
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab ? sender.tab.id : (message.tabId || null);
   if (!message || !message.action) {
@@ -141,6 +315,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           state.attribution = Object.assign({}, state.attribution, attribution);
         }
         state.lastUpdated = Date.now();
+        if (state.url) scanBrowserCookiesForTab(tabId, state.url);
         updateBadge(tabId, state);
       }
       sendResponse({ status: 'ok' });
@@ -227,6 +402,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         state.url = message.data.url;
         state.title = message.data.title;
         state.lastUpdated = Date.now();
+        scanBrowserCookiesForTab(tabId, state.url);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -235,6 +411,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'GET_ACTIVE_TAB_STATE': {
       const targetId = message.tabId;
       const curState = targetId ? getOrCreateTabState(targetId) : null;
+      if (curState && curState.url) {
+        scanBrowserCookiesForTab(targetId, curState.url);
+      }
       sendResponse({ state: curState });
       break;
     }
@@ -282,4 +461,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-console.info('[OpenAI Pixel Inspector] Service worker online and initialized.');
+console.info('[OpenAI Pixel Inspector] Service worker online with chrome.webRequest and chrome.cookies support.');
