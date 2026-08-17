@@ -1,5 +1,12 @@
 /**
  * OpenAI Ads Pixel Inspector - Popup Controller (Full Buildout)
+ * 
+ * Features:
+ * - Persistent accordion drawers (fixing the collapse bug)
+ * - Light & Dark theme toggle with persistence
+ * - Real-time event monitoring & filtering
+ * - oppref attribution inspection
+ * - Issue diagnostics & audit reports (Markdown/JSON/CSV)
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
@@ -13,6 +20,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const badgeTabIdEl = document.getElementById('badge-tab-id');
   const btnRefresh = document.getElementById('btn-refresh');
   const btnClear = document.getElementById('btn-clear');
+  const btnTheme = document.getElementById('btn-theme');
+  const themeIcon = document.getElementById('theme-icon');
 
   // Overview Tab elements
   const nodeBridge = document.getElementById('node-bridge');
@@ -73,8 +82,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentFilter = 'all';
   let searchQuery = '';
   let activeModalJson = '';
+  const expandedEventIds = new Set(); // Tracks expanded event drawer IDs to persist open state
 
-  // 1. Tab Switching
+  // ==========================================
+  // 1. Theme Management (Dark / Light)
+  // ==========================================
+  let currentTheme = localStorage.getItem('openai_pixel_inspector_theme') || 'dark';
+
+  function applyTheme(theme) {
+    currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
+    if (themeIcon) {
+      themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+    localStorage.setItem('openai_pixel_inspector_theme', theme);
+  }
+
+  applyTheme(currentTheme);
+
+  if (btnTheme) {
+    btnTheme.addEventListener('click', () => {
+      applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  // ==========================================
+  // 2. Navigation Tabs
+  // ==========================================
   navTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       navTabs.forEach((t) => t.classList.remove('active'));
@@ -85,7 +120,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 2. Filter Chips
+  // ==========================================
+  // 3. Filter Chips & Search
+  // ==========================================
   filterChips.forEach((chip) => {
     chip.addEventListener('click', () => {
       filterChips.forEach((c) => c.classList.remove('active'));
@@ -95,13 +132,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 3. Search Input
   eventSearchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value;
     renderEvents();
   });
 
+  // ==========================================
   // 4. Modal Handling
+  // ==========================================
   modalCloseBtn.addEventListener('click', () => {
     rawModal.classList.add('hidden');
   });
@@ -121,7 +159,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     rawModal.classList.remove('hidden');
   }
 
-  // 5. Node Status Helper
+  // ==========================================
+  // 5. Diagnostics Helper
+  // ==========================================
   function setNodeStatus(nodeEl, textEl, isConnected, text) {
     if (!nodeEl || !textEl) return;
     nodeEl.classList.remove('node-connected', 'node-disconnected');
@@ -129,7 +169,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     textEl.textContent = text;
   }
 
-  // 6. Fetch Active Tab and Diagnostics
   async function getActiveTab() {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -151,7 +190,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
 
-    // Query service worker
+    // Background Service Worker Health
     try {
       const bgResp = await chrome.runtime.sendMessage({ action: 'PING_BACKGROUND' });
       if (bgResp && bgResp.status === 'ok') {
@@ -161,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       setNodeStatus(nodeWorker, workerStatusText, false, 'Offline');
     }
 
-    // Query content script
+    // Content Script & Bridge Health
     try {
       const csResp = await chrome.tabs.sendMessage(activeTab.id, { action: 'PING_CONTENT_SCRIPT' });
       if (csResp && csResp.status === 'ok') {
@@ -192,10 +231,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // 7. Render All Views
+  // ==========================================
+  // 6. Rendering Engine
+  // ==========================================
   function renderAll() {
     if (!currentTabState) return;
-
     renderOverview();
     renderEvents();
     renderAttribution();
@@ -209,7 +249,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const stats = currentTabState.stats || {};
     const events = currentTabState.events || [];
 
-    // Summary Card
     if (pixel.detected) {
       valPixelDetected.textContent = `✅ Detected (${pixel.confidence || 'high'})`;
       pixelStatusBadge.textContent = 'Active';
@@ -224,7 +263,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     valPixelInit.textContent = pixel.initialized ? '✅ Initialized' : (pixel.detected ? '⚠️ Pending init' : 'Not initialized');
     valOppref.textContent = attribution.oppref ? `✅ ${truncateString(attribution.oppref, 18)}` : '⚠️ Not detected';
 
-    // Metrics
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
     metricCustomEvents.textContent = stats.customEvents || 0;
@@ -233,7 +271,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabCountEvents.textContent = stats.totalEvents || 0;
     tabCountIssues.textContent = stats.errorEvents || 0;
 
-    // Latest Event
     if (events.length > 0) {
       const latest = events[events.length - 1];
       latestEventTime.textContent = formatTimestamp(latest.timestamp);
@@ -263,7 +300,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentTabState) return;
     const events = currentTabState.events || [];
 
-    // Filter and search
     const filtered = events.filter((evt) => {
       if (currentFilter === 'standard' && evt.validation.isCustom) return false;
       if (currentFilter === 'custom' && !evt.validation.isCustom) return false;
@@ -293,9 +329,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     eventsListContainer.innerHTML = '';
-    filtered.slice().reverse().forEach((evt, idx) => {
+    filtered.slice().reverse().forEach((evt) => {
       const item = document.createElement('div');
-      item.className = 'event-item';
+      const isExpanded = expandedEventIds.has(evt.id);
+      item.className = `event-item ${isExpanded ? 'open' : ''}`;
 
       const isCustom = evt.validation.isCustom;
       const statusClass = evt.validation.status === 'valid' ? 'badge-success' : (evt.validation.status === 'warning' ? 'badge-warning' : 'badge-error');
@@ -365,10 +402,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       `;
 
-      // Toggle drawer accordion
+      // Toggle drawer accordion & preserve open state in expandedEventIds Set
       const header = item.querySelector('.event-header');
       header.addEventListener('click', () => {
-        item.classList.toggle('open');
+        if (expandedEventIds.has(evt.id)) {
+          expandedEventIds.delete(evt.id);
+          item.classList.remove('open');
+        } else {
+          expandedEventIds.add(evt.id);
+          item.classList.add('open');
+        }
       });
 
       // Raw button
@@ -459,7 +502,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
   }
 
-  // 8. Actions (Clear, Rescan, Export)
+  // ==========================================
+  // 7. Action Handlers
+  // ==========================================
   btnRefresh.addEventListener('click', async () => {
     btnRefresh.style.transform = 'rotate(180deg)';
     setTimeout(() => { btnRefresh.style.transform = 'none'; }, 300);
@@ -471,6 +516,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   btnClear.addEventListener('click', async () => {
     if (activeTab) {
+      expandedEventIds.clear();
       await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id });
       await updateState();
     }

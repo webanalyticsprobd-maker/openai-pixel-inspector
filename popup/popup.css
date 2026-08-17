@@ -2,7 +2,7 @@
    OpenAI Ads Pixel Inspector - Complete Styling System
    ========================================================================== */
 
-:root {
+:root, [data-theme="dark"] {
   --bg-primary: #0a0c10;
   --bg-surface: #12151c;
   --bg-surface-elevated: #1a1e28;
@@ -31,6 +31,30 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f1f5f9;
+  --bg-surface-hover: #e2e8f0;
+  
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.15);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  
+  --accent-emerald: #059669;
+  --accent-emerald-dark: #047857;
+  --accent-emerald-glow: rgba(5, 150, 105, 0.2);
+  
+  --color-blue: #0284c7;
+  --color-purple: #7c3aed;
+  --color-amber: #d97706;
+  --color-rose: #e11d48;
+  --color-emerald: #059669;
 }
 
 * {
