@@ -95,19 +95,19 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
       if (!Number.isInteger(paramValue)) {
         return {
           valid: false,
-          severity: 'warning',
+          severity: 'error',
           code: 'PARAM_AMOUNT_NOT_INTEGER',
-          message: `"${paramName}" is decimal (${paramValue}). OpenAI expects minor currency units as an integer (e.g., 2599 for $25.99, or 35000 for $350.00).`
+          message: `"${paramName}" is decimal (${paramValue}). OpenAI requires minor currency units as an integer (e.g., 2599 for $25.99, or 35000 for $350.00).`
         };
       }
       
-      // Educational warning for common major unit mistakes (e.g. sending 350 for $350 instead of 35000)
+      // Strictly detect and flag major unit values as errors (e.g. sending 350 for $350 instead of 35000)
       if (paramValue > 0 && paramValue < 1000) {
         return {
-          valid: true,
-          severity: 'warning',
-          code: 'PARAM_AMOUNT_POTENTIAL_MAJOR_UNITS',
-          message: `"${paramName}" value is ${paramValue}. OpenAI interprets this as ${paramValue} minor units ($${(paramValue / 100).toFixed(2)} USD). If the item price is $${paramValue}.00, you must send ${paramValue * 100}!`
+          valid: false,
+          severity: 'error',
+          code: 'PARAM_AMOUNT_INVALID_MINOR_UNITS',
+          message: `"${paramName}" value is ${paramValue}. OpenAI interprets this as ${paramValue} minor units ($${(paramValue / 100).toFixed(2)}). If your product price is $${paramValue}.00, you must send ${paramValue * 100} (cents)!`
         };
       }
     }
