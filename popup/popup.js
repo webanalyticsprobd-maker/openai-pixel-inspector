@@ -5,6 +5,8 @@
  * - Full session journey history across all page navigations
  * - Action-based duplicate event detection (double-firing diagnostics)
  * - Strict real Event ID display (never synthetic / generated)
+ * - Side Panel support for full-screen wide view diagnostics
+ * - Clean parameter formatting preventing layout clipping
  * - Journey timeline table and Event health summary
  * - Google Sheets / Excel CSV, JSON, and Markdown export
  * - Light & Dark theme toggle with persistence
@@ -24,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnClear = document.getElementById('btn-clear');
   const btnTheme = document.getElementById('btn-theme');
   const themeIcon = document.getElementById('theme-icon');
+  const btnSidepanel = document.getElementById('btn-sidepanel');
 
   // Overview Tab elements
   const nodeBridge = document.getElementById('node-bridge');
@@ -112,7 +115,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 2. Navigation Tabs
+  // 2. Side Panel Opener (Wide View Mode)
+  // ==========================================
+  if (btnSidepanel) {
+    btnSidepanel.addEventListener('click', async () => {
+      try {
+        const currentWindow = await chrome.windows.getCurrent();
+        if (chrome.sidePanel && chrome.sidePanel.open) {
+          await chrome.sidePanel.open({ windowId: currentWindow.id });
+          window.close(); // Close popup once side panel opens
+        } else {
+          chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
+        }
+      } catch (err) {
+        console.warn('[OpenAI Pixel Inspector] SidePanel open error:', err);
+        chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
+      }
+    });
+  }
+
+  // ==========================================
+  // 3. Navigation Tabs
   // ==========================================
   navTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -125,7 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ==========================================
-  // 3. Filter Chips & Search
+  // 4. Filter Chips & Search
   // ==========================================
   filterChips.forEach((chip) => {
     chip.addEventListener('click', () => {
@@ -142,7 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ==========================================
-  // 4. Modal Handling
+  // 5. Modal Handling
   // ==========================================
   modalCloseBtn.addEventListener('click', () => {
     rawModal.classList.add('hidden');
@@ -164,7 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 5. Diagnostics Helper
+  // 6. Diagnostics Helper
   // ==========================================
   function setNodeStatus(nodeEl, textEl, isConnected, text) {
     if (!nodeEl || !textEl) return;
@@ -236,7 +259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 6. Rendering Engine
+  // 7. Rendering Engine
   // ==========================================
   function renderAll() {
     if (!currentTabState) return;
@@ -353,19 +376,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusBadgeHtml = `<span class="badge ${statusClass}">${evt.validation.status}</span>`;
       }
 
-      // Build Parameter Table Rows
+      // Build Parameter Table Rows with clean formatted JSON blocks for arrays/objects
       let paramRows = '';
       const params = evt.parameters || {};
       for (const [key, val] of Object.entries(params)) {
         const valRes = (evt.validation.parameterResults && evt.validation.parameterResults[key]) || {};
         const paramStatusBadge = valRes.valid ? '<span style="color:var(--color-emerald)">✓</span>' : (valRes.severity === 'warning' ? '<span style="color:var(--color-amber)">⚠</span>' : '<span style="color:var(--color-rose)">✗</span>');
-        const displayVal = typeof val === 'object' ? JSON.stringify(val) : escapeHtml(String(val));
+        
+        let displayVal = '';
+        if (typeof val === 'object' && val !== null) {
+          displayVal = `<div class="param-json-block">${escapeHtml(JSON.stringify(val, null, 2))}</div>`;
+        } else {
+          displayVal = escapeHtml(String(val));
+        }
 
         paramRows += `
           <tr>
             <td>${escapeHtml(key)}</td>
             <td>${displayVal}</td>
-            <td style="text-align:right;">${paramStatusBadge}</td>
+            <td style="text-align:center;">${paramStatusBadge}</td>
           </tr>
         `;
       }
@@ -410,7 +439,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <table class="param-table">
             <thead>
-              <tr><th>Parameter</th><th>Value</th><th style="text-align:right;">Valid</th></tr>
+              <tr>
+                <th>Parameter</th>
+                <th>Value</th>
+                <th style="text-align:center;">Valid</th>
+              </tr>
             </thead>
             <tbody>
               ${paramRows}
@@ -529,10 +562,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const statusColor = row.duplicateStatus.includes('Double Fired') ? 'var(--color-rose)' : 'var(--color-emerald)';
         journeyRows += `
           <tr style="font-size: 11px;">
-            <td style="font-weight: bold; color: var(--text-secondary);">${row.step}</td>
+            <td style="font-weight: bold; color: var(--text-secondary); width: 25px;">${row.step}</td>
             <td><strong>${escapeHtml(row.name)}</strong></td>
             <td style="font-family: monospace; color: var(--text-secondary);">${escapeHtml(truncateString(row.pathname, 18))}</td>
-            <td style="text-align: center;">${row.count}</td>
+            <td style="text-align: center; width: 40px;">${row.count}</td>
             <td style="color: ${statusColor}; font-weight: 500;">${escapeHtml(row.duplicateStatus)}</td>
           </tr>
         `;
@@ -542,7 +575,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <table class="param-table" style="margin-top: 4px;">
           <thead>
             <tr>
-              <th style="width: 30px;">#</th>
+              <th style="width: 25px;">#</th>
               <th>Event</th>
               <th>Page URL</th>
               <th style="text-align: center; width: 40px;">Count</th>
@@ -566,7 +599,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         summaryRows += `
           <tr style="font-size: 11px;">
             <td><strong>${escapeHtml(sum.displayName || sum.name)}</strong></td>
-            <td style="text-align: center; font-weight: bold;">${sum.detected}</td>
+            <td style="text-align: center; font-weight: bold; width: 60px;">${sum.detected}</td>
             <td style="color: ${isDup ? 'var(--color-rose)' : 'var(--color-emerald)'}; font-weight: 500;">
               ${escapeHtml(sum.audit)}
             </td>
@@ -594,7 +627,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 7. Action Handlers
+  // 8. Action Handlers
   // ==========================================
   btnRefresh.addEventListener('click', async () => {
     btnRefresh.style.transform = 'rotate(180deg)';

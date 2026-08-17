@@ -1,5 +1,6 @@
 /* ==========================================================================
    OpenAI Ads Pixel Inspector - Complete Styling System
+   Fully responsive for both Popup window and Chrome Side Panel
    ========================================================================== */
 
 :root, [data-theme="dark"] {
@@ -63,9 +64,27 @@
   padding: 0;
 }
 
+/* Custom Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
 body {
-  width: 420px;
-  min-height: 540px;
+  width: 480px;
+  min-width: 440px;
+  max-width: 100vw;
+  min-height: 560px;
   max-height: 600px;
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -74,6 +93,20 @@ body {
   line-height: 1.4;
   user-select: none;
   overflow-x: hidden;
+}
+
+/* When in Chrome Side Panel (full viewport mode) */
+@media (min-width: 500px) {
+  body {
+    width: 100%;
+    min-width: 320px;
+    height: 100vh;
+    max-height: none;
+  }
+  .app-container {
+    height: 100vh;
+    max-height: none;
+  }
 }
 
 .app-container {
@@ -128,7 +161,7 @@ body {
 }
 
 .brand-subtitle {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
   display: block;
 }
@@ -298,6 +331,7 @@ body {
   padding: 2px 7px;
   border-radius: 9999px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .badge-neutral {
@@ -614,35 +648,72 @@ body {
 .chip-err { background: rgba(244, 63, 94, 0.15); color: var(--color-rose); }
 .chip-neutral { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
 
-/* Parameter Table */
+/* Parameter Table Layout - Fixed and Never Truncated */
 .param-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   margin-top: 6px;
   margin-bottom: 8px;
 }
 
 .param-table th, .param-table td {
-  padding: 4px 6px;
+  padding: 5px 6px;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
 }
 
 .param-table th {
   color: var(--text-muted);
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.param-table td {
+.param-table th:nth-child(1),
+.param-table td:nth-child(1) {
+  width: 28%;
+  font-weight: 500;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.param-table th:nth-child(2),
+.param-table td:nth-child(2) {
+  width: 58%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.param-table th:nth-child(3),
+.param-table td:nth-child(3) {
+  width: 14%;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.param-json-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .drawer-actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+  margin-top: 8px;
 }
 
 /* Issues Cards */
@@ -799,7 +870,7 @@ body {
   padding: 8px;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-blue);
   white-space: pre-wrap;
   word-break: break-all;
@@ -813,16 +884,42 @@ body {
 }
 
 /* Empty State */
-.empty-state, .empty-state-sm {
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 16px;
   text-align: center;
-  padding: 18px 10px;
-  color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.empty-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.empty-subtext {
   font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.empty-state-sm {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px;
 }
 
 /* Footer */
 .app-footer {
-  padding: 6px 14px;
+  padding: 8px 14px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
   display: flex;
@@ -844,17 +941,9 @@ body {
   height: 6px;
   border-radius: 50%;
   background: var(--color-emerald);
-  box-shadow: 0 0 6px rgba(52, 211, 153, 0.8);
-  animation: pulse-ring 2s infinite ease-in-out;
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(0.95); opacity: 0.7; }
-  50% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.7; }
+  box-shadow: 0 0 6px var(--color-emerald);
 }
 
 .version-tag {
   font-family: var(--font-mono);
-  font-size: 10px;
 }
