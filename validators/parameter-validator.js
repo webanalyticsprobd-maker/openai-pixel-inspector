@@ -108,6 +108,25 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           message: `Parameter "currency" is strictly required whenever "${paramName}" is provided.`
         };
       }
+
+      // Check if event amount was mistakenly sent in major units while contents items used minor units
+      if (paramName === 'amount' && Array.isArray(allParams.contents) && allParams.contents.length > 0) {
+        const itemsWithAmount = allParams.contents.filter(i => typeof i.amount === 'number');
+        if (itemsWithAmount.length > 0) {
+          const itemsSum = allParams.contents.reduce((sum, i) => sum + (i.amount * (Number(i.quantity) || 1)), 0);
+          const curr = (allParams.currency || 'USD').toString().toUpperCase();
+          const mult = (curr === 'JPY' || curr === 'KRW') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
+          
+          if (mult > 1 && paramValue * mult === itemsSum) {
+            return {
+              valid: false,
+              severity: 'error',
+              code: 'PARAM_AMOUNT_MAJOR_UNITS',
+              message: `Event amount (${paramValue}) was sent in major units ($${paramValue}.00). In ${curr}, OpenAI expects minor units: ${itemsSum} (${paramValue} × ${mult})!`
+            };
+          }
+        }
+      }
     }
   }
 
@@ -203,9 +222,14 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         }
       });
 
-      // If event amount was provided in minor units (e.g. 35000) and items sum does not match (e.g. 350)
-      if (hasItemAmounts && typeof allParams.amount === 'number' && itemsTotalAmount !== allParams.amount) {
-        itemIssues.push(`Item amount sum (${itemsTotalAmount}) does not match event amount (${allParams.amount}). Contents item amounts must also be in minor units!`);
+      // Detect if contents item amounts were mistakenly sent in major units while event amount used minor units
+      if (hasItemAmounts && typeof allParams.amount === 'number') {
+        const curr = (allParams.currency || 'USD').toString().toUpperCase();
+        const mult = (curr === 'JPY' || curr === 'KRW') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
+        
+        if (mult > 1 && itemsTotalAmount * mult === allParams.amount) {
+          itemIssues.push(`Item amount in contents (${itemsTotalAmount}) was sent in major units. For ${curr}, OpenAI expects minor units: ${allParams.amount} (${itemsTotalAmount} × ${mult})!`);
+        }
       }
 
       if (itemIssues.length > 0) {
