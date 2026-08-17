@@ -559,26 +559,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (report.journeyTable && report.journeyTable.length > 0) {
       let journeyRows = '';
       report.journeyTable.forEach((row) => {
-        const statusColor = row.duplicateStatus.includes('Double Fired') ? 'var(--color-rose)' : 'var(--color-emerald)';
+        const isDup = row.duplicateStatus.includes('Double Fired') || row.duplicateStatus.includes('Duplicate');
+        const statusColor = isDup ? 'var(--color-rose)' : 'var(--color-emerald)';
+        const pathDisplay = row.pathname || row.url || '/';
+
         journeyRows += `
-          <tr style="font-size: 11px;">
-            <td style="font-weight: bold; color: var(--text-secondary); width: 25px;">${row.step}</td>
+          <tr>
+            <td>${row.step}</td>
             <td><strong>${escapeHtml(row.name)}</strong></td>
-            <td style="font-family: monospace; color: var(--text-secondary);">${escapeHtml(truncateString(row.pathname, 18))}</td>
-            <td style="text-align: center; width: 40px;">${row.count}</td>
-            <td style="color: ${statusColor}; font-weight: 500;">${escapeHtml(row.duplicateStatus)}</td>
+            <td title="${escapeHtml(row.url || pathDisplay)}"><code>${escapeHtml(pathDisplay)}</code></td>
+            <td>${row.count}</td>
+            <td style="color: ${statusColor}; font-weight: 600;">${escapeHtml(row.duplicateStatus)}</td>
           </tr>
         `;
       });
 
       journeyTableContainer.innerHTML = `
-        <table class="param-table" style="margin-top: 4px;">
+        <table class="journey-table">
           <thead>
             <tr>
-              <th style="width: 25px;">#</th>
+              <th>#</th>
               <th>Event</th>
               <th>Page URL</th>
-              <th style="text-align: center; width: 40px;">Count</th>
+              <th style="text-align: center;">Count</th>
               <th>Duplicate Status</th>
             </tr>
           </thead>
@@ -597,10 +600,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       report.eventSummaries.forEach((sum) => {
         const isDup = sum.duplicates > 0;
         summaryRows += `
-          <tr style="font-size: 11px;">
+          <tr>
             <td><strong>${escapeHtml(sum.displayName || sum.name)}</strong></td>
-            <td style="text-align: center; font-weight: bold; width: 60px;">${sum.detected}</td>
-            <td style="color: ${isDup ? 'var(--color-rose)' : 'var(--color-emerald)'}; font-weight: 500;">
+            <td>${sum.detected}</td>
+            <td style="color: ${isDup ? 'var(--color-rose)' : 'var(--color-emerald)'}; font-weight: 600;">
               ${escapeHtml(sum.audit)}
             </td>
           </tr>
@@ -608,11 +611,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       eventSummaryTableContainer.innerHTML = `
-        <table class="param-table" style="margin-top: 4px;">
+        <table class="summary-table">
           <thead>
             <tr>
               <th>Event</th>
-              <th style="text-align: center; width: 60px;">Detected</th>
+              <th style="text-align: center;">Detected</th>
               <th>Audit Assessment</th>
             </tr>
           </thead>

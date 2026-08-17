@@ -648,7 +648,9 @@ body {
 .chip-err { background: rgba(244, 63, 94, 0.15); color: var(--color-rose); }
 .chip-neutral { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
 
-/* Parameter Table Layout - Fixed and Never Truncated */
+/* ==========================================================================
+   1. PARAMETER TABLE (3 Columns: Parameter, Value, Valid)
+   ========================================================================== */
 .param-table {
   width: 100%;
   table-layout: fixed;
@@ -714,6 +716,130 @@ body {
   justify-content: flex-end;
   gap: 6px;
   margin-top: 8px;
+}
+
+/* ==========================================================================
+   2. JOURNEY TIMELINE TABLE (5 Columns: #, Event, Page URL, Count, Duplicate Status)
+   ========================================================================== */
+.journey-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.journey-table th, .journey-table td {
+  padding: 5px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: middle;
+}
+
+.journey-table th {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Column 1: Step # */
+.journey-table th:nth-child(1),
+.journey-table td:nth-child(1) {
+  width: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Column 2: Event Name */
+.journey-table th:nth-child(2),
+.journey-table td:nth-child(2) {
+  width: 30%;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+/* Column 3: Page URL / Path */
+.journey-table th:nth-child(3),
+.journey-table td:nth-child(3) {
+  width: 30%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+/* Column 4: Request Count */
+.journey-table th:nth-child(4),
+.journey-table td:nth-child(4) {
+  width: 12%;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Column 5: Duplicate Status */
+.journey-table th:nth-child(5),
+.journey-table td:nth-child(5) {
+  width: 24%;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+/* ==========================================================================
+   3. EVENT HEALTH SUMMARY TABLE (3 Columns: Event, Detected, Audit Assessment)
+   ========================================================================== */
+.summary-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.summary-table th, .summary-table td {
+  padding: 5px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: middle;
+}
+
+.summary-table th {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Column 1: Event */
+.summary-table th:nth-child(1),
+.summary-table td:nth-child(1) {
+  width: 35%;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+/* Column 2: Detected Count */
+.summary-table th:nth-child(2),
+.summary-table td:nth-child(2) {
+  width: 20%;
+  text-align: center;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* Column 3: Audit Assessment */
+.summary-table th:nth-child(3),
+.summary-table td:nth-child(3) {
+  width: 45%;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 11px;
 }
 
 /* Issues Cards */
