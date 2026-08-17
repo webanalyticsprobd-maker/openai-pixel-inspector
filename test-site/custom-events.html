@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAI Custom Events Test Suite</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; max-width: 700px; margin: 40px auto; padding: 20px; }
+    .btn { background: #c084fc; color: #0f172a; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; margin: 6px; font-weight: 600; }
+    .btn:hover { opacity: 0.9; }
+    .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; margin-top: 16px; }
+    .log { background: #020617; padding: 10px; font-family: monospace; font-size: 11px; color: #c084fc; height: 140px; overflow-y: auto; margin-top: 12px; }
+    input { background: #0f172a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px; font-size: 12px; width: 200px; }
+  </style>
+
+  <script>
+    (function (w, d, s, u) {
+      if (w.oaiq) return;
+      var q = function () { q.q.push(arguments); };
+      q.q = [];
+      w.oaiq = q;
+    })(window, document, "script", "https://bzrcdn.openai.com/sdk/oaiq.min.js");
+
+    oaiq("init", { pixelId: "oai_custom_events_test_101" });
+  </script>
+</head>
+<body>
+  <h1>Custom OpenAI Events Test Suite</h1>
+  <p style="color: #94a3b8;">
+    This page fires various custom OpenAI pixel events to test custom event detection, tagging, parameter inspection, and schema flexibility.
+  </p>
+
+  <div class="card">
+    <h3>Preset Custom Events</h3>
+    <button class="btn" id="btn-video">Fire "video_play_milestone"</button>
+    <button class="btn" id="btn-quote">Fire "quote_calculator_submitted"</button>
+    <button class="btn" id="btn-chat">Fire "ai_assistant_interaction"</button>
+  </div>
+
+  <div class="card">
+    <h3>Trigger Arbitrary Custom Event</h3>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <input type="text" id="custom-name-input" value="custom_user_action" placeholder="Custom Event Name">
+      <button class="btn" id="btn-custom-fire" style="background:#10a37f; color:white;">Fire Event</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <p><a href="index.html" style="color: #38bdf8;">← Back to Test Hub</a></p>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('btn-video').addEventListener('click', () => {
+      oaiq("measure", "video_play_milestone", {
+        video_id: "vid_gpt_intro",
+        progress_percentage: 75,
+        duration_seconds: 120,
+        player_type: "html5"
+      }, {
+        event_id: "evt_vid_" + Date.now()
+      });
+      log('Fired custom event: "video_play_milestone" with 4 custom parameters');
+    });
+
+    document.getElementById('btn-quote').addEventListener('click', () => {
+      oaiq("measure", "quote_calculator_submitted", {
+        tier: "enterprise_annual",
+        seats: 250,
+        estimated_monthly_value: 5000,
+        industry: "technology"
+      });
+      log('Fired custom event: "quote_calculator_submitted"');
+    });
+
+    document.getElementById('btn-chat').addEventListener('click', () => {
+      oaiq("measure", "ai_assistant_interaction", {
+        query_category: "billing_inquiry",
+        resolved_automatically: true,
+        turns_count: 3
+      });
+      log('Fired custom event: "ai_assistant_interaction"');
+    });
+
+    document.getElementById('btn-custom-fire').addEventListener('click', () => {
+      const name = document.getElementById('custom-name-input').value.trim() || 'custom_event';
+      oaiq("measure", name, {
+        triggered_by: "test_suite_ui",
+        client_timestamp: Date.now(),
+        is_simulation: true
+      });
+      log(`Fired arbitrary custom event: "${name}"`);
+    });
+
+    log("Initialized window.oaiq with pixelId 'oai_custom_events_test_101'");
+  </script>
+</body>
+</html>

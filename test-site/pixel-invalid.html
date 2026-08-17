@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invalid Parameters & Tracking Errors Test</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; max-width: 700px; margin: 40px auto; padding: 20px; }
+    .btn { background: #f43f5e; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; margin: 6px; font-weight: 500; }
+    .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; margin-top: 16px; }
+    .log { background: #020617; padding: 10px; font-family: monospace; font-size: 11px; color: #fb7185; height: 140px; overflow-y: auto; margin-top: 12px; }
+  </style>
+
+  <script>
+    (function (w, d, s, u) {
+      if (w.oaiq) return;
+      var q = function () { q.q.push(arguments); };
+      q.q = [];
+      w.oaiq = q;
+    })(window, document, "script", "https://bzrcdn.openai.com/sdk/oaiq.min.js");
+
+    oaiq("init", { pixelId: "oai_invalid_tester_999" });
+  </script>
+</head>
+<body>
+  <h1>Invalid Parameters & Error Diagnostics Test</h1>
+  <p style="color: #94a3b8;">
+    This page triggers events with intentionally missing required parameters, wrong data types, and invalid formats to test error flags.
+  </p>
+
+  <div class="card">
+    <h3>Trigger Error Scenarios</h3>
+    <button class="btn" id="btn-missing-currency">order_created (Missing Currency ❌)</button>
+    <button class="btn" id="btn-invalid-amount-type">order_created (Amount as String ❌)</button>
+    <button class="btn" id="btn-invalid-currency">order_created (Invalid Currency "XYZ" ⚠️)</button>
+    <button class="btn" id="btn-major-units">order_created (Amount in Major Units $25 ⚠️)</button>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <p><a href="index.html" style="color: #38bdf8;">← Back to Test Hub</a></p>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('btn-missing-currency').addEventListener('click', () => {
+      // order_created requires amount AND currency
+      oaiq("measure", "order_created", {
+        amount: 2500
+        // missing currency!
+      });
+      log('Fired order_created with MISSING currency parameter.');
+    });
+
+    document.getElementById('btn-invalid-amount-type').addEventListener('click', () => {
+      oaiq("measure", "order_created", {
+        amount: "twenty-five-dollars", // invalid type!
+        currency: "USD"
+      });
+      log('Fired order_created with string value for numeric amount.');
+    });
+
+    document.getElementById('btn-invalid-currency').addEventListener('click', () => {
+      oaiq("measure", "order_created", {
+        amount: 3000,
+        currency: "XYZ_FAKE_CURRENCY" // unrecognized currency
+      });
+      log('Fired order_created with unrecognized currency "XYZ_FAKE_CURRENCY".');
+    });
+
+    document.getElementById('btn-major-units').addEventListener('click', () => {
+      oaiq("measure", "order_created", {
+        amount: 25, // Likely meant $25.00 (2500 cents)
+        currency: "USD"
+      });
+      log('Fired order_created with amount 25 (warning for major currency units).');
+    });
+
+    log("Initialized window.oaiq with pixelId 'oai_invalid_tester_999'");
+  </script>
+</body>
+</html>

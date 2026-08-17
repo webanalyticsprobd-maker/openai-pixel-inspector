@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAI Ads Pixel Inspector</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="logo-group">
+          <div class="logo-badge">
+            <span class="logo-icon">✦</span>
+          </div>
+          <div>
+            <h1 class="brand-title">OpenAI Pixel Inspector</h1>
+            <span class="brand-subtitle">Ads & Attribution Diagnostics</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="btn-clear" class="icon-button" title="Clear Tab Events">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+          <button id="btn-refresh" class="icon-button" title="Rescan Tab">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Target Banner -->
+      <div class="tab-target-bar">
+        <span class="target-icon">🌐</span>
+        <span id="target-host" class="target-host truncate">Loading active tab...</span>
+        <span id="badge-tab-id" class="badge badge-subtle">Tab #--</span>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-tab="overview">Overview</button>
+        <button class="nav-tab" data-tab="events">Events <span class="tab-count" id="tab-count-events">0</span></button>
+        <button class="nav-tab" data-tab="attribution">oppref</button>
+        <button class="nav-tab" data-tab="issues">Issues <span class="tab-count tab-count-error" id="tab-count-issues">0</span></button>
+        <button class="nav-tab" data-tab="audit">Audit & Export</button>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      
+      <!-- TAB 1: OVERVIEW -->
+      <div class="tab-pane active" id="pane-overview">
+        <!-- Pipeline Health Card -->
+        <section class="card diagnostic-card">
+          <div class="card-header">
+            <span class="card-title">Diagnostics Pipeline</span>
+            <span id="pipeline-status-badge" class="badge badge-neutral">Checking</span>
+          </div>
+          <div class="pipeline-grid">
+            <div class="pipeline-node" id="node-bridge">
+              <div class="node-indicator"></div>
+              <div class="node-info">
+                <span class="node-label">Page Bridge</span>
+                <span class="node-status" id="bridge-status-text">--</span>
+              </div>
+            </div>
+            <div class="pipeline-arrow">→</div>
+            <div class="pipeline-node" id="node-content">
+              <div class="node-indicator"></div>
+              <div class="node-info">
+                <span class="node-label">Content Script</span>
+                <span class="node-status" id="content-status-text">--</span>
+              </div>
+            </div>
+            <div class="pipeline-arrow">→</div>
+            <div class="pipeline-node" id="node-worker">
+              <div class="node-indicator"></div>
+              <div class="node-info">
+                <span class="node-label">Service Worker</span>
+                <span class="node-status" id="worker-status-text">--</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Status Summary Card -->
+        <section class="card summary-card">
+          <div class="card-header">
+            <span class="card-title">Tracking Summary</span>
+            <span id="pixel-status-badge" class="badge badge-neutral">Pending</span>
+          </div>
+          
+          <div class="status-rows">
+            <div class="status-row">
+              <span class="status-label">OpenAI Pixel SDK</span>
+              <span class="status-val font-semibold" id="val-pixel-detected">Checking...</span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">Pixel ID</span>
+              <span class="status-val mono" id="val-pixel-id">None</span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">Initialization State</span>
+              <span class="status-val" id="val-pixel-init">Checking...</span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">Attribution (oppref)</span>
+              <span class="status-val" id="val-oppref">Checking...</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Event Metrics Grid -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-num text-emerald" id="metric-total-events">0</span>
+            <span class="metric-label">Total Events</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num text-blue" id="metric-standard-events">0</span>
+            <span class="metric-label">Standard</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num text-purple" id="metric-custom-events">0</span>
+            <span class="metric-label">Custom</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num text-rose" id="metric-issues-events">0</span>
+            <span class="metric-label">Errors</span>
+          </div>
+        </div>
+
+        <!-- Latest Event Snapshot -->
+        <section class="card latest-event-card">
+          <div class="card-header">
+            <span class="card-title">Latest Observed Event</span>
+            <span id="latest-event-time" class="text-muted font-mono" style="font-size: 11px;">--:--:--</span>
+          </div>
+          <div id="latest-event-content">
+            <div class="empty-state-sm">No events detected yet.</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- TAB 2: EVENTS TIMELINE -->
+      <div class="tab-pane" id="pane-events">
+        <!-- Search & Filter Controls -->
+        <div class="events-toolbar">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="event-search-input" placeholder="Search event names, IDs, parameters...">
+          </div>
+          <div class="filter-chips">
+            <button class="filter-chip active" data-filter="all">All</button>
+            <button class="filter-chip" data-filter="standard">Standard</button>
+            <button class="filter-chip" data-filter="custom">Custom</button>
+            <button class="filter-chip" data-filter="errors">Errors</button>
+            <button class="filter-chip" data-filter="warnings">Warnings</button>
+            <button class="filter-chip" data-filter="network">Network</button>
+          </div>
+        </div>
+
+        <!-- Events List Accordion -->
+        <div class="events-list" id="events-list-container">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- TAB 3: ATTRIBUTION (oppref) -->
+      <div class="tab-pane" id="pane-attribution">
+        <section class="card">
+          <div class="card-header">
+            <span class="card-title">OpenAI Click Reference (oppref)</span>
+            <span id="oppref-status-badge" class="badge badge-neutral">Scanning</span>
+          </div>
+          <p class="section-desc">
+            <code>oppref</code> is OpenAI's privacy-preserving click identifier passed via URL query parameters and stored in the <code>__oppref</code> cookie for conversion attribution.
+          </p>
+          <div class="status-rows" style="margin-top: 12px;">
+            <div class="status-row">
+              <span class="status-label">URL Query Parameter</span>
+              <span class="status-val font-mono" id="attr-url-val">Not present</span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">Cookie (__oppref)</span>
+              <span class="status-val font-mono" id="attr-cookie-val">Not present</span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">Local / Session Storage</span>
+              <span class="status-val font-mono" id="attr-storage-val">Not present</span>
+            </div>
+            <div class="status-row">
+              <span class="status-label">Active Attribution Key</span>
+              <span class="status-val font-mono text-emerald" id="attr-active-key">None</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" style="margin-top: 10px;">
+          <div class="card-header">
+            <span class="card-title">Attribution Guidance</span>
+          </div>
+          <ul class="guidance-list">
+            <li><strong>Ads Ingestion:</strong> When users click on ChatGPT/OpenAI Ads, OpenAI automatically appends <code>?oppref=gAAAA...</code>.</li>
+            <li><strong>Cookie TTL:</strong> The official SDK persists this into the <code>__oppref</code> cookie (approx. 30-day lifetime).</li>
+            <li><strong>CAPI Pairing:</strong> Pass the same <code>oppref</code> in your server Conversions API payload for hybrid attribution.</li>
+          </ul>
+        </section>
+      </div>
+
+      <!-- TAB 4: ISSUES & DEDUPLICATION -->
+      <div class="tab-pane" id="pane-issues">
+        <div id="issues-list-container">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- TAB 5: AUDIT & EXPORT -->
+      <div class="tab-pane" id="pane-audit">
+        <section class="card">
+          <div class="card-header">
+            <span class="card-title">Tracking Implementation Audit</span>
+            <span id="audit-score-badge" class="badge badge-success">Audit Ready</span>
+          </div>
+          <div class="audit-summary-box" id="audit-summary-box">
+            <!-- Dynamically populated -->
+          </div>
+          <div class="export-actions">
+            <button class="btn btn-primary" id="btn-copy-markdown">
+              <span>📋 Copy Markdown Report</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-export-json">
+              <span>📥 Export JSON</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-export-csv">
+              <span>📊 Export CSV</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Raw Data Modal Drawer -->
+    <div class="modal-overlay hidden" id="raw-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <span class="modal-title" id="modal-event-title">Raw Event JSON</span>
+          <button class="icon-button" id="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <pre class="raw-code" id="modal-json-content"></pre>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="modal-copy-btn">Copy JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span class="pulse-dot"></span>
+        <span id="footer-status-text">Real-time Inspector Active</span>
+      </div>
+      <div class="footer-right">
+        <span class="version-tag">v1.0.0</span>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

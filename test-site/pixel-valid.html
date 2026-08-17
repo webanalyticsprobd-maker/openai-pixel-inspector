@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valid OpenAI Ads Pixel Test</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; max-width: 700px; margin: 40px auto; padding: 20px; }
+    .btn { background: #10a37f; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; margin: 6px; font-weight: 500; }
+    .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; margin-top: 16px; }
+    .log { background: #020617; padding: 10px; font-family: monospace; font-size: 11px; color: #34d399; height: 120px; overflow-y: auto; margin-top: 12px; }
+  </style>
+
+  <!-- Official OpenAI Pixel Base Snippet Simulation -->
+  <script>
+    (function (w, d, s, u) {
+      if (w.oaiq) return;
+      var q = function () { q.q.push(arguments); };
+      q.q = [];
+      w.oaiq = q;
+    })(window, document, "script", "https://bzrcdn.openai.com/sdk/oaiq.min.js");
+
+    // Initialize with standard Pixel ID
+    oaiq("init", { pixelId: "oai_pixel_valid_889900" });
+
+    // Track Page View
+    oaiq("measure", "page_viewed", {
+      page_title: "Valid OpenAI Ads Pixel Test",
+      page_path: "/test-site/pixel-valid.html"
+    }, {
+      event_id: "evt_pv_" + Date.now()
+    });
+  </script>
+</head>
+<body>
+  <h1>Valid OpenAI Ads Pixel Test</h1>
+  <p style="color: #94a3b8;">This page initializes <code>window.oaiq</code> with a valid Pixel ID and fires standard events.</p>
+
+  <div class="card">
+    <h3>Trigger Standard Events</h3>
+    <button class="btn" id="btn-purchase">Trigger order_created (Purchase $49.99)</button>
+    <button class="btn" id="btn-lead">Trigger lead_created</button>
+    <button class="btn" id="btn-cart">Trigger add_to_cart</button>
+    <button class="btn" id="btn-content">Trigger contents_viewed</button>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <p><a href="index.html" style="color: #38bdf8;">← Back to Test Hub</a></p>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('btn-purchase').addEventListener('click', () => {
+      const eventId = "order_" + Math.floor(Math.random() * 900000 + 100000);
+      oaiq("measure", "order_created", {
+        type: "contents",
+        amount: 4999, // 49.99 in minor units
+        currency: "USD",
+        order_id: eventId,
+        contents: [{ id: "item_99", name: "Pro Plan", price: 4999 }]
+      }, {
+        event_id: eventId
+      });
+      log(`Fired order_created with event_id: ${eventId}, amount: 4999 USD`);
+    });
+
+    document.getElementById('btn-lead').addEventListener('click', () => {
+      const eventId = "lead_" + Date.now();
+      oaiq("measure", "lead_created", {
+        type: "customer_action",
+        lead_type: "enterprise_demo"
+      }, {
+        event_id: eventId
+      });
+      log(`Fired lead_created with event_id: ${eventId}`);
+    });
+
+    document.getElementById('btn-cart').addEventListener('click', () => {
+      oaiq("measure", "add_to_cart", {
+        amount: 2999,
+        currency: "USD",
+        quantity: 1
+      });
+      log(`Fired add_to_cart`);
+    });
+
+    document.getElementById('btn-content').addEventListener('click', () => {
+      oaiq("measure", "contents_viewed", {
+        content_name: "OpenAI Ads Whitepaper",
+        content_type: "article"
+      });
+      log(`Fired contents_viewed`);
+    });
+
+    log("Initialized window.oaiq with pixelId 'oai_pixel_valid_889900' and fired page_viewed.");
+  </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPA Client-Side Navigation Test</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; max-width: 700px; margin: 40px auto; padding: 20px; }
+    .nav { display: flex; gap: 8px; margin-bottom: 20px; }
+    .nav-btn { background: #334155; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; }
+    .nav-btn.active { background: #38bdf8; color: #0f172a; font-weight: bold; }
+    .page-view { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; }
+    .btn { background: #10a37f; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+    .log { background: #020617; padding: 10px; font-family: monospace; font-size: 11px; color: #38bdf8; height: 120px; overflow-y: auto; margin-top: 12px; }
+  </style>
+
+  <script>
+    (function (w, d, s, u) {
+      if (w.oaiq) return;
+      var q = function () { q.q.push(arguments); };
+      q.q = [];
+      w.oaiq = q;
+    })(window, document, "script", "https://bzrcdn.openai.com/sdk/oaiq.min.js");
+
+    oaiq("init", { pixelId: "oai_spa_app_777" });
+    oaiq("measure", "page_viewed", { page_path: "/home" });
+  </script>
+</head>
+<body>
+  <h1>SPA Client-Side Navigation Simulator</h1>
+  <p style="color: #94a3b8;">
+    Simulates single-page application route transitions (e.g. Next.js, React Router) using <code>history.pushState</code> without full page reloads.
+  </p>
+
+  <div class="nav">
+    <button class="nav-btn active" data-path="/home" data-title="Home">🏠 Home</button>
+    <button class="nav-btn" data-path="/products" data-title="Products Catalog">🛍️ Products</button>
+    <button class="nav-btn" data-path="/cart" data-title="Shopping Cart">🛒 Cart</button>
+    <button class="nav-btn" data-path="/checkout" data-title="Checkout Flow">💳 Checkout</button>
+  </div>
+
+  <div class="page-view" id="page-content">
+    <h2 id="view-title">Home Page</h2>
+    <p id="view-desc">Welcome to the SPA store.</p>
+    <button class="btn" id="btn-page-action">Trigger Route Action</button>
+    <div class="log" id="log"></div>
+  </div>
+
+  <p style="margin-top: 20px;"><a href="index.html" style="color: #38bdf8;">← Back to Test Hub</a></p>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const viewTitle = document.getElementById('view-title');
+    const viewDesc = document.getElementById('view-desc');
+    let currentRoute = '/home';
+
+    navBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        navBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const path = btn.dataset.path;
+        const title = btn.dataset.title;
+        currentRoute = path;
+
+        // Push state without reloading
+        history.pushState({ path: path }, title, window.location.pathname + '?route=' + encodeURIComponent(path));
+        document.title = title + " - SPA Simulator";
+
+        viewTitle.textContent = title;
+        viewDesc.textContent = `Active virtual route: ${path}`;
+
+        // Fire virtual page view
+        oaiq("measure", "page_viewed", {
+          page_path: path,
+          page_title: title
+        });
+        log(`SPA Navigation -> ${path} (fired page_viewed)`);
+      });
+    });
+
+    document.getElementById('btn-page-action').addEventListener('click', () => {
+      if (currentRoute === '/products') {
+        oaiq("measure", "contents_viewed", { content_name: "SPA Premium Widget" });
+        log('Fired contents_viewed on /products');
+      } else if (currentRoute === '/cart') {
+        oaiq("measure", "add_to_cart", { amount: 3500, currency: "USD", quantity: 1 });
+        log('Fired add_to_cart on /cart');
+      } else if (currentRoute === '/checkout') {
+        oaiq("measure", "checkout_started", { amount: 3500, currency: "USD" });
+        log('Fired checkout_started on /checkout');
+      } else {
+        oaiq("measure", "custom_home_banner_click", { banner_id: "hero_2026" });
+        log('Fired custom_home_banner_click on /home');
+      }
+    });
+
+    log("SPA Initialized on route '/home'.");
+  </script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Duplicate Pixel & Deduplication Test</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; max-width: 700px; margin: 40px auto; padding: 20px; }
+    .btn { background: #f59e0b; color: #0f172a; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; margin: 6px; font-weight: 600; }
+    .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; margin-top: 16px; }
+    .log { background: #020617; padding: 10px; font-family: monospace; font-size: 11px; color: #fde047; height: 140px; overflow-y: auto; margin-top: 12px; }
+  </style>
+
+  <script>
+    (function (w, d, s, u) {
+      if (w.oaiq) return;
+      var q = function () { q.q.push(arguments); };
+      q.q = [];
+      w.oaiq = q;
+    })(window, document, "script", "https://bzrcdn.openai.com/sdk/oaiq.min.js");
+
+    // Multiple Pixel Initializations (e.g. conflicting GTM container + hardcoded snippet)
+    oaiq("init", { pixelId: "oai_first_pixel_111" });
+    oaiq("init", { pixelId: "oai_second_pixel_222" });
+  </script>
+</head>
+<body>
+  <h1>Duplicate Pixel & Deduplication Test</h1>
+  <p style="color: #94a3b8;">
+    This page executes multiple <code>oaiq("init")</code> calls with distinct Pixel IDs and fires duplicate events with identical event IDs.
+  </p>
+
+  <div class="card">
+    <h3>Trigger Duplicate Events</h3>
+    <button class="btn" id="btn-duplicate-event">Fire Duplicate Purchase (Same Event ID)</button>
+    <button class="btn" id="btn-add-third-pixel">Initialize Third Pixel ID</button>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <p><a href="index.html" style="color: #38bdf8;">← Back to Test Hub</a></p>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('btn-duplicate-event').addEventListener('click', () => {
+      const fixedEventId = "order_duplicate_test_7788";
+      // Dispatch twice with identical ID
+      oaiq("measure", "order_created", {
+        amount: 8900,
+        currency: "USD"
+      }, {
+        event_id: fixedEventId
+      });
+
+      setTimeout(() => {
+        oaiq("measure", "order_created", {
+          amount: 8900,
+          currency: "USD"
+        }, {
+          event_id: fixedEventId
+        });
+        log(`Dispatched duplicate order_created event with same event_id: "${fixedEventId}".`);
+      }, 500);
+    });
+
+    document.getElementById('btn-add-third-pixel').addEventListener('click', () => {
+      oaiq("init", { pixelId: "oai_third_pixel_333" });
+      log('Initialized third pixel ID: "oai_third_pixel_333".');
+    });
+
+    log("Initialized with two Pixel IDs: 'oai_first_pixel_111' & 'oai_second_pixel_222'.");
+  </script>
+</body>
+</html>

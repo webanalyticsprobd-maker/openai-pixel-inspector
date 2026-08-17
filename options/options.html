@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAI Ads Pixel Inspector - Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="options-header">
+      <div class="logo-group">
+        <div class="logo-badge">✦</div>
+        <div>
+          <h1>OpenAI Ads Pixel Inspector</h1>
+          <p>Preferences & Debugging Settings</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="options-main">
+      <section class="settings-card">
+        <h2>Diagnostics & Validation</h2>
+        
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="customEventValidation">Custom Event Validation</label>
+            <p>Automatically detect, catalog, and validate arbitrary custom oaiq("measure", ...) events.</p>
+          </div>
+          <input type="checkbox" id="customEventValidation" checked>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="networkInterception">Network Ingestion Monitoring</label>
+            <p>Monitor outgoing POST network requests to bzr.openai.com for HTTP delivery correlation.</p>
+          </div>
+          <input type="checkbox" id="networkInterception" checked>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="debugLogging">Verbose Console Logging</label>
+            <p>Output structured [OpenAI Pixel Inspector] logs to DevTools console for debugging.</p>
+          </div>
+          <input type="checkbox" id="debugLogging">
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <h2>About & Specifications</h2>
+        <div class="about-item">
+          <strong>SDK Target:</strong> <code>https://bzrcdn.openai.com/sdk/oaiq.min.js</code>
+        </div>
+        <div class="about-item">
+          <strong>Attribution Ref:</strong> <code>oppref</code> URL query param & <code>__oppref</code> cookie
+        </div>
+        <div class="about-item">
+          <strong>Ingestion Endpoint:</strong> <code>https://bzr.openai.com/v1/sdk/events</code>
+        </div>
+      </section>
+
+      <div class="save-bar">
+        <button id="btn-save" class="btn btn-primary">Save Settings</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

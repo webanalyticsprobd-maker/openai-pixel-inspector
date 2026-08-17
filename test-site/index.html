@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAI Ads Pixel - Test Bench Hub</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 { color: #f8fafc; display: flex; align-items: center; gap: 10px; }
+    .badge { font-size: 12px; background: #10a37f; padding: 4px 8px; border-radius: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 20px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; }
+    .card h3 { margin-top: 0; color: #38bdf8; font-size: 16px; }
+    .card p { font-size: 13px; color: #94a3b8; line-height: 1.4; flex: 1; }
+    .btn { background: #10a37f; color: white; border: none; padding: 8px 14px; border-radius: 6px; text-decoration: none; display: inline-block; font-size: 12px; font-weight: 500; margin-top: 10px; }
+    .btn:hover { background: #0b7a5e; }
+  </style>
+</head>
+<body>
+  <h1>
+    <span>OpenAI Ads Pixel Inspector</span>
+    <span class="badge">Test Suite</span>
+  </h1>
+  <p style="color: #94a3b8;">Select any test scenario below to validate the Chrome Extension behavior in real time.</p>
+
+  <div class="grid">
+    <div class="card">
+      <div>
+        <h3>1. Valid Pixel & Attribution</h3>
+        <p>Correct oaiq initialization, oppref URL query, and standard valid conversion events.</p>
+      </div>
+      <a class="btn" href="pixel-valid.html?oppref=gAAAAAb_test_token_12345">Open Valid Pixel Test</a>
+    </div>
+
+    <div class="card">
+      <div>
+        <h3>2. Custom Events Suite</h3>
+        <p>Triggers arbitrary custom events (e.g. video_watched, demo_signup, webinar_attended) with custom parameters.</p>
+      </div>
+      <a class="btn" href="custom-events.html">Open Custom Events Test</a>
+    </div>
+
+    <div class="card">
+      <div>
+        <h3>3. Invalid Parameters & Errors</h3>
+        <p>Missing currency, wrong data types, invalid format, testing error flags.</p>
+      </div>
+      <a class="btn" href="pixel-invalid.html">Open Invalid Parameter Test</a>
+    </div>
+
+    <div class="card">
+      <div>
+        <h3>4. Duplicate Initializations</h3>
+        <p>Multiple oaiq("init") calls with different pixel IDs to test duplicate detection warnings.</p>
+      </div>
+      <a class="btn" href="duplicate-pixel.html">Open Duplicate Pixel Test</a>
+    </div>
+
+    <div class="card">
+      <div>
+        <h3>5. SPA Client-Side Routing</h3>
+        <p>Simulates client-side navigation (/home -> /products -> /checkout) without full page reloads.</p>
+      </div>
+      <a class="btn" href="spa-test.html">Open SPA Navigation Test</a>
+    </div>
+
+    <div class="card">
+      <div>
+        <h3>6. Missing Pixel</h3>
+        <p>Page with zero tracking tags to verify "Not Detected" states.</p>
+      </div>
+      <a class="btn" href="pixel-missing.html">Open Missing Pixel Test</a>
+    </div>
+  </div>
+</body>
+</html>
