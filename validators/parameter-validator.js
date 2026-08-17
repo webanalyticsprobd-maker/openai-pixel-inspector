@@ -2,10 +2,16 @@
  * OpenAI Ads Pixel Inspector - Strict Generic Parameter Validation Engine
  * 
  * Validates individual parameters, arrays, and objects against official OpenAI Ads schemas.
- * Strictly flags all violations as 'error' (❌) according to the official documentation.
+ * Strictly calculates and validates minor currency units dynamically:
+ * Minor Unit Amount = Price × 10^(Currency Decimal Places)
  */
 
-import { ISO_CURRENCIES, CONTENT_ITEM_SCHEMA } from './schemas.js';
+import {
+  ISO_CURRENCIES,
+  CONTENT_ITEM_SCHEMA,
+  getCurrencyDecimalPlaces,
+  getCurrencySmallestUnitName
+} from './schemas.js';
 
 /**
  * Validates a single parameter value against a rule definition
@@ -72,34 +78,44 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     };
   }
 
-  // 5. Numeric / Amount Format & Minor Units Rules
+  // 5. Dynamic Minor Currency Units & Amount Rules
   if (rule.type === 'integer' || rule.type === 'number') {
     if (rule.min !== undefined && paramValue < rule.min) {
       return {
         valid: false,
         severity: 'error',
         code: 'PARAM_NUM_MIN_OUT_OF_RANGE',
-        message: `Parameter "${paramName}" (${paramValue}) must be greater than or equal to ${rule.min}.`
+        message: `Parameter "${paramName}" (${paramValue}) cannot be negative. Must be >= ${rule.min}.`
       };
     }
 
     if (rule.minorUnit) {
+      // Must be an integer (no floats or decimals)
       if (!Number.isInteger(paramValue)) {
         return {
           valid: false,
           severity: 'error',
           code: 'PARAM_AMOUNT_NOT_INTEGER',
-          message: `"${paramName}" is decimal (${paramValue}). OpenAI requires minor currency units as an integer (e.g., 2599 for $25.99, or 35000 for $350.00).`
+          message: `"${paramName}" is decimal (${paramValue}). OpenAI requires minor currency units as an integer (e.g. 12599 for $125.99 USD, or 35000 for $350.00 USD).`
         };
       }
-      
-      // Strictly detect major unit values as errors (e.g. sending 350 for $350 instead of 35000)
-      if (paramValue > 0 && paramValue < 1000) {
+
+      // Determine currency context
+      const currency = (allParams.currency || 'USD').toString().trim().toUpperCase();
+      const decimals = getCurrencyDecimalPlaces(currency);
+      const smallestUnit = getCurrencySmallestUnitName(currency);
+      const multiplier = Math.pow(10, decimals);
+
+      // Detect major units mistakenly sent as minor units (e.g. sending 350 for $350.00 instead of 35000)
+      if (decimals > 0 && paramValue > 0 && paramValue < (multiplier * 10)) {
+        const majorVal = (paramValue / multiplier).toFixed(decimals);
+        const correctMinorUnits = paramValue * multiplier;
+
         return {
           valid: false,
           severity: 'error',
           code: 'PARAM_AMOUNT_INVALID_MINOR_UNITS',
-          message: `"${paramName}" value is ${paramValue}. OpenAI interprets this as ${paramValue} minor units ($${(paramValue / 100).toFixed(2)}). If your product price is $${paramValue}.00, you must send ${paramValue * 100} (cents)!`
+          message: `"${paramName}" is ${paramValue}. In ${currency} (${decimals} decimals, smallest unit: ${smallestUnit}), ${paramValue} minor units represents ${majorVal} ${currency}. If your product/event price is ${paramValue} ${currency}, you MUST send ${correctMinorUnits} (Price × 10^${decimals})!`
         };
       }
     }
@@ -124,7 +140,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         valid: false,
         severity: 'error',
         code: 'PARAM_CURRENCY_INVALID_TYPE',
-        message: `Currency must be a 3-letter uppercase ISO 4217 string (e.g., "USD").`
+        message: `Currency must be a 3-letter uppercase ISO 4217 string (e.g., "USD", "BDT", "EUR").`
       };
     }
     const clean = paramValue.trim().toUpperCase();
@@ -175,9 +191,12 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
           itemIssues.push(`Item #${idx + 1} must be an object.`);
         } else {
+          // Inherit event-level currency if item-level currency omitted
+          const itemContext = Object.assign({ currency: allParams.currency || 'USD' }, item);
+          
           for (const [propName, propRule] of Object.entries(CONTENT_ITEM_SCHEMA)) {
             if (item[propName] !== undefined) {
-              const res = validateParameter(propName, item[propName], propRule, item);
+              const res = validateParameter(propName, item[propName], propRule, itemContext);
               if (!res.valid && res.severity === 'error') {
                 itemIssues.push(`Item #${idx + 1} "${propName}": ${res.message}`);
               }

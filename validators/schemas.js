@@ -1,16 +1,51 @@
 /**
- * OpenAI Ads Pixel Inspector - Schema Registry
+ * OpenAI Ads Pixel Inspector - Schema Registry & ISO 4217 Currency Definitions
  * 
  * Defines declarative schemas for all OpenAI Ads events according to official specifications:
  * https://developers.openai.com/ads/supported-events
  * https://developers.openai.com/ads/measurement-pixel
  */
 
-export const ISO_CURRENCIES = new Set([
-  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CNY', 'INR', 'BRL', 'MXN',
-  'CHF', 'SEK', 'NOK', 'DKK', 'NZD', 'SGD', 'HKD', 'KRW', 'PLN', 'ZAR',
-  'AED', 'SAR', 'TRY', 'ILS', 'THB', 'PHP', 'MYR', 'IDR', 'CZK', 'HUF'
-]);
+export const CURRENCY_DECIMAL_PLACES = {
+  // 0 Decimal Places (Multiplier: 10^0 = 1)
+  'JPY': 0, 'KRW': 0, 'VND': 0, 'CLP': 0, 'ISK': 0, 'PYG': 0, 'RWF': 0, 'UGX': 0,
+  
+  // 3 Decimal Places (Multiplier: 10^3 = 1000)
+  'KWD': 3, 'BHD': 3, 'OMR': 3, 'JOD': 3, 'TND': 3, 'IQD': 3, 'LYD': 3,
+
+  // 2 Decimal Places (Standard Default, Multiplier: 10^2 = 100)
+  'USD': 2, 'BDT': 2, 'EUR': 2, 'GBP': 2, 'CAD': 2, 'AUD': 2, 'INR': 2,
+  'CHF': 2, 'SGD': 2, 'NZD': 2, 'BRL': 2, 'MXN': 2, 'CNY': 2, 'SEK': 2,
+  'NOK': 2, 'DKK': 2, 'HKD': 2, 'PLN': 2, 'ZAR': 2, 'AED': 2, 'SAR': 2,
+  'TRY': 2, 'ILS': 2, 'THB': 2, 'PHP': 2, 'MYR': 2, 'IDR': 2, 'CZK': 2,
+  'HUF': 2, 'PKR': 2, 'EGP': 2, 'NGN': 2, 'KES': 2, 'GHS': 2, 'LKR': 2
+};
+
+export const ISO_CURRENCIES = new Set(Object.keys(CURRENCY_DECIMAL_PLACES));
+
+export function getCurrencyDecimalPlaces(currencyCode) {
+  if (!currencyCode || typeof currencyCode !== 'string') return 2;
+  const clean = currencyCode.trim().toUpperCase();
+  return CURRENCY_DECIMAL_PLACES[clean] !== undefined ? CURRENCY_DECIMAL_PLACES[clean] : 2;
+}
+
+export function getCurrencySmallestUnitName(currencyCode) {
+  const clean = (currencyCode || 'USD').trim().toUpperCase();
+  switch (clean) {
+    case 'USD': case 'CAD': case 'AUD': case 'NZD': case 'SGD': return 'cents';
+    case 'BDT': return 'poisha';
+    case 'EUR': return 'cents';
+    case 'GBP': return 'pence';
+    case 'INR': case 'PKR': return 'paise';
+    case 'CHF': return 'rappen/centimes';
+    case 'KWD': case 'BHD': case 'IQD': case 'JOD': return 'fils';
+    case 'OMR': return 'baisa';
+    case 'JPY': return 'yen (0 decimals)';
+    case 'KRW': return 'won (0 decimals)';
+    case 'VND': return 'dong (0 decimals)';
+    default: return `${getCurrencyDecimalPlaces(clean)} decimal minor units`;
+  }
+}
 
 export const STANDARD_EVENT_NAMES = [
   'page_viewed',
@@ -51,7 +86,7 @@ export const CONTENT_ITEM_SCHEMA = {
   name: { type: 'string', description: 'Human-readable product/item name' },
   content_type: { type: 'string', enum: ['product', 'plan', 'page', 'category', 'service'], description: 'Category type' },
   quantity: { type: 'integer', min: 1, description: 'Item quantity (positive integer)' },
-  amount: { type: 'integer', min: 0, minorUnit: true, description: 'Item monetary value in minor units (e.g. 2599 for $25.99)' },
+  amount: { type: 'integer', min: 0, minorUnit: true, description: 'Item monetary value in minor units (e.g. 2500 for $25.00)' },
   currency: { type: 'string', format: 'currency', description: 'ISO 4217 3-letter currency code' },
   variant_dict: { type: 'object', description: 'Key-value map of variants (e.g. { size: "M" })' }
 };
