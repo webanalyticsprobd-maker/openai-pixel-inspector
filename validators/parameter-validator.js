@@ -2,8 +2,7 @@
  * OpenAI Ads Pixel Inspector - Strict Generic Parameter Validation Engine
  * 
  * Validates individual parameters, arrays, and objects against official OpenAI Ads schemas.
- * Strictly calculates and validates minor currency units dynamically:
- * Minor Unit Amount = Price × 10^(Currency Decimal Places)
+ * Strictly checks data types, minor currency unit formatting, required fields, and mathematical consistency.
  */
 
 import {
@@ -78,7 +77,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     };
   }
 
-  // 5. Dynamic Minor Currency Units & Amount Rules
+  // 5. Amount & Minor Currency Units Requirements
   if (rule.type === 'integer' || rule.type === 'number') {
     if (rule.min !== undefined && paramValue < rule.min) {
       return {
@@ -90,42 +89,40 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     }
 
     if (rule.minorUnit) {
-      // Must be an integer (no floats or decimals)
+      // Must be an integer (no floats, decimals, or strings)
       if (!Number.isInteger(paramValue)) {
         return {
           valid: false,
           severity: 'error',
           code: 'PARAM_AMOUNT_NOT_INTEGER',
-          message: `"${paramName}" is decimal (${paramValue}). OpenAI requires minor currency units as an integer (e.g. 12599 for $125.99 USD, or 35000 for $350.00 USD).`
+          message: `"${paramName}" (${paramValue}) must be an integer in minor currency units (no decimals). For example, send 12599 for $125.99 USD.`
         };
       }
 
-      // Determine currency context
+      // Check currency pairing
       const currency = (allParams.currency || 'USD').toString().trim().toUpperCase();
-      const decimals = getCurrencyDecimalPlaces(currency);
-      const smallestUnit = getCurrencySmallestUnitName(currency);
-      const multiplier = Math.pow(10, decimals);
+      if (!allParams.currency && rule.requiredCurrency !== false) {
+        return {
+          valid: false,
+          severity: 'error',
+          code: 'PARAM_AMOUNT_MISSING_CURRENCY',
+          message: `Parameter "currency" is strictly required whenever "${paramName}" is provided.`
+        };
+      }
 
-      // Detect major units mistakenly sent as minor units (e.g. sending 350 for $350.00 instead of 35000, or 1400 for $1400.00 instead of 140000)
-      if (decimals > 0 && paramValue > 0) {
-        const majorVal = (paramValue / multiplier).toFixed(decimals);
-        const correctMinorUnits = paramValue * multiplier;
-        
-        // Calculate item quantity if contents[] is passed
-        let totalQty = 1;
-        if (Array.isArray(allParams.contents) && allParams.contents.length > 0) {
-          totalQty = allParams.contents.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-        }
-        const pricePerUnit = parseFloat(majorVal) / totalQty;
-
-        // Flag as Error if total minor units represents < 100.00 currency units or if price per unit < 20.00
-        if (paramValue <= 10000 || pricePerUnit < 20.0) {
-          return {
-            valid: false,
-            severity: 'error',
-            code: 'PARAM_AMOUNT_INVALID_MINOR_UNITS',
-            message: `"${paramName}" is ${paramValue}. In ${currency} (${decimals} decimals, smallest unit: ${smallestUnit}), ${paramValue} minor units represents ONLY ${currency} ${majorVal}. If your intended total is ${currency} ${paramValue}, you MUST send ${correctMinorUnits} (Price × 10^${decimals})!`
-          };
+      // Check item-level total sum consistency when contents[] items also provide amount
+      if (paramName === 'amount' && Array.isArray(allParams.contents) && allParams.contents.length > 0) {
+        const itemsWithAmount = allParams.contents.filter(i => typeof i.amount === 'number');
+        if (itemsWithAmount.length === allParams.contents.length) {
+          const itemsSum = allParams.contents.reduce((sum, i) => sum + (i.amount * (Number(i.quantity) || 1)), 0);
+          if (itemsSum !== paramValue) {
+            return {
+              valid: false,
+              severity: 'error',
+              code: 'PARAM_AMOUNT_TOTAL_MISMATCH',
+              message: `Event-level amount (${paramValue}) does not match sum of items in contents (${itemsSum}).`
+            };
+          }
         }
       }
     }
