@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenAI Ads Pixel - Full Journey & Duplicate Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    button {
+      background: #10a37f;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 13px;
+    }
+    button:hover {
+      background: #0b7a5e;
+    }
+    button.btn-warn {
+      background: #f59e0b;
+    }
+    button.btn-warn:hover {
+      background: #d97706;
+    }
+    button.btn-danger {
+      background: #ef4444;
+    }
+    button.btn-danger:hover {
+      background: #dc2626;
+    }
+    .log-box {
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      color: #38bdf8;
+    }
+  </style>
+
+  <!-- OpenAI Pixel Base Snippet -->
+  <script>
+    (function (w, d, s, u) {
+      if (w.oaiq) return;
+      var q = function () {
+        q.q.push(arguments);
+      };
+      q.q = [];
+      w.oaiq = q;
+      var js = d.createElement(s);
+      js.async = true;
+      js.src = u;
+      var f = d.getElementsByTagName(s)[0];
+      f.parentNode.insertBefore(js, f);
+    })(window, document, "script", "https://bzrcdn.openai.com/sdk/oaiq.min.js");
+
+    oaiq("init", {
+      pixelId: "px_journey_store_99"
+    });
+  </script>
+</head>
+<body>
+  <h1>Full User Journey & Duplicate Event Test Bench</h1>
+  <p style="color: #94a3b8;">Simulate a real e-commerce conversion journey and test intelligent duplicate event detection.</p>
+
+  <div class="card">
+    <h3>Step-by-Step Conversion Journey</h3>
+    <p style="font-size: 13px; color: #94a3b8;">Trigger events in chronological order to observe the session journey recorder:</p>
+    
+    <div class="btn-row">
+      <button onclick="triggerStep(1, 'page_viewed', { type: 'contents' })">1. page_viewed (/home)</button>
+      <button onclick="triggerStep(2, 'contents_viewed', { type: 'contents', contents: [{ id: 'shoe_123', name: 'Running Shoes Pro', amount: 8900, currency: 'USD' }] })">2. contents_viewed (Shoe A)</button>
+      <button onclick="triggerStep(3, 'items_added', { type: 'contents', amount: 8900, currency: 'USD', contents: [{ id: 'shoe_123', name: 'Running Shoes Pro', quantity: 1, amount: 8900, currency: 'USD' }] })">3. items_added (Shoe A)</button>
+      <button onclick="triggerStep(4, 'page_viewed', { type: 'contents' }, { path: '/checkout' })">4. page_viewed (/checkout)</button>
+      <button onclick="triggerStep(5, 'checkout_started', { type: 'contents', amount: 8900, currency: 'USD' })">5. checkout_started</button>
+      <button onclick="triggerStep(6, 'order_created', { type: 'contents', amount: 8900, currency: 'USD' })">6. order_created (Purchase)</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Duplicate Event Testing</h3>
+    <p style="font-size: 13px; color: #94a3b8;">Test intentional valid repeated actions vs. accidental double-fires:</p>
+    
+    <div class="btn-row">
+      <button class="btn-warn" onclick="testIntentionalRepetition()">Valid: View Product A, then Product B (2 legitimate views)</button>
+      <button class="btn-danger" onclick="testDoubleFire()">Double Fire: 2 items_added calls in 50ms (Simulated rapid click bug)</button>
+      <button class="btn-danger" onclick="testDuplicatePageView()">Double Fire: 2 page_viewed on single load</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Console Log</h3>
+    <div id="log" class="log-box">Ready. Click buttons above to trigger events.</div>
+  </div>
+
+  <script>
+    function log(msg) {
+      const el = document.getElementById('log');
+      el.innerHTML += '<br>[' + new Date().toLocaleTimeString() + '] ' + msg;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function triggerStep(stepNum, name, data, opts) {
+      log('Step ' + stepNum + ': Firing ' + name + '...');
+      if (opts && opts.path) {
+        history.pushState({}, '', opts.path);
+      }
+      oaiq('measure', name, data, opts || {});
+    }
+
+    function testIntentionalRepetition() {
+      log('User intentionally views Product A:');
+      oaiq('measure', 'contents_viewed', { type: 'contents', contents: [{ id: 'prod_A', name: 'Product A' }] });
+      setTimeout(() => {
+        log('User intentionally views Product B (Legitimate repeated action):');
+        oaiq('measure', 'contents_viewed', { type: 'contents', contents: [{ id: 'prod_B', name: 'Product B' }] });
+      }, 1000);
+    }
+
+    function testDoubleFire() {
+      log('Firing Double Fire test (2 identical items_added within 50ms):');
+      oaiq('measure', 'items_added', { type: 'contents', amount: 4999, currency: 'USD', contents: [{ id: 'prod_99', name: 'Double Fired Item' }] });
+      setTimeout(() => {
+        oaiq('measure', 'items_added', { type: 'contents', amount: 4999, currency: 'USD', contents: [{ id: 'prod_99', name: 'Double Fired Item' }] });
+      }, 50);
+    }
+
+    function testDuplicatePageView() {
+      log('Firing 2 page_viewed on the same page:');
+      oaiq('measure', 'page_viewed', { type: 'contents' });
+      setTimeout(() => {
+        oaiq('measure', 'page_viewed', { type: 'contents' });
+      }, 50);
+    }
+  </script>
+</body>
+</html>

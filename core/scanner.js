@@ -1,5 +1,5 @@
 /**
- * OpenAI Ads Pixel Inspector - Scanner & Audit Report Generator
+ * OpenAI Ads Pixel Inspector - Scanner & Full Journey Audit Generator
  */
 
 export function generateAuditReport(tabState) {
@@ -7,10 +7,12 @@ export function generateAuditReport(tabState) {
   const attribution = tabState.attribution || {};
   const events = tabState.events || [];
   const network = tabState.network || [];
+  const visitedPages = tabState.visitedPages || [];
 
   const summary = {
     website: tabState.url || 'Unknown',
     hostname: '',
+    sessionId: tabState.sessionId || 'SESSION_' + Date.now().toString(36).toUpperCase(),
     generatedAt: new Date().toISOString(),
     overallStatus: 'pass', // 'pass' | 'warning' | 'fail'
     scores: {
@@ -22,13 +24,17 @@ export function generateAuditReport(tabState) {
       opprefPresent: Boolean(attribution.oppref),
       opprefCookie: attribution.cookieDetected,
       totalEvents: events.length,
+      pagesVisitedCount: Math.max(visitedPages.length, 1),
       standardEvents: 0,
       customEvents: 0,
       validEvents: 0,
       warningEvents: 0,
       errorEvents: 0,
+      duplicateEvents: 0,
       networkRequestsTracked: network.length
     },
+    journeyTable: [],
+    eventSummaries: [],
     issues: [],
     recommendations: []
   };
@@ -58,33 +64,29 @@ export function generateAuditReport(tabState) {
     });
   }
 
-  // 2. Duplicate Pixel IDs
-  if (pixel.pixelIds && pixel.pixelIds.length > 1) {
-    summary.issues.push({
-      code: 'MULTIPLE_PIXEL_IDS_FOUND',
-      severity: 'warning',
-      message: `Multiple OpenAI Pixel IDs were detected: ${pixel.pixelIds.join(', ')}.`,
-      recommendation: 'Review your tag manager and template configurations to prevent duplicate conversions.'
-    });
-  }
-
-  // 3. Attribution oppref Check
+  // 2. Attribution oppref Check
   if (!attribution.oppref) {
     summary.issues.push({
       code: 'OPPREF_NOT_DETECTED',
       severity: 'info',
       message: 'No oppref click reference detected in URL or cookie.',
-      recommendation: 'oppref is automatically appended to URLs when users click OpenAI Ads. It will not be present on direct organic traffic.'
+      recommendation: 'oppref is automatically appended to landing URLs when users click OpenAI Ads. Direct/organic visits will not carry this parameter.'
     });
   }
 
-  // 4. Events Aggregation
-  for (const evt of events) {
+  // 3. Process Events Journey & Count Aggregates
+  const eventGroupMap = {};
+
+  events.forEach((evt, idx) => {
     const isCustom = evt.validation && evt.validation.isCustom;
     if (isCustom) {
       summary.scores.customEvents++;
     } else {
       summary.scores.standardEvents++;
+    }
+
+    if (evt.isDuplicate) {
+      summary.scores.duplicateEvents++;
     }
 
     if (evt.validation) {
@@ -95,14 +97,63 @@ export function generateAuditReport(tabState) {
         summary.overallStatus = 'fail';
       }
 
-      // Collect all validation issues
       if (Array.isArray(evt.validation.issues)) {
         for (const issue of evt.validation.issues) {
           summary.issues.push(issue);
         }
       }
     }
-  }
+
+    // Build Journey Row
+    summary.journeyTable.push({
+      step: idx + 1,
+      name: evt.displayName || evt.name,
+      canonicalName: evt.name,
+      dataShape: evt.validation ? evt.validation.dataShape : 'contents',
+      url: evt.url || '/',
+      pathname: evt.pathname || '/',
+      timestamp: evt.timestamp,
+      eventId: evt.eventId || 'Not Sent',
+      parameters: evt.parameters || {},
+      count: evt.requestCount || 1,
+      duplicateStatus: evt.duplicateStatus || '✅ Correct',
+      auditStatus: evt.validation ? evt.validation.status : 'valid'
+    });
+
+    // Group for Event Summary Table
+    const grpName = evt.name;
+    if (!eventGroupMap[grpName]) {
+      eventGroupMap[grpName] = {
+        name: grpName,
+        displayName: evt.displayName || grpName,
+        isCustom: isCustom,
+        count: 0,
+        duplicates: 0,
+        uniquePages: new Set()
+      };
+    }
+    eventGroupMap[grpName].count++;
+    if (evt.pathname) eventGroupMap[grpName].uniquePages.add(evt.pathname);
+    if (evt.isDuplicate) eventGroupMap[grpName].duplicates++;
+  });
+
+  // Build Event Summaries
+  summary.eventSummaries = Object.values(eventGroupMap).map((grp) => {
+    let auditMsg = '✅ Valid';
+    if (grp.duplicates > 0) {
+      auditMsg = `❌ ${grp.duplicates} duplicate(s) detected`;
+    } else if (grp.name === 'page_viewed') {
+      auditMsg = `✅ Valid across ${grp.uniquePages.size} page(s)`;
+    }
+    return {
+      name: grp.name,
+      displayName: grp.displayName,
+      isCustom: grp.isCustom,
+      detected: grp.count,
+      duplicates: grp.duplicates,
+      audit: auditMsg
+    };
+  });
 
   // Deduplicate issues list
   const uniqueIssues = [];
@@ -118,7 +169,7 @@ export function generateAuditReport(tabState) {
 
   if (summary.scores.errorEvents > 0 && summary.overallStatus !== 'fail') {
     summary.overallStatus = 'fail';
-  } else if (summary.scores.warningEvents > 0 && summary.overallStatus === 'pass') {
+  } else if ((summary.scores.warningEvents > 0 || summary.scores.duplicateEvents > 0) && summary.overallStatus === 'pass') {
     summary.overallStatus = 'warning';
   }
 

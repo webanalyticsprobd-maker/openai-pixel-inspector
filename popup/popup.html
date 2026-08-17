@@ -17,14 +17,14 @@
           </div>
           <div>
             <h1 class="brand-title">OpenAI Pixel Inspector</h1>
-            <span class="brand-subtitle">Ads & Attribution Diagnostics</span>
+            <span class="brand-subtitle">Journey Audit & Deduplication Diagnostics</span>
           </div>
         </div>
         <div class="header-actions">
           <button id="btn-theme" class="icon-button" title="Toggle Light/Dark Theme">
             <span id="theme-icon">☀️</span>
           </button>
-          <button id="btn-clear" class="icon-button" title="Clear Tab Events">
+          <button id="btn-clear" class="icon-button" title="Reset Session & Clear Journey">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           </button>
           <button id="btn-refresh" class="icon-button" title="Rescan Tab">
@@ -46,7 +46,7 @@
         <button class="nav-tab" data-tab="events">Events <span class="tab-count" id="tab-count-events">0</span></button>
         <button class="nav-tab" data-tab="attribution">oppref</button>
         <button class="nav-tab" data-tab="issues">Issues <span class="tab-count tab-count-error" id="tab-count-issues">0</span></button>
-        <button class="nav-tab" data-tab="audit">Audit & Export</button>
+        <button class="nav-tab" data-tab="audit">Journey Audit</button>
       </nav>
     </header>
 
@@ -105,8 +105,8 @@
               <span class="status-val mono" id="val-pixel-id">None</span>
             </div>
             <div class="status-row">
-              <span class="status-label">Initialization State</span>
-              <span class="status-val" id="val-pixel-init">Checking...</span>
+              <span class="status-label">Session ID</span>
+              <span class="status-val mono" id="val-session-id">--</span>
             </div>
             <div class="status-row">
               <span class="status-label">Attribution (oppref)</span>
@@ -153,12 +153,13 @@
         <div class="events-toolbar">
           <div class="search-box">
             <span class="search-icon">🔍</span>
-            <input type="text" id="event-search-input" placeholder="Search event names, IDs, parameters...">
+            <input type="text" id="event-search-input" placeholder="Search event names, URLs, parameters...">
           </div>
           <div class="filter-chips">
             <button class="filter-chip active" data-filter="all">All</button>
             <button class="filter-chip" data-filter="standard">Standard</button>
             <button class="filter-chip" data-filter="custom">Custom</button>
+            <button class="filter-chip" data-filter="duplicates">Duplicates</button>
             <button class="filter-chip" data-filter="errors">Errors</button>
             <button class="filter-chip" data-filter="warnings">Warnings</button>
             <button class="filter-chip" data-filter="network">Network</button>
@@ -224,21 +225,40 @@
       <div class="tab-pane" id="pane-audit">
         <section class="card">
           <div class="card-header">
-            <span class="card-title">Tracking Implementation Audit</span>
+            <span class="card-title">Full Journey Tracking Audit</span>
             <span id="audit-score-badge" class="badge badge-success">Audit Ready</span>
           </div>
+          
           <div class="audit-summary-box" id="audit-summary-box">
             <!-- Dynamically populated -->
           </div>
-          <div class="export-actions">
+
+          <!-- Journey Audit Table Section -->
+          <div style="margin-top: 14px;">
+            <h3 style="font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">User Journey Timeline</h3>
+            <div id="journey-table-container" style="overflow-x: auto; max-height: 220px;">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Event Summary Breakdown Section -->
+          <div style="margin-top: 14px;">
+            <h3 style="font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">Event Health Summary</h3>
+            <div id="event-summary-table-container" style="overflow-x: auto;">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Export Actions -->
+          <div class="export-actions" style="margin-top: 16px;">
             <button class="btn btn-primary" id="btn-copy-markdown">
-              <span>📋 Copy Markdown Report</span>
+              <span>📋 Copy Markdown</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-export-csv">
+              <span>📊 Export CSV (Sheets/Excel)</span>
             </button>
             <button class="btn btn-secondary" id="btn-export-json">
               <span>📥 Export JSON</span>
-            </button>
-            <button class="btn btn-secondary" id="btn-export-csv">
-              <span>📊 Export CSV</span>
             </button>
           </div>
         </section>
@@ -265,10 +285,10 @@
     <footer class="app-footer">
       <div class="footer-left">
         <span class="pulse-dot"></span>
-        <span id="footer-status-text">Real-time Inspector Active</span>
+        <span id="footer-status-text">Full Journey Inspector Active</span>
       </div>
       <div class="footer-right">
-        <span class="version-tag">v1.0.0</span>
+        <span class="version-tag">v1.1.0</span>
       </div>
     </footer>
   </div>

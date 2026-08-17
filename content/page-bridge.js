@@ -73,8 +73,8 @@
     } else if (command === 'measure') {
       // oaiq("measure", eventName, properties, options)
       const eventName = args[1] || 'unknown';
-      const properties = (args.length >= 3 && typeof args[2] === 'object') ? args[2] : {};
-      const options = (args.length >= 4 && typeof args[3] === 'object') ? args[3] : {};
+      const properties = (args.length >= 3 && typeof args[2] === 'object' && args[2] !== null) ? args[2] : {};
+      const options = (args.length >= 4 && typeof args[3] === 'object' && args[3] !== null) ? args[3] : {};
 
       sendToContentScript('PIXEL_EVENT_CAPTURED', {
         name: eventName,
@@ -82,6 +82,9 @@
         options: options,
         args: Array.from(args).slice(1),
         pixelId: Array.from(activePixelIds)[0] || null,
+        url: window.location.href,
+        pathname: window.location.pathname,
+        title: document.title,
         timestamp: Date.now(),
         caller: 'oaiq("measure")'
       });
@@ -89,8 +92,8 @@
       // oaiq("measureSingle", pixelId, eventName, properties, options)
       const targetPixelId = args[1] || null;
       const eventName = args[2] || 'unknown';
-      const properties = (args.length >= 4 && typeof args[3] === 'object') ? args[3] : {};
-      const options = (args.length >= 5 && typeof args[4] === 'object') ? args[4] : {};
+      const properties = (args.length >= 4 && typeof args[3] === 'object' && args[3] !== null) ? args[3] : {};
+      const options = (args.length >= 5 && typeof args[4] === 'object' && args[4] !== null) ? args[4] : {};
 
       if (targetPixelId) activePixelIds.add(targetPixelId);
 
@@ -100,6 +103,9 @@
         options: options,
         args: Array.from(args).slice(2),
         pixelId: targetPixelId,
+        url: window.location.href,
+        pathname: window.location.pathname,
+        title: document.title,
         timestamp: Date.now(),
         caller: 'oaiq("measureSingle")'
       });

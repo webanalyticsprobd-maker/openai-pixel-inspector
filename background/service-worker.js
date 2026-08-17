@@ -4,8 +4,7 @@
  * Orchestrates normalized state, validation, network request correlation,
  * event stores, badge counts, and popup messaging for all browser tabs.
  * 
- * Includes Browser-level Network Request Observation (chrome.webRequest)
- * and Browser Cookie Jar Inspection (chrome.cookies) to monitor live websites.
+ * Maintains persistent full session journey history across all page navigations.
  */
 
 import { normalizeEvent } from '../core/normalizer.js';
@@ -25,10 +24,13 @@ function getOrCreateTabStore(tabId) {
 }
 
 function createDefaultTabState(tabId, url = '', title = '') {
+  const store = getOrCreateTabStore(tabId);
   return {
     tabId: tabId,
+    sessionId: store.sessionId,
     url: url,
     title: title,
+    visitedPages: url ? [url] : [],
     lastUpdated: Date.now(),
     contentScriptActive: false,
     bridgeConnected: false,
@@ -46,7 +48,7 @@ function createDefaultTabState(tabId, url = '', title = '') {
       urlDetected: false,
       details: {}
     },
-    events: [],
+    events: store.events || [],
     network: [],
     issues: [],
     warnings: [],
@@ -56,7 +58,8 @@ function createDefaultTabState(tabId, url = '', title = '') {
       customEvents: 0,
       validEvents: 0,
       warningEvents: 0,
-      errorEvents: 0
+      errorEvents: 0,
+      duplicateEvents: 0
     }
   };
 }
@@ -66,7 +69,12 @@ function getOrCreateTabState(tabId, url = '', title = '') {
     tabStates.set(tabId, createDefaultTabState(tabId, url, title));
   }
   const state = tabStates.get(tabId);
-  if (url) state.url = url;
+  if (url) {
+    state.url = url;
+    if (!state.visitedPages.includes(url)) {
+      state.visitedPages.push(url);
+    }
+  }
   if (title) state.title = title;
   return state;
 }
@@ -74,11 +82,15 @@ function getOrCreateTabState(tabId, url = '', title = '') {
 function updateBadge(tabId, state) {
   if (!state || typeof chrome.action === 'undefined') return;
   const errCount = state.stats.errorEvents;
+  const dupCount = state.stats.duplicateEvents;
   const evtCount = state.stats.totalEvents;
 
   if (errCount > 0) {
     chrome.action.setBadgeText({ tabId: tabId, text: `${errCount}` });
     chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#ef4444' });
+  } else if (dupCount > 0) {
+    chrome.action.setBadgeText({ tabId: tabId, text: `${dupCount}d` });
+    chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#f59e0b' });
   } else if (evtCount > 0) {
     chrome.action.setBadgeText({ tabId: tabId, text: `${evtCount}` });
     chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#10a37f' });
@@ -120,13 +132,15 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabStores.delete(tabId);
 });
 
-// Navigation listener
+// Navigation listener - Maintains session journey across page navigations
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading' && changeInfo.url) {
-    const store = getOrCreateTabStore(tabId);
-    store.clear();
-    const state = createDefaultTabState(tabId, tab.url, tab.title);
-    tabStates.set(tabId, state);
+  if (changeInfo.status === 'loading' && tab.url) {
+    const state = getOrCreateTabState(tabId, tab.url, tab.title);
+    state.url = tab.url;
+    if (!state.visitedPages.includes(tab.url)) {
+      state.visitedPages.push(tab.url);
+    }
+    state.lastUpdated = Date.now();
     updateBadge(tabId, state);
     scanBrowserCookiesForTab(tabId, tab.url);
   }
@@ -191,25 +205,32 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
 
         state.network.push(netEntry);
 
-        // If the request contains an event name not yet captured via JS bridge, add it
+        // If the request contains an event name, correlate or record
         if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event)) {
           const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event;
-          const normalized = normalizeEvent({
-            name: evtName,
-            parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
-            event_id: parsedPayload.event_id,
-            pixelId: parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
-            timestamp: Date.now(),
-            caller: 'network (webRequest)'
-          }, {
-            pixelId: state.pixel.pixelIds[0] || null,
-            oppref: state.attribution.oppref || null
-          });
+          
+          // Correlate with existing event or add if not captured via JS bridge
+          const correlated = store.correlateNetworkRequest(netEntry);
+          if (!correlated) {
+            const normalized = normalizeEvent({
+              name: evtName,
+              parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
+              event_id: parsedPayload.event_id || null, // Real event_id only
+              pixelId: parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
+              url: state.url,
+              timestamp: Date.now(),
+              caller: 'network (webRequest)'
+            }, {
+              url: state.url,
+              pixelId: state.pixel.pixelIds[0] || null,
+              oppref: state.attribution.oppref || null
+            });
 
-          normalized.network.detected = true;
-          normalized.network.url = url;
-          normalized.network.method = method;
-          store.addEvent(normalized);
+            normalized.network.detected = true;
+            normalized.network.url = url;
+            normalized.network.method = method;
+            store.addEvent(normalized);
+          }
           state.events = store.events;
         } else {
           store.correlateNetworkRequest(netEntry);
@@ -346,7 +367,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (state && store && message.data) {
         const rawEvent = message.data;
         const normalized = normalizeEvent(rawEvent, {
-          pixelId: state.pixel.pixelIds[0] || null,
+          url: rawEvent.url || state.url,
+          pathname: rawEvent.pathname || '',
+          pixelId: rawEvent.pixelId || state.pixel.pixelIds[0] || null,
           oppref: state.attribution.oppref || null
         });
 
@@ -360,9 +383,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let valid = 0;
         let warning = 0;
         let error = 0;
+        let duplicate = 0;
 
         for (const evt of state.events) {
           if (evt.validation.isCustom) custom++; else standard++;
+          if (evt.isDuplicate) duplicate++;
           if (evt.validation.status === 'valid') valid++;
           if (evt.validation.status === 'warning') warning++;
           if (evt.validation.status === 'error') error++;
@@ -374,7 +399,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           customEvents: custom,
           validEvents: valid,
           warningEvents: warning,
-          errorEvents: error
+          errorEvents: error,
+          duplicateEvents: duplicate
         };
 
         state.lastUpdated = Date.now();
@@ -401,6 +427,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (state && message.data) {
         state.url = message.data.url;
         state.title = message.data.title;
+        if (!state.visitedPages.includes(message.data.url)) {
+          state.visitedPages.push(message.data.url);
+        }
         state.lastUpdated = Date.now();
         scanBrowserCookiesForTab(tabId, state.url);
       }
@@ -435,7 +464,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (targetId) {
         const store = getOrCreateTabStore(targetId);
         store.clear();
-        const state = createDefaultTabState(targetId);
+        const state = createDefaultTabState(targetId, tabStates.get(targetId)?.url || '');
         tabStates.set(targetId, state);
         updateBadge(targetId, state);
       }
@@ -461,4 +490,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-console.info('[OpenAI Pixel Inspector] Service worker online with chrome.webRequest and chrome.cookies support.');
+console.info('[OpenAI Pixel Inspector] Service worker online with full session journey persistence.');

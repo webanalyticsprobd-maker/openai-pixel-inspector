@@ -1,12 +1,14 @@
 /**
- * OpenAI Ads Pixel Inspector - Popup Controller (Full Buildout)
+ * OpenAI Ads Pixel Inspector - Popup Controller (Journey & Duplicate Audit Engine)
  * 
  * Features:
- * - Persistent accordion drawers (fixing the collapse bug)
+ * - Full session journey history across all page navigations
+ * - Action-based duplicate event detection (double-firing diagnostics)
+ * - Strict real Event ID display (never synthetic / generated)
+ * - Journey timeline table and Event health summary
+ * - Google Sheets / Excel CSV, JSON, and Markdown export
  * - Light & Dark theme toggle with persistence
- * - Real-time event monitoring & filtering
- * - oppref attribution inspection
- * - Issue diagnostics & audit reports (Markdown/JSON/CSV)
+ * - Persistent accordion drawers
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
@@ -35,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pixelStatusBadge = document.getElementById('pixel-status-badge');
   const valPixelDetected = document.getElementById('val-pixel-detected');
   const valPixelId = document.getElementById('val-pixel-id');
-  const valPixelInit = document.getElementById('val-pixel-init');
+  const valSessionId = document.getElementById('val-session-id');
   const valOppref = document.getElementById('val-oppref');
 
   const metricTotalEvents = document.getElementById('metric-total-events');
@@ -66,6 +68,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Audit Tab elements
   const auditScoreBadge = document.getElementById('audit-score-badge');
   const auditSummaryBox = document.getElementById('audit-summary-box');
+  const journeyTableContainer = document.getElementById('journey-table-container');
+  const eventSummaryTableContainer = document.getElementById('event-summary-table-container');
   const btnCopyMarkdown = document.getElementById('btn-copy-markdown');
   const btnExportJson = document.getElementById('btn-export-json');
   const btnExportCsv = document.getElementById('btn-export-csv');
@@ -260,16 +264,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     valPixelId.textContent = (pixel.pixelIds && pixel.pixelIds.length > 0) ? pixel.pixelIds.join(', ') : 'None';
-    valPixelInit.textContent = pixel.initialized ? '✅ Initialized' : (pixel.detected ? '⚠️ Pending init' : 'Not initialized');
+    valSessionId.textContent = currentTabState.sessionId || 'SESSION_' + activeTab?.id;
     valOppref.textContent = attribution.oppref ? `✅ ${truncateString(attribution.oppref, 18)}` : '⚠️ Not detected';
 
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
     metricCustomEvents.textContent = stats.customEvents || 0;
-    metricIssuesEvents.textContent = stats.errorEvents || 0;
+    metricIssuesEvents.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0);
 
     tabCountEvents.textContent = stats.totalEvents || 0;
-    tabCountIssues.textContent = stats.errorEvents || 0;
+    tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0);
 
     if (events.length > 0) {
       const latest = events[events.length - 1];
@@ -280,14 +284,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="event-badge-type ${latest.validation.isCustom ? 'event-badge-custom' : 'event-badge-std'}">
               ${latest.validation.isCustom ? 'Custom' : 'Standard'}
             </span>
-            <strong>${escapeHtml(latest.name)}</strong>
+            <strong>${escapeHtml(latest.displayName || latest.name)}</strong>
           </div>
-          <span class="badge ${latest.validation.status === 'valid' ? 'badge-success' : (latest.validation.status === 'warning' ? 'badge-warning' : 'badge-error')}">
-            ${latest.validation.status.toUpperCase()}
+          <span class="badge ${latest.isDuplicate ? 'badge-error' : (latest.validation.status === 'valid' ? 'badge-success' : 'badge-warning')}">
+            ${latest.isDuplicate ? 'DOUBLE FIRED' : latest.validation.status.toUpperCase()}
           </span>
         </div>
         <div style="font-size: 11px; font-family: monospace; color: var(--text-secondary); margin-top: 6px;">
-          ${Object.keys(latest.parameters).length} parameter(s) sent • ID: ${escapeHtml(truncateString(latest.eventId, 14))}
+          ${Object.keys(latest.parameters).length} parameter(s) • Page: ${escapeHtml(latest.pathname || '/')} • ID: ${latest.eventId ? escapeHtml(latest.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}
         </div>
       `;
     } else {
@@ -303,16 +307,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const filtered = events.filter((evt) => {
       if (currentFilter === 'standard' && evt.validation.isCustom) return false;
       if (currentFilter === 'custom' && !evt.validation.isCustom) return false;
+      if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
       if (currentFilter === 'errors' && evt.validation.status !== 'error') return false;
       if (currentFilter === 'warnings' && evt.validation.status !== 'warning') return false;
       if (currentFilter === 'network' && !evt.network.detected) return false;
 
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
-        const nameMatch = evt.name.toLowerCase().includes(q);
+        const nameMatch = (evt.displayName || evt.name).toLowerCase().includes(q);
+        const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
         const idMatch = (evt.eventId || '').toLowerCase().includes(q);
         const paramsMatch = JSON.stringify(evt.parameters).toLowerCase().includes(q);
-        return nameMatch || idMatch || paramsMatch;
+        return nameMatch || urlMatch || idMatch || paramsMatch;
       }
       return true;
     });
@@ -322,20 +328,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="empty-state">
           <span class="empty-icon">📡</span>
           <p class="empty-text">No matching OpenAI Pixel events observed.</p>
-          <span class="empty-subtext">Trigger tracking actions on the page to view</span>
+          <span class="empty-subtext">Trigger tracking actions on the page or across the user journey.</span>
         </div>
       `;
       return;
     }
 
     eventsListContainer.innerHTML = '';
-    filtered.slice().reverse().forEach((evt) => {
+    filtered.slice().reverse().forEach((evt, idx) => {
       const item = document.createElement('div');
-      const isExpanded = expandedEventIds.has(evt.id);
+      const itemKey = evt._id || `evt_${idx}`;
+      const isExpanded = expandedEventIds.has(itemKey);
       item.className = `event-item ${isExpanded ? 'open' : ''}`;
 
       const isCustom = evt.validation.isCustom;
-      const statusClass = evt.validation.status === 'valid' ? 'badge-success' : (evt.validation.status === 'warning' ? 'badge-warning' : 'badge-error');
+      let statusBadgeHtml = '';
+
+      if (evt.isDuplicate) {
+        statusBadgeHtml = `<span class="badge badge-error">❌ Double Fired</span>`;
+      } else if (evt.requestCount > 1) {
+        statusBadgeHtml = `<span class="badge badge-error">❌ Fired ${evt.requestCount}x</span>`;
+      } else {
+        const statusClass = evt.validation.status === 'valid' ? 'badge-success' : (evt.validation.status === 'warning' ? 'badge-warning' : 'badge-error');
+        statusBadgeHtml = `<span class="badge ${statusClass}">${evt.validation.status}</span>`;
+      }
 
       // Build Parameter Table Rows
       let paramRows = '';
@@ -362,7 +378,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const firedChip = '<span class="chip-status chip-ok">JS Fired ✓</span>';
       const netSentChip = evt.network.detected ? '<span class="chip-status chip-ok">POST Sent ✓</span>' : '<span class="chip-status chip-neutral">Network --</span>';
       const netStatusChip = evt.network.status ? `<span class="chip-status ${evt.network.status === 200 ? 'chip-ok' : 'chip-err'}">HTTP ${evt.network.status}</span>` : '';
-      const validationChip = `<span class="chip-status ${evt.validation.status === 'valid' ? 'chip-ok' : (evt.validation.status === 'warning' ? 'chip-warn' : 'chip-err')}">Validation: ${evt.validation.status.toUpperCase()}</span>`;
+      const dupChip = evt.isDuplicate ? '<span class="chip-status chip-err">Duplicate / Double Fired ⚠</span>' : '<span class="chip-status chip-ok">Single Action ✓</span>';
+
+      // Strictly real Event ID rendering (no fake IDs)
+      const eventIdDisplay = evt.eventId ? `<code>${escapeHtml(evt.eventId)}</code>` : '<span style="color:var(--text-muted); font-style: italic;">Not Sent</span>';
 
       item.innerHTML = `
         <div class="event-header">
@@ -373,7 +392,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="event-name">${escapeHtml(evt.displayName || evt.name)}</span>
           </div>
           <div class="event-meta-group">
-            <span class="badge ${statusClass}">${evt.validation.status}</span>
+            ${statusBadgeHtml}
             <span class="event-time">${formatTimestamp(evt.timestamp)}</span>
           </div>
         </div>
@@ -382,11 +401,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             ${firedChip}
             ${netSentChip}
             ${netStatusChip}
-            ${validationChip}
+            ${dupChip}
           </div>
-          <div style="margin-bottom:6px; color:var(--text-secondary); font-size:10px;">
-            <strong>Event ID:</strong> <code>${escapeHtml(evt.eventId || 'None')}</code>
-            ${evt.pixelId ? ` | <strong>Pixel:</strong> <code>${escapeHtml(evt.pixelId)}</code>` : ''}
+          <div style="margin-bottom:6px; color:var(--text-secondary); font-size:10px; line-height: 1.6;">
+            <div><strong>Page Path:</strong> <code>${escapeHtml(evt.pathname || evt.url || '/')}</code></div>
+            <div><strong>Event ID:</strong> ${eventIdDisplay} ${evt.pixelId ? ` | <strong>Pixel:</strong> <code>${escapeHtml(evt.pixelId)}</code>` : ''}</div>
+            ${evt.duplicateReason ? `<div style="color:var(--color-rose); margin-top:2px;">⚠️ <strong>Duplicate Reason:</strong> ${escapeHtml(evt.duplicateReason)}</div>` : ''}
           </div>
           <table class="param-table">
             <thead>
@@ -405,11 +425,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Toggle drawer accordion & preserve open state in expandedEventIds Set
       const header = item.querySelector('.event-header');
       header.addEventListener('click', () => {
-        if (expandedEventIds.has(evt.id)) {
-          expandedEventIds.delete(evt.id);
+        if (expandedEventIds.has(itemKey)) {
+          expandedEventIds.delete(itemKey);
           item.classList.remove('open');
         } else {
-          expandedEventIds.add(evt.id);
+          expandedEventIds.add(itemKey);
           item.classList.add('open');
         }
       });
@@ -418,7 +438,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const rawBtn = item.querySelector('.btn-inspect-raw');
       rawBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openRawModal(`Event: ${evt.name}`, evt);
+        openRawModal(`Event: ${evt.displayName || evt.name}`, evt);
       });
 
       eventsListContainer.appendChild(item);
@@ -452,8 +472,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       issuesListContainer.innerHTML = `
         <div class="empty-state">
           <span class="empty-icon">✅</span>
-          <p class="empty-text">No implementation issues or warnings found!</p>
-          <span class="empty-subtext">All parameters and tracking calls match specifications.</span>
+          <p class="empty-text">No implementation issues, double fires, or warnings found!</p>
+          <span class="empty-subtext">All parameters, journey actions, and tracking calls match OpenAI specifications.</span>
         </div>
       `;
       return;
@@ -485,21 +505,92 @@ document.addEventListener('DOMContentLoaded', async () => {
       auditScoreBadge.textContent = 'Healthy (Pass)';
       auditScoreBadge.className = 'badge badge-success';
     } else if (report.overallStatus === 'warning') {
-      auditScoreBadge.textContent = 'Warnings Found';
+      auditScoreBadge.textContent = 'Warnings / Duplicates';
       auditScoreBadge.className = 'badge badge-warning';
     } else {
       auditScoreBadge.textContent = 'Errors Detected';
       auditScoreBadge.className = 'badge badge-error';
     }
 
+    // Top Summary Box
     auditSummaryBox.innerHTML = `
+      <div><strong>Session ID:</strong> <code>${escapeHtml(report.sessionId || 'SESSION')}</code></div>
       <div><strong>Target Host:</strong> ${escapeHtml(report.hostname || 'Unknown')}</div>
-      <div><strong>Pixel SDK Installed:</strong> ${report.scores.pixelInstalled ? '✅ Yes' : '❌ No'}</div>
-      <div><strong>Pixel Initialized:</strong> ${report.scores.initialized ? '✅ Yes' : '⚠️ No'}</div>
-      <div><strong>Attribution (oppref):</strong> ${report.scores.opprefPresent ? '✅ Detected' : '⚠️ Missing'}</div>
-      <div><strong>Total Events Captured:</strong> ${report.scores.totalEvents} (${report.scores.standardEvents} Standard, ${report.scores.customEvents} Custom)</div>
+      <div><strong>Visited Pages:</strong> ${report.scores.pagesVisitedCount} page(s) in session</div>
+      <div><strong>Total Events Recorded:</strong> ${report.scores.totalEvents} (${report.scores.standardEvents} Standard, ${report.scores.customEvents} Custom)</div>
+      <div><strong>Duplicate / Double Fires:</strong> ${report.scores.duplicateEvents > 0 ? `<span style="color:var(--color-rose); font-weight:bold;">${report.scores.duplicateEvents} detected</span>` : '<span style="color:var(--color-emerald)">0 (Clean)</span>'}</div>
       <div><strong>Issues Count:</strong> ${report.issues.length} (${report.scores.errorEvents} errors, ${report.scores.warningEvents} warnings)</div>
     `;
+
+    // 1. Render Journey Timeline Table
+    if (report.journeyTable && report.journeyTable.length > 0) {
+      let journeyRows = '';
+      report.journeyTable.forEach((row) => {
+        const statusColor = row.duplicateStatus.includes('Double Fired') ? 'var(--color-rose)' : 'var(--color-emerald)';
+        journeyRows += `
+          <tr style="font-size: 11px;">
+            <td style="font-weight: bold; color: var(--text-secondary);">${row.step}</td>
+            <td><strong>${escapeHtml(row.name)}</strong></td>
+            <td style="font-family: monospace; color: var(--text-secondary);">${escapeHtml(truncateString(row.pathname, 18))}</td>
+            <td style="text-align: center;">${row.count}</td>
+            <td style="color: ${statusColor}; font-weight: 500;">${escapeHtml(row.duplicateStatus)}</td>
+          </tr>
+        `;
+      });
+
+      journeyTableContainer.innerHTML = `
+        <table class="param-table" style="margin-top: 4px;">
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>Event</th>
+              <th>Page URL</th>
+              <th style="text-align: center; width: 40px;">Count</th>
+              <th>Duplicate Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${journeyRows}
+          </tbody>
+        </table>
+      `;
+    } else {
+      journeyTableContainer.innerHTML = '<div class="empty-state-sm">No journey steps recorded yet.</div>';
+    }
+
+    // 2. Render Event Health Summary Table
+    if (report.eventSummaries && report.eventSummaries.length > 0) {
+      let summaryRows = '';
+      report.eventSummaries.forEach((sum) => {
+        const isDup = sum.duplicates > 0;
+        summaryRows += `
+          <tr style="font-size: 11px;">
+            <td><strong>${escapeHtml(sum.displayName || sum.name)}</strong></td>
+            <td style="text-align: center; font-weight: bold;">${sum.detected}</td>
+            <td style="color: ${isDup ? 'var(--color-rose)' : 'var(--color-emerald)'}; font-weight: 500;">
+              ${escapeHtml(sum.audit)}
+            </td>
+          </tr>
+        `;
+      });
+
+      eventSummaryTableContainer.innerHTML = `
+        <table class="param-table" style="margin-top: 4px;">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th style="text-align: center; width: 60px;">Detected</th>
+              <th>Audit Assessment</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summaryRows}
+          </tbody>
+        </table>
+      `;
+    } else {
+      eventSummaryTableContainer.innerHTML = '<div class="empty-state-sm">No events to summarize.</div>';
+    }
   }
 
   // ==========================================
@@ -526,65 +617,100 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
     const md = [
-      `# OpenAI Ads Pixel Audit Report`,
+      `# OpenAI Ads Pixel Tracking & Journey Audit Report`,
+      `**Session ID:** ${report.sessionId || 'SESSION'}`,
       `**Website:** ${report.hostname || report.website}`,
       `**Generated:** ${report.generatedAt}`,
       `**Status:** ${report.overallStatus.toUpperCase()}`,
       ``,
-      `## 1. Pixel & Attribution`,
+      `## 1. Pixel & Attribution Health`,
       `- **Pixel Installed:** ${report.scores.pixelInstalled ? 'Yes' : 'No'}`,
       `- **Pixel ID(s):** ${(report.scores.pixelIds || []).join(', ') || 'None'}`,
       `- **Initialized:** ${report.scores.initialized ? 'Yes' : 'No'}`,
       `- **oppref Detected:** ${report.scores.opprefPresent ? 'Yes' : 'No'}`,
       ``,
-      `## 2. Event Summary`,
+      `## 2. Event Journey Summary`,
       `- **Total Events:** ${report.scores.totalEvents}`,
       `- **Standard Events:** ${report.scores.standardEvents}`,
       `- **Custom Events:** ${report.scores.customEvents}`,
-      `- **Valid Events:** ${report.scores.validEvents}`,
-      `- **Warnings:** ${report.scores.warningEvents}`,
-      `- **Errors:** ${report.scores.errorEvents}`,
+      `- **Duplicate / Double Fires:** ${report.scores.duplicateEvents}`,
+      `- **Pages Visited:** ${report.scores.pagesVisitedCount}`,
       ``,
-      `## 3. Issues & Recommendations`,
-      report.issues.length === 0 ? `*No issues found.*` : report.issues.map((i) => `- **[${i.severity.toUpperCase()}] ${i.code}**: ${i.message}\n  *Recommendation:* ${i.recommendation || 'N/A'}`).join('\n')
+      `## 3. Journey Steps Audit Table`,
+      `| Step | Event Name | Page Path | Request Count | Duplicate Status |`,
+      `|---|---|---|---|---|`,
+      ...(report.journeyTable || []).map((j) => `| ${j.step} | ${j.name} | ${j.pathname} | ${j.count} | ${j.duplicateStatus} |`),
+      ``,
+      `## 4. Event Health Breakdown`,
+      `| Event Name | Detected | Audit Assessment |`,
+      `|---|---|---|`,
+      ...(report.eventSummaries || []).map((s) => `| ${s.displayName || s.name} | ${s.detected} | ${s.audit} |`),
+      ``,
+      `## 5. Issues & Recommendations`,
+      report.issues.length === 0 ? `*No issues found. Tracking implementation is clean!*` : report.issues.map((i) => `- **[${i.severity.toUpperCase()}] ${i.code}**: ${i.message}\n  *Recommendation:* ${i.recommendation || 'N/A'}`).join('\n')
     ].join('\n');
 
     navigator.clipboard.writeText(md);
-    btnCopyMarkdown.textContent = '✅ Copied to Clipboard!';
-    setTimeout(() => { btnCopyMarkdown.innerHTML = '<span>📋 Copy Markdown Report</span>'; }, 2000);
-  });
-
-  btnExportJson.addEventListener('click', () => {
-    if (!currentTabState) return;
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(currentTabState, null, 2));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute('href', dataStr);
-    dlAnchor.setAttribute('download', `openai_pixel_audit_${Date.now()}.json`);
-    dlAnchor.click();
+    btnCopyMarkdown.textContent = '✅ Copied!';
+    setTimeout(() => { btnCopyMarkdown.innerHTML = '<span>📋 Copy Markdown</span>'; }, 2000);
   });
 
   btnExportCsv.addEventListener('click', () => {
     if (!currentTabState || !currentTabState.events) return;
-    const rows = [
-      ['Timestamp', 'Event Name', 'Type', 'Pixel ID', 'Event ID', 'Validation Status', 'Amount', 'Currency', 'oppref']
+    const headers = [
+      'Step',
+      'Timestamp',
+      'Event Name',
+      'Data Type',
+      'Page URL',
+      'Page Path',
+      'Event ID',
+      'Pixel ID',
+      'Duplicate Status',
+      'Audit Status',
+      'Amount',
+      'Currency',
+      'Parameters JSON',
+      'oppref'
     ];
-    for (const evt of currentTabState.events) {
+
+    const rows = [headers];
+    currentTabState.events.forEach((evt, idx) => {
       rows.push([
+        idx + 1,
         new Date(evt.timestamp).toISOString(),
-        `"${evt.name}"`,
-        evt.validation.isCustom ? 'Custom' : 'Standard',
+        `"${evt.displayName || evt.name}"`,
+        evt.validation ? evt.validation.dataShape : 'contents',
+        `"${evt.url || ''}"`,
+        `"${evt.pathname || ''}"`,
+        `"${evt.eventId || 'Not Sent'}"`,
         `"${evt.pixelId || ''}"`,
-        `"${evt.eventId || ''}"`,
-        evt.validation.status,
+        `"${evt.duplicateStatus || '✅ Correct'}"`,
+        evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
+        `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`,
         `"${evt.attribution.oppref || ''}"`
       ]);
-    }
+    });
+
     const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map((e) => e.join(',')).join('\n'));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', csvContent);
-    dlAnchor.setAttribute('download', `openai_pixel_events_${Date.now()}.csv`);
+    dlAnchor.setAttribute('download', `openai_pixel_journey_audit_${Date.now()}.csv`);
+    dlAnchor.click();
+  });
+
+  btnExportJson.addEventListener('click', () => {
+    if (!currentTabState) return;
+    const report = generateAuditReport(currentTabState);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({
+      report: report,
+      sessionState: currentTabState
+    }, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', `openai_pixel_session_audit_${Date.now()}.json`);
     dlAnchor.click();
   });
 
