@@ -106,17 +106,27 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
       const smallestUnit = getCurrencySmallestUnitName(currency);
       const multiplier = Math.pow(10, decimals);
 
-      // Detect major units mistakenly sent as minor units (e.g. sending 350 for $350.00 instead of 35000)
-      if (decimals > 0 && paramValue > 0 && paramValue < (multiplier * 10)) {
+      // Detect major units mistakenly sent as minor units (e.g. sending 350 for $350.00 instead of 35000, or 1400 for $1400.00 instead of 140000)
+      if (decimals > 0 && paramValue > 0) {
         const majorVal = (paramValue / multiplier).toFixed(decimals);
         const correctMinorUnits = paramValue * multiplier;
+        
+        // Calculate item quantity if contents[] is passed
+        let totalQty = 1;
+        if (Array.isArray(allParams.contents) && allParams.contents.length > 0) {
+          totalQty = allParams.contents.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+        }
+        const pricePerUnit = parseFloat(majorVal) / totalQty;
 
-        return {
-          valid: false,
-          severity: 'error',
-          code: 'PARAM_AMOUNT_INVALID_MINOR_UNITS',
-          message: `"${paramName}" is ${paramValue}. In ${currency} (${decimals} decimals, smallest unit: ${smallestUnit}), ${paramValue} minor units represents ${majorVal} ${currency}. If your product/event price is ${paramValue} ${currency}, you MUST send ${correctMinorUnits} (Price × 10^${decimals})!`
-        };
+        // Flag as Error if total minor units represents < 100.00 currency units or if price per unit < 20.00
+        if (paramValue <= 10000 || pricePerUnit < 20.0) {
+          return {
+            valid: false,
+            severity: 'error',
+            code: 'PARAM_AMOUNT_INVALID_MINOR_UNITS',
+            message: `"${paramName}" is ${paramValue}. In ${currency} (${decimals} decimals, smallest unit: ${smallestUnit}), ${paramValue} minor units represents ONLY ${currency} ${majorVal}. If your intended total is ${currency} ${paramValue}, you MUST send ${correctMinorUnits} (Price × 10^${decimals})!`
+          };
+        }
       }
     }
   }
