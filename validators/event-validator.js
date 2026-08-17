@@ -1,29 +1,24 @@
 /**
- * OpenAI Ads Pixel Inspector - Event Validator Engine
+ * OpenAI Ads Pixel Inspector - Event Validation Engine
  * 
- * Validates events against official OpenAI Ads schemas and data shapes:
- * - contents (items_added, checkout_started, contents_viewed, order_created, page_viewed)
- * - customer_action (appointment_scheduled, lead_created, registration_completed)
- * - plan_enrollment (subscription_created, trial_started)
- * - custom
+ * Executes schema-driven validation for OpenAI Ads Pixel events.
+ * Fully decoupled from UI layer.
  */
 
 import {
   STANDARD_EVENT_NAMES,
   STANDARD_EVENT_ALIASES,
   EVENT_SCHEMAS,
-  EVENT_DATA_SHAPES,
-  CONTENT_ITEM_SCHEMA,
-  CUSTOM_EVENT_RULES,
-  ISO_CURRENCIES
+  CUSTOM_EVENT_RULES
 } from './schemas.js';
+import { validateParameter } from './parameter-validator.js';
 
 export function validateEvent(event) {
   let eventName = event.name || event.eventName || '';
   const options = event.options || {};
   const parameters = event.parameters || {};
 
-  // Resolve alias if applicable
+  // Resolve alias if applicable (e.g. Purchase -> order_created)
   let canonicalName = eventName;
   if (STANDARD_EVENT_ALIASES[eventName]) {
     canonicalName = STANDARD_EVENT_ALIASES[eventName];
@@ -33,205 +28,149 @@ export function validateEvent(event) {
   const isCustomEvent = canonicalName === 'custom' || !isBuiltin;
   const customEventName = options.custom_event_name || (isCustomEvent && canonicalName !== 'custom' ? canonicalName : null);
 
+  // Retrieve declarative schema
+  const schema = EVENT_SCHEMAS[canonicalName] || EVENT_SCHEMAS['custom'] || {
+    dataShape: 'custom',
+    required: ['type'],
+    optional: [],
+    parameters: { type: { type: 'string', expected: 'custom', required: true } }
+  };
+
   const validation = {
     status: 'valid', // 'valid' | 'warning' | 'error'
     isCustom: isCustomEvent,
     canonicalName: canonicalName,
-    dataShape: isBuiltin ? (EVENT_SCHEMAS[canonicalName]?.dataShape || 'contents') : 'custom',
+    dataShape: schema.dataShape || 'contents',
     parameterResults: {},
     issues: [],
     errorsCount: 0,
-    warningsCount: 0
+    warningsCount: 0,
+    infoCount: 0
   };
 
-  const expectedShapeKey = isBuiltin ? EVENT_SCHEMAS[canonicalName]?.dataShape : 'custom';
-  const shapeDef = EVENT_DATA_SHAPES[expectedShapeKey] || EVENT_DATA_SHAPES.contents;
-
-  // 1. Data Shape Type Validation (Required field 'type')
-  if (!parameters.type) {
-    validation.issues.push({
-      code: 'MISSING_DATA_SHAPE_TYPE',
-      severity: 'error',
-      event: eventName,
-      parameter: 'type',
-      message: `Event data object is missing required "type" field (expected type: "${expectedShapeKey}").`,
-      recommendation: `Include { type: "${expectedShapeKey}" } in the event data object.`
-    });
-    validation.errorsCount++;
-    validation.parameterResults.type = { valid: false, severity: 'error', message: 'Missing type field' };
-  } else if (parameters.type !== expectedShapeKey) {
-    validation.issues.push({
-      code: 'INVALID_DATA_SHAPE_TYPE',
-      severity: 'warning',
-      event: eventName,
-      parameter: 'type',
-      message: `Event "${eventName}" has type "${parameters.type}", but official data shape expects type: "${expectedShapeKey}".`,
-      recommendation: `Change type to "${expectedShapeKey}".`
-    });
-    validation.warningsCount++;
-    validation.parameterResults.type = { valid: false, severity: 'warning', message: `Expected ${expectedShapeKey}` };
-  } else {
-    validation.parameterResults.type = { valid: true, severity: 'success', message: 'Valid data shape type' };
-  }
-
-  // 2. Amount & Currency Rule (If amount is present, currency is required)
-  if (parameters.amount !== undefined && parameters.amount !== null) {
-    if (typeof parameters.amount !== 'number' || isNaN(parameters.amount)) {
-      validation.issues.push({
-        code: 'INVALID_AMOUNT_TYPE',
-        severity: 'error',
-        event: eventName,
-        parameter: 'amount',
-        message: 'Amount must be an integer in minor currency units (e.g. 2599 for $25.99).',
-        recommendation: 'Pass numeric integers for amount instead of strings or floats.'
-      });
-      validation.errorsCount++;
-      validation.parameterResults.amount = { valid: false, severity: 'error', message: 'Must be integer' };
-    } else {
-      if (!Number.isInteger(parameters.amount)) {
+  // 1. Check Required Parameters from Schema
+  if (schema.required && Array.isArray(schema.required)) {
+    schema.required.forEach((reqField) => {
+      if (parameters[reqField] === undefined || parameters[reqField] === null) {
+        validation.errorsCount++;
         validation.issues.push({
-          code: 'AMOUNT_NOT_INTEGER',
-          severity: 'warning',
+          code: `MISSING_REQUIRED_${reqField.toUpperCase()}`,
+          severity: 'error',
           event: eventName,
-          parameter: 'amount',
-          message: `Amount ${parameters.amount} is a decimal. OpenAI Pixel expects integer minor units (e.g. 2599 instead of 25.99).`,
-          recommendation: 'Multiply dollars by 100 to send integer minor units.'
+          parameter: reqField,
+          message: `Missing required parameter "${reqField}" for event "${eventName}".`,
+          recommendation: `Include "${reqField}" with expected value (e.g., { ${reqField}: "${schema.parameters[reqField]?.expected || 'value'}" }).`
         });
-        validation.warningsCount++;
+        validation.parameterResults[reqField] = {
+          valid: false,
+          severity: 'error',
+          code: 'PARAM_MISSING_REQUIRED',
+          message: `Required parameter "${reqField}" is missing.`
+        };
       }
-      validation.parameterResults.amount = { valid: true, severity: 'success', message: 'Valid amount' };
-    }
-
-    // Check required currency
-    if (!parameters.currency) {
-      validation.issues.push({
-        code: 'MISSING_CURRENCY_WITH_AMOUNT',
-        severity: 'error',
-        event: eventName,
-        parameter: 'currency',
-        message: 'Currency is required whenever an "amount" is sent.',
-        recommendation: 'Add ISO 4217 currency code (e.g., currency: "USD").'
-      });
-      validation.errorsCount++;
-      validation.parameterResults.currency = { valid: false, severity: 'error', message: 'Required when amount is present' };
-    }
+    });
   }
 
-  // 3. Currency Format Validation
-  if (parameters.currency) {
-    if (typeof parameters.currency !== 'string') {
-      validation.issues.push({
-        code: 'INVALID_CURRENCY_TYPE',
-        severity: 'error',
-        event: eventName,
-        parameter: 'currency',
-        message: 'Currency must be a string 3-letter ISO 4217 code.',
-        recommendation: 'Use 3-letter currency string like "USD", "EUR", "GBP".'
-      });
-      validation.errorsCount++;
-      validation.parameterResults.currency = { valid: false, severity: 'error', message: 'Invalid currency' };
-    } else {
-      const cleanCurr = parameters.currency.trim().toUpperCase();
-      if (!ISO_CURRENCIES.has(cleanCurr)) {
-        validation.issues.push({
-          code: 'UNRECOGNIZED_CURRENCY_CODE',
-          severity: 'warning',
-          event: eventName,
-          parameter: 'currency',
-          message: `"${parameters.currency}" is not a recognized 3-letter ISO 4217 currency code.`,
-          recommendation: 'Verify standard 3-letter uppercase ISO currency.'
-        });
-        validation.warningsCount++;
-      }
-      validation.parameterResults.currency = { valid: true, severity: 'success', message: 'Valid currency' };
-    }
-  }
-
-  // 4. Validate contents[] Array Items
-  if (parameters.contents !== undefined) {
-    if (!Array.isArray(parameters.contents)) {
-      validation.issues.push({
-        code: 'CONTENTS_NOT_ARRAY',
-        severity: 'error',
-        event: eventName,
-        parameter: 'contents',
-        message: '"contents" must be an array of Content objects.',
-        recommendation: 'Wrap items in an array: contents: [{ id: "...", name: "..." }].'
-      });
-      validation.errorsCount++;
-      validation.parameterResults.contents = { valid: false, severity: 'error', message: 'Must be array' };
-    } else {
-      validation.parameterResults.contents = { valid: true, severity: 'success', message: `${parameters.contents.length} item(s)` };
-      parameters.contents.forEach((item, idx) => {
-        if (typeof item !== 'object' || item === null) {
-          validation.issues.push({
-            code: 'INVALID_CONTENT_ITEM',
-            severity: 'error',
-            event: eventName,
-            parameter: `contents[${idx}]`,
-            message: `Item at index ${idx} in contents array is not an object.`,
-            recommendation: 'Each item in contents[] must be an object with fields like id, name, content_type, quantity, amount.'
-          });
-          validation.errorsCount++;
-        } else {
-          // Check item quantity
-          if (item.quantity !== undefined && (!Number.isInteger(item.quantity) || item.quantity < 1)) {
+  // 2. Check Conditional Requirements (e.g., currency required when amount is present)
+  if (schema.conditionalRequired && Array.isArray(schema.conditionalRequired)) {
+    schema.conditionalRequired.forEach((cond) => {
+      if (parameters[cond.when] !== undefined && parameters[cond.when] !== null) {
+        cond.require.forEach((reqField) => {
+          if (parameters[reqField] === undefined || parameters[reqField] === null || parameters[reqField] === '') {
+            validation.errorsCount++;
             validation.issues.push({
-              code: 'INVALID_ITEM_QUANTITY',
-              severity: 'warning',
+              code: `MISSING_CONDITIONAL_${reqField.toUpperCase()}`,
+              severity: 'error',
               event: eventName,
-              parameter: `contents[${idx}].quantity`,
-              message: 'Item quantity must be a positive integer.',
-              recommendation: 'Use integer quantities (e.g. quantity: 1).'
+              parameter: reqField,
+              message: cond.message || `Parameter "${reqField}" is required when "${cond.when}" is provided.`,
+              recommendation: `Provide "${reqField}" whenever "${cond.when}" is sent.`
             });
-            validation.warningsCount++;
+            validation.parameterResults[reqField] = {
+              valid: false,
+              severity: 'error',
+              code: 'PARAM_MISSING_CONDITIONAL',
+              message: `Required when "${cond.when}" is present.`
+            };
           }
-        }
+        });
+      }
+    });
+  }
+
+  // 3. Validate All Provided Parameters Against Schema Rules
+  for (const [paramKey, paramVal] of Object.entries(parameters)) {
+    const paramRule = schema.parameters ? schema.parameters[paramKey] : null;
+    const res = validateParameter(paramKey, paramVal, paramRule, parameters);
+    
+    validation.parameterResults[paramKey] = res;
+
+    if (res.severity === 'error') {
+      validation.errorsCount++;
+      validation.issues.push({
+        code: res.code || 'PARAM_VALIDATION_ERROR',
+        severity: 'error',
+        event: eventName,
+        parameter: paramKey,
+        message: res.message,
+        recommendation: `Fix "${paramKey}" to match OpenAI Ads Pixel specification.`
       });
+    } else if (res.severity === 'warning') {
+      validation.warningsCount++;
+      validation.issues.push({
+        code: res.code || 'PARAM_VALIDATION_WARNING',
+        severity: 'warning',
+        event: eventName,
+        parameter: paramKey,
+        message: res.message,
+        recommendation: `Review "${paramKey}" formatting.`
+      });
+    } else if (res.severity === 'info') {
+      validation.infoCount++;
     }
   }
 
-  // 5. Custom Event Rules
+  // 4. Custom Event Validations
   if (isCustomEvent) {
     if (canonicalName === 'custom' && !options.custom_event_name) {
+      validation.errorsCount++;
       validation.issues.push({
         code: 'MISSING_CUSTOM_EVENT_NAME',
         severity: 'error',
         event: eventName,
         parameter: 'custom_event_name',
-        message: 'When measuring "custom", custom_event_name is required in the options object.',
-        recommendation: 'Call oaiq("measure", "custom", { type: "custom" }, { custom_event_name: "..." }).'
+        message: 'When measuring "custom", custom_event_name is required in the options parameter.',
+        recommendation: 'Pass { custom_event_name: "your_event_name" } in options parameter.'
       });
-      validation.errorsCount++;
     }
 
     if (customEventName) {
       if (customEventName.length > CUSTOM_EVENT_RULES.maxLength) {
+        validation.warningsCount++;
         validation.issues.push({
           code: 'CUSTOM_NAME_TOO_LONG',
           severity: 'warning',
           event: eventName,
           parameter: 'custom_event_name',
           message: `Custom event name exceeds ${CUSTOM_EVENT_RULES.maxLength} characters.`,
-          recommendation: 'Keep custom event names between 1 and 64 characters.'
+          recommendation: 'Keep custom event names under 64 characters.'
         });
-        validation.warningsCount++;
       }
       if (!CUSTOM_EVENT_RULES.validPattern.test(customEventName)) {
+        validation.warningsCount++;
         validation.issues.push({
           code: 'CUSTOM_NAME_INVALID_FORMAT',
           severity: 'warning',
           event: eventName,
           parameter: 'custom_event_name',
-          message: 'Custom event name must start/end with letter or number and contain only letters, numbers, underscores, or dashes.',
-          recommendation: 'Use format like "quote_requested" or "video_completed".'
+          message: 'Custom event name must start/end with an alphanumeric character and contain only alphanumeric, underscores, or hyphens.',
+          recommendation: 'Use clean identifiers such as "quote_requested" or "video_completed".'
         });
-        validation.warningsCount++;
       }
     }
   }
 
-  // Derive final status
+  // 5. Compute Final Validation Status
   if (validation.errorsCount > 0) {
     validation.status = 'error';
   } else if (validation.warningsCount > 0) {

@@ -1,20 +1,19 @@
 /**
- * OpenAI Ads Pixel Inspector - Popup Controller (Journey & Duplicate Audit Engine)
+ * OpenAI Ads Pixel Inspector - Popup Controller
  * 
  * Features:
- * - Full session journey history across all page navigations
- * - Action-based duplicate event detection (double-firing diagnostics)
- * - Strict real Event ID display (never synthetic / generated)
- * - Side Panel support for full-screen wide view diagnostics
- * - Clean parameter formatting preventing layout clipping
- * - Journey timeline table and Event health summary
- * - Google Sheets / Excel CSV, JSON, and Markdown export
- * - Light & Dark theme toggle with persistence
- * - Persistent accordion drawers
+ * - Generic Schema-Driven Parameter Validation Engine
+ * - 4-Level Parameter Severity: ✅ Valid, ⚠️ Warning, ❌ Error, ℹ️ Info
+ * - Network Monitor: Inspects observable HTTP POST requests & safe headers to bzr.openai.com
+ * - 5-Stage Lifecycle Separation (Pixel Fired, Network Sent, Server Status, Parameters, Validation)
+ * - Session Journey Timeline & Deduplication Audit
+ * - CSV, JSON, and Markdown Report Export
+ * - Chrome Side Panel & Theme Persistence
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
 import { generateAuditReport } from '../core/scanner.js';
+import { computeEventLifecycle } from '../core/normalizer.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
@@ -51,12 +50,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   const latestEventTime = document.getElementById('latest-event-time');
 
   const tabCountEvents = document.getElementById('tab-count-events');
+  const tabCountNetwork = document.getElementById('tab-count-network');
   const tabCountIssues = document.getElementById('tab-count-issues');
 
   // Events Tab elements
   const eventSearchInput = document.getElementById('event-search-input');
   const filterChips = document.querySelectorAll('.filter-chip');
   const eventsListContainer = document.getElementById('events-list-container');
+
+  // Network Tab elements
+  const networkListContainer = document.getElementById('network-list-container');
+  const networkCountBadge = document.getElementById('network-count-badge');
 
   // Attribution Tab elements
   const opprefStatusBadge = document.getElementById('oppref-status-badge');
@@ -89,7 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentFilter = 'all';
   let searchQuery = '';
   let activeModalJson = '';
-  const expandedEventIds = new Set(); // Tracks expanded event drawer IDs to persist open state
+  const expandedEventIds = new Set();
 
   // ==========================================
   // 1. Theme Management (Dark / Light)
@@ -123,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentWindow = await chrome.windows.getCurrent();
         if (chrome.sidePanel && chrome.sidePanel.open) {
           await chrome.sidePanel.open({ windowId: currentWindow.id });
-          window.close(); // Close popup once side panel opens
+          window.close();
         } else {
           chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
         }
@@ -265,6 +269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentTabState) return;
     renderOverview();
     renderEvents();
+    renderNetwork();
     renderAttribution();
     renderIssues();
     renderAudit();
@@ -275,6 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const attribution = currentTabState.attribution || {};
     const stats = currentTabState.stats || {};
     const events = currentTabState.events || [];
+    const network = currentTabState.network || [];
 
     if (pixel.detected) {
       valPixelDetected.textContent = `✅ Detected (${pixel.confidence || 'high'})`;
@@ -296,6 +302,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     metricIssuesEvents.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0);
 
     tabCountEvents.textContent = stats.totalEvents || 0;
+    tabCountNetwork.textContent = network.length || 0;
     tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0);
 
     if (events.length > 0) {
@@ -376,13 +383,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusBadgeHtml = `<span class="badge ${statusClass}">${evt.validation.status}</span>`;
       }
 
-      // Build Parameter Table Rows with clean formatted JSON blocks for arrays/objects
+      // Compute Separate 5-Stage Lifecycle
+      const lifecycle = computeEventLifecycle(evt);
+
+      // Build Parameter Table Rows with 4-Level Severity Badges
       let paramRows = '';
       const params = evt.parameters || {};
       for (const [key, val] of Object.entries(params)) {
         const valRes = (evt.validation.parameterResults && evt.validation.parameterResults[key]) || {};
-        const paramStatusBadge = valRes.valid ? '<span style="color:var(--color-emerald)">✓</span>' : (valRes.severity === 'warning' ? '<span style="color:var(--color-amber)">⚠</span>' : '<span style="color:var(--color-rose)">✗</span>');
         
+        let paramStatusBadge = '';
+        if (valRes.severity === 'valid' || valRes.valid) {
+          paramStatusBadge = '<span class="badge badge-success">✅ Valid</span>';
+        } else if (valRes.severity === 'warning') {
+          paramStatusBadge = `<span class="badge badge-warning" title="${escapeHtml(valRes.message || 'Warning')}">⚠️ Warning</span>`;
+        } else if (valRes.severity === 'error') {
+          paramStatusBadge = `<span class="badge badge-error" title="${escapeHtml(valRes.message || 'Error')}">❌ Error</span>`;
+        } else if (valRes.severity === 'info') {
+          paramStatusBadge = `<span class="badge badge-neutral" title="${escapeHtml(valRes.message || 'Info')}">ℹ️ Info</span>`;
+        } else {
+          paramStatusBadge = '<span class="badge badge-success">✅ Valid</span>';
+        }
+
         let displayVal = '';
         if (typeof val === 'object' && val !== null) {
           displayVal = `<div class="param-json-block">${escapeHtml(JSON.stringify(val, null, 2))}</div>`;
@@ -403,12 +425,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         paramRows = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center;">No parameters passed</td></tr>';
       }
 
-      // Lifecycle status chips
-      const firedChip = '<span class="chip-status chip-ok">JS Fired ✓</span>';
-      const netSentChip = evt.network.detected ? '<span class="chip-status chip-ok">POST Sent ✓</span>' : '<span class="chip-status chip-neutral">Network --</span>';
-      const netStatusChip = evt.network.status ? `<span class="chip-status ${evt.network.status === 200 ? 'chip-ok' : 'chip-err'}">HTTP ${evt.network.status}</span>` : '';
-      const dupChip = evt.isDuplicate ? '<span class="chip-status chip-err">Duplicate / Double Fired ⚠</span>' : '<span class="chip-status chip-ok">Single Action ✓</span>';
-
       // Strictly real Event ID rendering (no fake IDs)
       const eventIdDisplay = evt.eventId ? `<code>${escapeHtml(evt.eventId)}</code>` : '<span style="color:var(--text-muted); font-style: italic;">Not Sent</span>';
 
@@ -426,36 +442,64 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
         <div class="event-details-drawer">
-          <div class="lifecycle-chips">
-            ${firedChip}
-            ${netSentChip}
-            ${netStatusChip}
-            ${dupChip}
+          <!-- 5-Stage Lifecycle Separation Card -->
+          <div class="lifecycle-box">
+            <div class="lifecycle-row">
+              <span class="lifecycle-label">Pixel Call:</span>
+              <span class="lifecycle-val" style="color:var(--color-emerald);">${lifecycle.pixelCall.label}</span>
+            </div>
+            <div class="lifecycle-row">
+              <span class="lifecycle-label">Network Request:</span>
+              <span class="lifecycle-val" style="color:${lifecycle.networkRequest.status === 'sent' ? 'var(--color-emerald)' : (lifecycle.networkRequest.status === 'pending' ? 'var(--color-amber)' : 'var(--text-muted)')};">
+                ${lifecycle.networkRequest.label}
+              </span>
+            </div>
+            <div class="lifecycle-row">
+              <span class="lifecycle-label">Server Response:</span>
+              <span class="lifecycle-val" style="color:${lifecycle.serverResponse.status === 'success' ? 'var(--color-emerald)' : (lifecycle.serverResponse.status === 'error' ? 'var(--color-rose)' : 'var(--text-muted)')};">
+                ${lifecycle.serverResponse.label}
+              </span>
+            </div>
+            <div class="lifecycle-row">
+              <span class="lifecycle-label">Parameters:</span>
+              <span class="lifecycle-val" style="color:${lifecycle.parametersStatus.status === 'valid' ? 'var(--color-emerald)' : (lifecycle.parametersStatus.status === 'warning' ? 'var(--color-amber)' : 'var(--color-rose)')};">
+                ${lifecycle.parametersStatus.label}
+              </span>
+            </div>
+            <div class="lifecycle-row">
+              <span class="lifecycle-label">Validation:</span>
+              <span class="lifecycle-val" style="color:${lifecycle.validationStatus.status === 'passed' ? 'var(--color-emerald)' : (lifecycle.validationStatus.status === 'warning' ? 'var(--color-amber)' : 'var(--color-rose)')};">
+                ${lifecycle.validationStatus.label}
+              </span>
+            </div>
           </div>
+
           <div style="margin-bottom:6px; color:var(--text-secondary); font-size:10px; line-height: 1.6;">
             <div><strong>Page Path:</strong> <code>${escapeHtml(evt.pathname || evt.url || '/')}</code></div>
             <div><strong>Event ID:</strong> ${eventIdDisplay} ${evt.pixelId ? ` | <strong>Pixel:</strong> <code>${escapeHtml(evt.pixelId)}</code>` : ''}</div>
             ${evt.duplicateReason ? `<div style="color:var(--color-rose); margin-top:2px;">⚠️ <strong>Duplicate Reason:</strong> ${escapeHtml(evt.duplicateReason)}</div>` : ''}
           </div>
+
           <table class="param-table">
             <thead>
               <tr>
                 <th>Parameter</th>
                 <th>Value</th>
-                <th style="text-align:center;">Valid</th>
+                <th style="text-align:center;">Status</th>
               </tr>
             </thead>
             <tbody>
               ${paramRows}
             </tbody>
           </table>
+
           <div class="drawer-actions">
             <button class="btn btn-secondary btn-xs btn-inspect-raw">Inspect Raw JSON</button>
           </div>
         </div>
       `;
 
-      // Toggle drawer accordion & preserve open state in expandedEventIds Set
+      // Toggle drawer accordion & preserve open state
       const header = item.querySelector('.event-header');
       header.addEventListener('click', () => {
         if (expandedEventIds.has(itemKey)) {
@@ -475,6 +519,84 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       eventsListContainer.appendChild(item);
+    });
+  }
+
+  // ==========================================
+  // 8. Network Monitor Renderer
+  // ==========================================
+  function renderNetwork() {
+    if (!currentTabState) return;
+    const networkRequests = currentTabState.network || [];
+    networkCountBadge.textContent = `${networkRequests.length} request(s)`;
+
+    if (networkRequests.length === 0) {
+      networkListContainer.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">🌐</span>
+          <p class="empty-text">No OpenAI Pixel network transmissions captured.</p>
+          <span class="empty-subtext">Requests to bzr.openai.com or bzrcdn.openai.com will appear here in real time.</span>
+        </div>
+      `;
+      return;
+    }
+
+    networkListContainer.innerHTML = '';
+    networkRequests.slice().reverse().forEach((req, idx) => {
+      const card = document.createElement('div');
+      card.className = 'network-card';
+
+      const method = req.method || 'POST';
+      let statusBadge = '<span class="badge badge-warning">⏳ Pending</span>';
+      if (req.status === 200) {
+        statusBadge = '<span class="badge badge-success">HTTP 200</span>';
+      } else if (req.status && req.status > 0) {
+        statusBadge = `<span class="badge badge-error">HTTP ${req.status}</span>`;
+      } else if (req.status === 0 || req.error) {
+        statusBadge = `<span class="badge badge-error">Blocked / Net Err</span>`;
+      }
+
+      // Extract Event Name if present in payload
+      const evtName = req.payload?.name || req.payload?.event_name || req.payload?.event || 'Measurement Signal';
+      const cleanUrl = req.url ? truncateString(req.url.replace(/^https?:\/\//, ''), 45) : 'bzr.openai.com/v1/sdk/events';
+
+      card.innerHTML = `
+        <div class="network-header">
+          <div class="network-method-group">
+            <span class="badge-post">${escapeHtml(method)}</span>
+            <span style="font-weight: 600; font-size: 11px;">${escapeHtml(evtName)}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            ${statusBadge}
+            <span class="text-muted font-mono" style="font-size: 10px;">${formatTimestamp(req.timestamp)}</span>
+          </div>
+        </div>
+        <div class="network-url">${escapeHtml(cleanUrl)}</div>
+        <div class="network-meta">
+          <span>Source: <code>${escapeHtml(req.source || 'webRequest')}</code></span>
+          <span>Payload: ${req.payload ? Object.keys(req.payload).length + ' fields' : 'None'}</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+          <button class="btn btn-secondary btn-xs btn-inspect-net-raw">Inspect Payload</button>
+        </div>
+      `;
+
+      const netRawBtn = card.querySelector('.btn-inspect-net-raw');
+      netRawBtn.addEventListener('click', () => {
+        openRawModal(`Network Request: ${evtName}`, {
+          method: method,
+          url: req.url,
+          status: req.status,
+          timestamp: new Date(req.timestamp).toISOString(),
+          headers: {
+            'Content-Type': 'application/json',
+            'Safe-Origin': targetHostEl.textContent
+          },
+          payload: req.payload || 'No payload body'
+        });
+      });
+
+      networkListContainer.appendChild(card);
     });
   }
 
@@ -630,7 +752,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 8. Action Handlers
+  // 9. Action Handlers
   // ==========================================
   btnRefresh.addEventListener('click', async () => {
     btnRefresh.style.transform = 'rotate(180deg)';

@@ -1070,6 +1070,85 @@ body {
   box-shadow: 0 0 6px var(--color-emerald);
 }
 
+/* Lifecycle Audit Box */
+.lifecycle-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lifecycle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.lifecycle-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.lifecycle-val {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Network Request Card */
+.network-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.network-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.network-method-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge-post {
+  background: rgba(16, 163, 127, 0.2);
+  color: var(--color-emerald);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.network-url {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.network-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .version-tag {
   font-family: var(--font-mono);
 }

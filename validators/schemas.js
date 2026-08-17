@@ -1,12 +1,16 @@
 /**
  * OpenAI Ads Pixel Inspector - Schema Registry
  * 
- * Defines official standard event schemas and data shapes for OpenAI Ads (oaiq).
- * Source: https://developers.openai.com/ads/supported-events
- *         https://developers.openai.com/ads/measurement-pixel
- *         https://developers.openai.com/ads/multiple-pixels
- * Last verified: Official OpenAI Ads Documentation 2026
+ * Defines declarative schemas for all OpenAI Ads events according to official specifications:
+ * https://developers.openai.com/ads/supported-events
+ * https://developers.openai.com/ads/measurement-pixel
  */
+
+export const ISO_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CNY', 'INR', 'BRL', 'MXN',
+  'CHF', 'SEK', 'NOK', 'DKK', 'NZD', 'SGD', 'HKD', 'KRW', 'PLN', 'ZAR',
+  'AED', 'SAR', 'TRY', 'ILS', 'THB', 'PHP', 'MYR', 'IDR', 'CZK', 'HUF'
+]);
 
 export const STANDARD_EVENT_NAMES = [
   'page_viewed',
@@ -38,193 +42,239 @@ export const STANDARD_EVENT_ALIASES = {
   'StartTrial': 'trial_started'
 };
 
-export const ISO_CURRENCIES = new Set([
-  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CNY', 'INR', 'BRL', 'MXN',
-  'CHF', 'SEK', 'NOK', 'DKK', 'NZD', 'SGD', 'HKD', 'KRW', 'PLN', 'ZAR',
-  'AED', 'SAR', 'TRY', 'ILS', 'THB', 'PHP', 'MYR', 'IDR', 'CZK', 'HUF'
-]);
-
 /**
- * Event Data Shapes specified by OpenAI:
- * - contents (items_added, checkout_started, contents_viewed, order_created, page_viewed)
- * - customer_action (appointment_scheduled, lead_created, registration_completed, app_installed, app_opened)
- * - plan_enrollment (subscription_created, trial_started)
- * - custom (custom)
- */
-export const EVENT_DATA_SHAPES = {
-  contents: {
-    shape: 'contents',
-    requiredFields: ['type'],
-    parameters: {
-      type: { type: 'string', expectedValue: 'contents' },
-      amount: { type: 'integer', min: 0, minorUnitsRecommended: true },
-      currency: { type: 'string', format: 'currency' },
-      contents: { type: 'array', itemType: 'Content' }
-    }
-  },
-  customer_action: {
-    shape: 'customer_action',
-    requiredFields: ['type'],
-    parameters: {
-      type: { type: 'string', expectedValue: 'customer_action' },
-      amount: { type: 'integer', min: 0, minorUnitsRecommended: true },
-      currency: { type: 'string', format: 'currency' }
-    }
-  },
-  plan_enrollment: {
-    shape: 'plan_enrollment',
-    requiredFields: ['type'],
-    parameters: {
-      type: { type: 'string', expectedValue: 'plan_enrollment' },
-      plan_id: { type: 'string' },
-      amount: { type: 'integer', min: 0, minorUnitsRecommended: true },
-      currency: { type: 'string', format: 'currency' },
-      contents: { type: 'array', itemType: 'Content' }
-    }
-  },
-  custom: {
-    shape: 'custom',
-    requiredFields: ['type'],
-    parameters: {
-      type: { type: 'string', expectedValue: 'custom' },
-      plan_id: { type: 'string' },
-      amount: { type: 'integer', min: 0, minorUnitsRecommended: true },
-      currency: { type: 'string', format: 'currency' },
-      contents: { type: 'array', itemType: 'Content' }
-    }
-  }
-};
-
-/**
- * Content Item Schema for contents[] array
+ * Content Item Schema for contents[] array items
  */
 export const CONTENT_ITEM_SCHEMA = {
-  id: { type: 'string' },
-  group_id: { type: 'string' },
-  name: { type: 'string' },
-  content_type: { type: 'string' }, // e.g. "product", "plan", "page"
-  quantity: { type: 'integer', min: 1 },
-  amount: { type: 'integer', min: 0, minorUnitsRecommended: true },
-  currency: { type: 'string', format: 'currency' },
-  variant_dict: { type: 'object' }
+  id: { type: 'string', description: 'Internal product/item identifier' },
+  group_id: { type: 'string', description: 'Product group or parent SKU (Conversions API only)' },
+  name: { type: 'string', description: 'Human-readable product/item name' },
+  content_type: { type: 'string', enum: ['product', 'plan', 'page', 'category', 'service'], description: 'Category type' },
+  quantity: { type: 'integer', min: 1, description: 'Item quantity (positive integer)' },
+  amount: { type: 'integer', min: 0, minorUnit: true, description: 'Item monetary value in minor units (e.g. 2599 for $25.99)' },
+  currency: { type: 'string', format: 'currency', description: 'ISO 4217 3-letter currency code' },
+  variant_dict: { type: 'object', description: 'Key-value map of variants (e.g. { size: "M" })' }
 };
 
 /**
- * Standard Events Directory with Data Shape mappings
+ * Generic Declarative Event Schemas
  */
 export const EVENT_SCHEMAS = {
-  // Page Viewed
+  // 1. Page Viewed
   'page_viewed': {
-    description: 'A user lands on or views an important page.',
     dataShape: 'contents',
     category: 'traffic',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['contents', 'amount', 'currency'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Optional page content items' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional monetary value' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Contents Viewed
+  // 2. Contents Viewed
   'contents_viewed': {
-    description: 'A user views a product, listing, article, or other content unit.',
     dataShape: 'contents',
     category: 'engagement',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['contents', 'amount', 'currency'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Array of viewed content/product items' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Monetary value in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Items Added (Add to Cart)
+  // 3. Items Added (Add To Cart)
   'items_added': {
-    description: 'A user adds one or more items to a cart, bundle, or selection.',
     dataShape: 'contents',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['amount', 'currency', 'contents'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Cart addition total in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Added product items' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Checkout Started
+  // 4. Checkout Started
   'checkout_started': {
-    description: 'A user starts checkout.',
     dataShape: 'contents',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['amount', 'currency', 'contents'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Checkout total in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Cart checkout items' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Order Created (Purchase)
+  // 5. Order Created (Purchase)
   'order_created': {
-    description: 'A purchase is completed.',
     dataShape: 'contents',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['amount', 'currency', 'contents'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Order total in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Purchased items' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Lead Created
+  // 6. Lead Created
   'lead_created': {
-    description: 'A user submits a lead form or requests contact.',
     dataShape: 'customer_action',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['amount', 'currency'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'customer_action', required: true, description: 'Must be "customer_action"' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Estimated lead value in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Registration Completed
+  // 7. Registration Completed
   'registration_completed': {
-    description: 'A user finishes an account or event registration flow.',
     dataShape: 'customer_action',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['amount', 'currency'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'customer_action', required: true, description: 'Must be "customer_action"' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional value' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Appointment Scheduled
+  // 8. Appointment Scheduled
   'appointment_scheduled': {
-    description: 'A user books a meeting, demo, or consultation.',
     dataShape: 'customer_action',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['amount', 'currency'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'customer_action', required: true, description: 'Must be "customer_action"' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Booking value in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Subscription Created
+  // 9. Subscription Created
   'subscription_created': {
-    description: 'A paid subscription starts.',
     dataShape: 'plan_enrollment',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['plan_id', 'amount', 'currency', 'contents'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'plan_enrollment', required: true, description: 'Must be "plan_enrollment"' },
+      plan_id: { type: 'string', description: 'Internal subscription plan identifier' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Recurring amount in minor units' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Plan-related items' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // Trial Started
+  // 10. Trial Started
   'trial_started': {
-    description: 'A free trial starts.',
     dataShape: 'plan_enrollment',
     category: 'conversion',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['plan_id'],
+    parameters: {
+      type: { type: 'string', expected: 'plan_enrollment', required: true, description: 'Must be "plan_enrollment"' },
+      plan_id: { type: 'string', description: 'Trial plan identifier' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
   },
 
-  // App Installed (CAPI only)
-  'app_installed': {
-    description: 'A user installs an app (Conversions API only).',
-    dataShape: 'customer_action',
-    category: 'mobile',
-    isPixelSupported: false
-  },
-
-  // App Opened (CAPI only)
-  'app_opened': {
-    description: 'A user opens an app (Conversions API only).',
-    dataShape: 'customer_action',
-    category: 'mobile',
-    isPixelSupported: false
-  },
-
-  // Custom Event
+  // 11. Custom Event
   'custom': {
-    description: 'A user-defined event not covered by standard taxonomy.',
     dataShape: 'custom',
     category: 'custom',
-    isPixelSupported: true
+    required: ['type'],
+    optional: ['plan_id', 'amount', 'currency', 'contents'],
+    optionsRequired: ['custom_event_name'],
+    conditionalRequired: [
+      { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
+    ],
+    parameters: {
+      type: { type: 'string', expected: 'custom', required: true, description: 'Must be "custom"' },
+      plan_id: { type: 'string', description: 'Optional plan ID' },
+      amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional custom event value' },
+      currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
+      contents: { type: 'array', itemSchema: 'Content', description: 'Optional content items' }
+    },
+    options: {
+      required: ['custom_event_name'],
+      optional: ['event_id', 'opt_out']
+    }
   }
-};
-
-/**
- * Options Schema (4th argument in measure call)
- */
-export const EVENT_OPTIONS_SCHEMA = {
-  event_id: { type: 'string', minLength: 1 },
-  custom_event_name: { type: 'string', minLength: 1, maxLength: 64 },
-  opt_out: { type: 'boolean' }
 };
 
 export const CUSTOM_EVENT_RULES = {

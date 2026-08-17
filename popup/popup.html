@@ -45,6 +45,7 @@
       <nav class="nav-tabs">
         <button class="nav-tab active" data-tab="overview">Overview</button>
         <button class="nav-tab" data-tab="events">Events <span class="tab-count" id="tab-count-events">0</span></button>
+        <button class="nav-tab" data-tab="network">Network <span class="tab-count" id="tab-count-network">0</span></button>
         <button class="nav-tab" data-tab="attribution">oppref</button>
         <button class="nav-tab" data-tab="issues">Issues <span class="tab-count tab-count-error" id="tab-count-issues">0</span></button>
         <button class="nav-tab" data-tab="audit">Journey Audit</button>
@@ -173,7 +174,23 @@
         </div>
       </div>
 
-      <!-- TAB 3: ATTRIBUTION (oppref) -->
+      <!-- TAB 3: NETWORK MONITOR -->
+      <div class="tab-pane" id="pane-network">
+        <section class="card">
+          <div class="card-header">
+            <span class="card-title">OpenAI Pixel Network Requests</span>
+            <span id="network-count-badge" class="badge badge-neutral">0 requests</span>
+          </div>
+          <p class="section-desc">
+            Live observation of HTTP POST/beacon transmissions dispatched to OpenAI Ads ingestion endpoints (<code>bzr.openai.com</code>).
+          </p>
+        </section>
+        <div class="events-list" id="network-list-container" style="margin-top: 8px;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- TAB 4: ATTRIBUTION (oppref) -->
       <div class="tab-pane" id="pane-attribution">
         <section class="card">
           <div class="card-header">
@@ -215,14 +232,14 @@
         </section>
       </div>
 
-      <!-- TAB 4: ISSUES & DEDUPLICATION -->
+      <!-- TAB 5: ISSUES & DEDUPLICATION -->
       <div class="tab-pane" id="pane-issues">
         <div id="issues-list-container">
           <!-- Dynamically populated -->
         </div>
       </div>
 
-      <!-- TAB 5: AUDIT & EXPORT -->
+      <!-- TAB 6: AUDIT & EXPORT -->
       <div class="tab-pane" id="pane-audit">
         <section class="card">
           <div class="card-header">
