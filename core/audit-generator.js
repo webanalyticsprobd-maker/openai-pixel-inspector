@@ -58,22 +58,37 @@ export function auditParameter(paramKey, paramVal, eventContext = {}) {
     return { status: 'warning', message: 'Empty value for "' + paramKey + '"' };
   }
 
-  // 1. Amount validation
+  // 1. Amount validation (Event-level monetary value in minor currency units)
   if (paramKey === 'amount' || paramKey.endsWith('_amount') || paramKey === 'value' || paramKey === 'price') {
     if (typeof paramVal !== 'number' || isNaN(paramVal)) {
-      return { status: 'error', message: '"' + paramKey + '" must be numeric, received: ' + typeof paramVal };
+      return { status: 'error', message: '"' + paramKey + '" must be an integer, received: ' + typeof paramVal };
     }
     if (paramVal < 0) {
       return { status: 'error', message: '"' + paramKey + '" cannot be negative (' + paramVal + ')' };
     }
     
-    // Strict minor currency unit check: e.g. for USD/EUR, $350 must be 35000 cents
+    // Per OpenAI official documentation:
+    // "Send monetary values as integers in the standard ISO 4217 minor unit for the currency code you provide, for example 12999 for $129.99 with currency: "USD"."
+    if (!Number.isInteger(paramVal)) {
+      return { status: 'error', message: '"' + paramKey + '" (' + paramVal + ') must be an integer in minor currency units (no decimals). For example, 12999 for $129.99 USD.' };
+    }
+
     const curr = (eventContext.currency || 'USD').toUpperCase();
     const mult = (curr === 'JPY' || curr === 'KRW') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
-    if (mult > 1 && paramVal > 0 && paramVal < 1000 && !Number.isInteger(paramVal)) {
-      return { status: 'error', message: 'Amount was sent in major units ($' + paramVal + '). OpenAI expects minor units: ' + (paramVal * mult) + ' for ' + curr + '.' };
+
+    // Check if event amount was mistakenly sent in major units while contents items used minor units
+    if (Array.isArray(eventContext.contents) && eventContext.contents.length > 0) {
+      const itemsSum = eventContext.contents.reduce((sum, i) => sum + ((Number(i.amount) || 0) * (Number(i.quantity) || 1)), 0);
+      if (mult > 1 && paramVal * mult === itemsSum) {
+        return { status: 'error', message: 'Event amount (' + paramVal + ') was sent in major units ($' + paramVal + '.00). In ' + curr + ', OpenAI expects minor units: ' + itemsSum + ' (' + paramVal + ' × ' + mult + ').' };
+      }
     }
-    return { status: 'valid', message: 'Valid monetary amount' };
+
+    if (paramKey === 'amount' && !eventContext.currency) {
+      return { status: 'error', message: 'Parameter "currency" is strictly required whenever "amount" is present.' };
+    }
+
+    return { status: 'valid', message: 'Valid monetary amount in minor units (' + paramVal + ' ' + curr + ')' };
   }
 
   // 2. Currency validation
