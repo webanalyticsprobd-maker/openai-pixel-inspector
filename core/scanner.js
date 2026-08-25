@@ -301,17 +301,6 @@ export function generateAuditReport(tabState) {
     };
   });
 
-  // 4. CAPI Deduplication Issues
-  if (summary.capiDeduplication.status === 'fail') {
-    summary.overallStatus = 'fail';
-    summary.issues.push({
-      code: 'CAPI_DEDUPLICATION_RISK',
-      severity: 'error',
-      message: `High risk of double-counting: Missing event_id on ${summary.capiDeduplication.missingEventIdList.join(', ')}.`,
-      recommendation: 'Pass a unique event_id on all monetary conversion events (e.g. order ID) to allow server-side deduplication.'
-    });
-  }
-
   // Deduplicate issues list
   const uniqueIssues = [];
   const seenCodes = new Set();
