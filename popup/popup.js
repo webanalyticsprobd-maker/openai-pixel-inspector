@@ -1,14 +1,6 @@
 /**
- * OpenAI Ads Pixel Inspector - Popup Controller
- * 
- * Features:
- * - Generic Schema-Driven Parameter Validation Engine
- * - 4-Level Parameter Severity: ✅ Valid, ⚠️ Warning, ❌ Error, ℹ️ Info
- * - Network Monitor: Inspects observable HTTP POST requests & safe headers to bzr.openai.com
- * - 5-Stage Lifecycle Separation (Pixel Fired, Network Sent, Server Status, Parameters, Validation)
- * - Session Journey Timeline & Deduplication Audit
- * - CSV, JSON, and Markdown Report Export
- * - Chrome Side Panel & Theme Persistence
+ * OpenAI Ads Pixel Inspector - Professional Developer & Analytics Debugger
+ * Reference Style: Stripe Dashboard + Linear + Chrome DevTools + OpenAI Branding
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
@@ -16,9 +8,10 @@ import { generateAuditReport } from '../core/scanner.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
-  const navTabs = document.querySelectorAll('.nav-tab');
+  const allNavTabs = document.querySelectorAll('.nav-tab, .nav-tab-secondary');
   const tabPanes = document.querySelectorAll('.tab-pane');
   const targetHostEl = document.getElementById('target-host');
+  const btnCopyHost = document.getElementById('btn-copy-host');
   const badgeTabIdEl = document.getElementById('badge-tab-id');
   const btnRefresh = document.getElementById('btn-refresh');
   const btnClear = document.getElementById('btn-clear');
@@ -26,11 +19,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const themeIcon = document.getElementById('theme-icon');
   const btnSidepanel = document.getElementById('btn-sidepanel');
 
+  // Overview Tab elements
   const pixelStatusBadge = document.getElementById('pixel-status-badge');
+  const healthStatusBadge = document.getElementById('health-status-badge');
+  const healthOverallLabel = document.getElementById('health-overall-label');
   const valPixelDetected = document.getElementById('val-pixel-detected');
   const valPixelId = document.getElementById('val-pixel-id');
   const valSessionId = document.getElementById('val-session-id');
   const valOppref = document.getElementById('val-oppref');
+  const valServersideStatus = document.getElementById('val-serverside-status');
 
   const metricTotalEvents = document.getElementById('metric-total-events');
   const metricStandardEvents = document.getElementById('metric-standard-events');
@@ -67,6 +64,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const attrActiveKey = document.getElementById('attr-active-key');
 
   // Issues Tab elements
+  const issuesStatusBadge = document.getElementById('issues-status-badge');
+  const issuesSummarySubtitle = document.getElementById('issues-summary-subtitle');
   const issuesListContainer = document.getElementById('issues-list-container');
 
   // Audit Tab elements
@@ -91,33 +90,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   let searchQuery = '';
   let activeModalJson = '';
   const expandedEventIds = new Set();
+  const expandedDlIndices = new Set();
 
   // ==========================================
   // SVG Icon System (Professional & Zero Emojis)
   // ==========================================
   const ICONS = {
-    check: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>',
-    cross: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>',
-    warn: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>',
-    info: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>',
+    check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
+    cross: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    warn: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    info: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
     sun: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
     moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
-    emptyEvents: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
-    emptyNet: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
-    emptyCheck: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+    copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    emptyCheck: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
   };
 
   function renderStatusBadge(severity, label, titleText) {
     const safeTitle = titleText ? ` title="${escapeHtml(titleText)}"` : '';
-    if (severity === 'valid' || severity === 'pass' || severity === 'success') {
-      return `<span class="badge badge-success"${safeTitle}>${ICONS.check} ${label || 'Valid'}</span>`;
-    } else if (severity === 'error' || severity === 'critical' || severity === 'fail') {
+    if (severity === 'valid' || severity === 'pass' || severity === 'success' || severity === 'detected' || severity === 'triggered') {
+      return `<span class="badge badge-success"${safeTitle}>${ICONS.check} ${label || 'Triggered'}</span>`;
+    } else if (severity === 'error' || severity === 'critical' || severity === 'fail' || severity === 'duplicate') {
       return `<span class="badge badge-error"${safeTitle}>${ICONS.cross} ${label || 'Error'}</span>`;
     } else if (severity === 'warning') {
       return `<span class="badge badge-warning"${safeTitle}>${ICONS.warn} ${label || 'Warning'}</span>`;
+    } else if (severity === 'info') {
+      return `<span class="badge badge-info"${safeTitle}>${ICONS.info} ${label || 'Info'}</span>`;
     } else {
-      return `<span class="badge badge-neutral"${safeTitle}>${ICONS.info} ${label || 'Info'}</span>`;
+      return `<span class="badge badge-neutral"${safeTitle}>${label || 'Not detected'}</span>`;
     }
+  }
+
+  // Copy with Visual Feedback
+  function copyToClipboard(text, triggerBtn) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      if (triggerBtn) {
+        const originalHtml = triggerBtn.innerHTML;
+        triggerBtn.innerHTML = ICONS.check;
+        triggerBtn.style.color = 'var(--status-success)';
+        setTimeout(() => {
+          triggerBtn.innerHTML = originalHtml;
+          triggerBtn.style.color = '';
+        }, 1500);
+      }
+    });
   }
 
   // ==========================================
@@ -164,39 +182,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 3. Navigation Tabs & Scroll Controls
+  // 3. Navigation System (Option B: Primary + Secondary)
   // ==========================================
-  const navScrollLeft = document.getElementById('nav-scroll-left');
-  const navScrollRight = document.getElementById('nav-scroll-right');
-  const navTabsScroll = document.getElementById('nav-tabs-scroll');
-
-  if (navScrollLeft && navTabsScroll) {
-    navScrollLeft.addEventListener('click', () => {
-      navTabsScroll.scrollBy({ left: -140, behavior: 'smooth' });
-    });
-  }
-  if (navScrollRight && navTabsScroll) {
-    navScrollRight.addEventListener('click', () => {
-      navTabsScroll.scrollBy({ left: 140, behavior: 'smooth' });
-    });
-  }
-
-  navTabs.forEach((tab) => {
+  allNavTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
-      navTabs.forEach((t) => t.classList.remove('active'));
-      tabPanes.forEach((p) => p.classList.remove('active'));
+      const targetId = tab.dataset.tab;
+      
+      allNavTabs.forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
-      const targetPane = document.getElementById(`pane-${tab.dataset.tab}`);
-      if (targetPane) targetPane.classList.add('active');
-      try {
-        tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      } catch {}
+
+      tabPanes.forEach((pane) => {
+        if (pane.id === `pane-${targetId}`) {
+          pane.classList.add('active');
+        } else {
+          pane.classList.remove('active');
+        }
+      });
     });
   });
 
-  // ==========================================
-  // 4. Filter Chips & Search
-  // ==========================================
+  // Search Filter Handler
+  eventSearchInput.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    renderEvents();
+  });
+
+  // Filter Chips Handler
   filterChips.forEach((chip) => {
     chip.addEventListener('click', () => {
       filterChips.forEach((c) => c.classList.remove('active'));
@@ -206,78 +217,83 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  eventSearchInput.addEventListener('input', (e) => {
-    searchQuery = e.target.value;
-    renderEvents();
-  });
+  // Copy Hostname Button
+  if (btnCopyHost) {
+    btnCopyHost.addEventListener('click', () => {
+      if (activeTab && activeTab.url) {
+        try {
+          const urlObj = new URL(activeTab.url);
+          copyToClipboard(urlObj.hostname, btnCopyHost);
+        } catch (_) {
+          copyToClipboard(activeTab.url, btnCopyHost);
+        }
+      }
+    });
+  }
 
   // ==========================================
-  // 5. Modal Handling
+  // 4. Modal Handlers
   // ==========================================
-  modalCloseBtn.addEventListener('click', () => {
-    rawModal.classList.add('hidden');
-  });
-
-  modalCopyBtn.addEventListener('click', () => {
-    if (activeModalJson) {
-      navigator.clipboard.writeText(activeModalJson);
-      modalCopyBtn.textContent = 'Copied!';
-      setTimeout(() => { modalCopyBtn.textContent = 'Copy JSON'; }, 1500);
-    }
-  });
-
-  function openRawModal(title, dataObj) {
-    activeModalJson = JSON.stringify(dataObj, null, 2);
+  function openRawModal(title, jsonData) {
     modalEventTitle.textContent = title;
+    activeModalJson = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData, null, 2);
     modalJsonContent.textContent = activeModalJson;
     rawModal.classList.remove('hidden');
   }
 
+  modalCloseBtn.addEventListener('click', () => {
+    rawModal.classList.add('hidden');
+  });
+
+  rawModal.addEventListener('click', (e) => {
+    if (e.target === rawModal) rawModal.classList.add('hidden');
+  });
+
+  modalCopyBtn.addEventListener('click', () => {
+    copyToClipboard(activeModalJson, modalCopyBtn);
+    modalCopyBtn.textContent = 'Copied!';
+    setTimeout(() => { modalCopyBtn.textContent = 'Copy JSON'; }, 1500);
+  });
+
   // ==========================================
-  // 6. Diagnostics Helper
+  // 5. Active Tab & Session Sync
   // ==========================================
   async function getActiveTab() {
-    try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      return tabs && tabs.length > 0 ? tabs[0] : null;
-    } catch {
-      return null;
-    }
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs[0] || null;
   }
 
   async function updateState() {
     activeTab = await getActiveTab();
-    if (!activeTab) return;
+    if (!activeTab) {
+      targetHostEl.textContent = 'No active tab';
+      return;
+    }
 
     try {
       const urlObj = new URL(activeTab.url);
       targetHostEl.textContent = urlObj.hostname || activeTab.url;
-    } catch {
+      badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
+    } catch (_) {
       targetHostEl.textContent = activeTab.url || 'Internal page';
+      badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
     }
-    badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
 
-    // Get Tab State
     try {
-      const stateResp = await chrome.runtime.sendMessage({
-        action: 'GET_ACTIVE_TAB_STATE',
+      const response = await chrome.runtime.sendMessage({
+        action: 'GET_TAB_STATE',
         tabId: activeTab.id
-      }).catch(() => null);
-
-      if (stateResp && stateResp.state) {
-        currentTabState = stateResp.state;
+      });
+      if (response && response.state) {
+        currentTabState = response.state;
         renderAll();
       }
     } catch (err) {
-      console.warn('[OpenAI Pixel Inspector] Tab state query error:', err);
+      console.warn('[OpenAI Pixel Inspector] Background sync error:', err);
     }
   }
 
-  // ==========================================
-  // 7. Rendering Engine
-  // ==========================================
   function renderAll() {
-    if (!currentTabState) return;
     renderOverview();
     renderEvents();
     renderFunnel();
@@ -287,55 +303,104 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderAudit();
   }
 
+  // ==========================================
+  // 6. Overview Renderer (Tracking Health Dashboard)
+  // ==========================================
   function renderOverview() {
+    if (!currentTabState) return;
+
     const pixel = currentTabState.pixel || {};
-    const attribution = currentTabState.attribution || {};
     const stats = currentTabState.stats || {};
-    const events = currentTabState.events || [];
+    const attribution = currentTabState.attribution || {};
     const dataLayer = currentTabState.dataLayer || [];
+    const events = currentTabState.events || [];
     const report = generateAuditReport(currentTabState);
 
-    if (pixel.detected) {
-      valPixelDetected.innerHTML = `<span style="color:var(--color-emerald); font-weight:600;">Detected (${escapeHtml(pixel.confidence || 'high')})</span>`;
+    // Overall Health Status Badge
+    if (report.overallStatus === 'pass') {
       pixelStatusBadge.textContent = 'Active';
       pixelStatusBadge.className = 'badge badge-success';
+      healthStatusBadge.textContent = 'Healthy (Pass)';
+      healthStatusBadge.className = 'badge badge-success';
+      healthOverallLabel.textContent = 'All tracking criteria verified';
+    } else if (report.overallStatus === 'warning') {
+      pixelStatusBadge.textContent = 'Warnings';
+      pixelStatusBadge.className = 'badge badge-warning';
+      healthStatusBadge.textContent = 'Needs Attention';
+      healthStatusBadge.className = 'badge badge-warning';
+      healthOverallLabel.textContent = 'Suboptimal tracking parameters';
     } else {
-      valPixelDetected.innerHTML = '<span style="color:var(--color-rose); font-weight:600;">Not Detected</span>';
-      pixelStatusBadge.textContent = 'Missing';
+      pixelStatusBadge.textContent = 'Errors';
       pixelStatusBadge.className = 'badge badge-error';
+      healthStatusBadge.textContent = 'Errors Detected';
+      healthStatusBadge.className = 'badge badge-error';
+      healthOverallLabel.textContent = 'Critical issues need resolution';
     }
 
-    valPixelId.textContent = (pixel.pixelIds && pixel.pixelIds.length > 0) ? pixel.pixelIds.join(', ') : 'None';
-    valSessionId.textContent = currentTabState.sessionId || 'SESSION_' + activeTab?.id;
-    valOppref.innerHTML = attribution.oppref ? `<span style="color:var(--color-emerald); font-weight:600;">${truncateString(attribution.oppref, 18)}</span>` : '<span style="color:var(--text-muted);">Not detected</span>';
+    // Health Table Rows
+    if (pixel.installed) {
+      valPixelDetected.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span>';
+    } else {
+      valPixelDetected.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
+    }
 
+    if (pixel.pixelIds && pixel.pixelIds.length > 0) {
+      valPixelId.innerHTML = `<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11.5px;">(${escapeHtml(pixel.pixelIds.join(', '))})</span>`;
+    } else {
+      valPixelId.innerHTML = '<span style="color:var(--text-muted);">None</span>';
+    }
+
+    valSessionId.textContent = currentTabState.sessionId || 'SESSION_' + activeTab?.id;
+
+    if (attribution.oppref) {
+      valOppref.innerHTML = `<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(${escapeHtml(truncateString(attribution.oppref, 14))})</span>`;
+    } else {
+      valOppref.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
+    }
+
+    // Server-Side Activity Check
+    const hasCapi = currentTabState.events?.some(e => e.isCapi || e.requestOrigin === 'server' || e.url?.includes('/api/')) || false;
+    if (hasCapi) {
+      valServersideStatus.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span style="color:var(--text-secondary); font-size:11.5px;">(First-party endpoint)</span>';
+    } else {
+      valServersideStatus.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No server-side activity detected during this session</span>';
+    }
+
+    // Metric Counters
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
     metricCustomEvents.textContent = stats.customEvents || 0;
-    metricIssuesEvents.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0);
+    
+    const issuesCount = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0) + (report.issues?.length || 0);
+    metricIssuesEvents.textContent = issuesCount;
+    if (issuesCount === 0) {
+      metricIssuesEvents.className = 'metric-num text-muted';
+    } else {
+      metricIssuesEvents.className = 'metric-num text-rose';
+    }
 
+    // Navigation Tab Count Badges
     tabCountEvents.textContent = stats.totalEvents || 0;
     tabCountFunnel.textContent = `${report.funnel.completedCount}/5`;
     tabCountDatalayer.textContent = dataLayer.length || 0;
-    tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0);
+    tabCountIssues.textContent = issuesCount;
 
+    // Latest Observed Event Snapshot
     if (events.length > 0) {
       const latest = events[events.length - 1];
       latestEventTime.textContent = formatTimestamp(latest.timestamp);
       latestEventContent.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="event-badge-type ${latest.validation.isCustom ? 'event-badge-custom' : 'event-badge-std'}">
+            <span class="event-type-badge ${latest.validation.isCustom ? 'event-type-custom' : 'event-type-std'}">
               ${latest.validation.isCustom ? 'Custom' : 'Standard'}
             </span>
-            <strong>${escapeHtml(latest.displayName || latest.name)}</strong>
+            <strong style="font-size: 13.5px; color: var(--text-main);">${escapeHtml(latest.displayName || latest.name)}</strong>
           </div>
-          <span class="badge ${latest.isDuplicate ? 'badge-error' : (latest.validation.status === 'valid' ? 'badge-success' : 'badge-warning')}">
-            ${latest.isDuplicate ? 'DOUBLE FIRED' : latest.validation.status.toUpperCase()}
-          </span>
+          ${latest.isDuplicate ? renderStatusBadge('duplicate', 'Double Fired') : renderStatusBadge('triggered', 'Triggered')}
         </div>
-        <div style="font-size: 12px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 6px;">
-          ${Object.keys(latest.parameters).length} parameter(s) • Page: ${escapeHtml(latest.pathname || '/')} • ID: ${latest.eventId ? escapeHtml(latest.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}
+        <div style="font-size: 11.5px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 4px;">
+          ${Object.keys(latest.parameters).length} param(s) • Path: ${escapeHtml(latest.pathname || '/')} • ID: ${latest.eventId ? escapeHtml(latest.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}
         </div>
       `;
     } else {
@@ -344,6 +409,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // ==========================================
+  // 7. Events Timeline Renderer (Separation of Trigger & Validation)
+  // ==========================================
   function renderEvents() {
     if (!currentTabState) return;
     const events = currentTabState.events || [];
@@ -370,8 +438,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       eventsListContainer.innerHTML = `
         <div class="empty-state">
           <span class="empty-icon">${ICONS.emptyEvents}</span>
-          <p class="empty-text">No matching OpenAI Pixel events observed.</p>
-          <span class="empty-subtext">Trigger tracking actions on the page or across the user journey.</span>
+          <p class="empty-text">No matching events observed.</p>
+          <span class="empty-subtext">Trigger tracking interactions on the target page.</span>
         </div>
       `;
       return;
@@ -382,95 +450,128 @@ document.addEventListener('DOMContentLoaded', async () => {
       const item = document.createElement('div');
       const itemKey = evt._id || `evt_${idx}`;
       const isExpanded = expandedEventIds.has(itemKey);
-
       const isCustom = evt.validation.isCustom;
-      let statusBadgeHtml = '';
-      let statusClass = 'event-status-valid';
 
+      // 1. Separation of Trigger vs Validation
+      let triggerBadgeHtml = '';
       if (evt.isDuplicate) {
-        statusBadgeHtml = renderStatusBadge('error', 'Double Fired');
-        statusClass = 'event-status-error';
+        triggerBadgeHtml = renderStatusBadge('duplicate', 'Double Fired');
       } else if (evt.requestCount > 1) {
-        statusBadgeHtml = renderStatusBadge('error', `Fired ${evt.requestCount}x`);
-        statusClass = 'event-status-error';
+        triggerBadgeHtml = renderStatusBadge('duplicate', `Fired ${evt.requestCount}x`);
       } else {
-        const statusLabel = evt.validation.status === 'valid' ? 'Valid' : (evt.validation.status === 'warning' ? 'Warning' : 'Error');
-        statusBadgeHtml = renderStatusBadge(evt.validation.status, statusLabel);
-        if (evt.validation.status === 'error') statusClass = 'event-status-error';
-        else if (evt.validation.status === 'warning') statusClass = 'event-status-warning';
-        else statusClass = 'event-status-valid';
+        triggerBadgeHtml = renderStatusBadge('triggered', 'Triggered');
       }
 
-      item.className = `event-item ${statusClass} ${isExpanded ? 'open' : ''}`;
-
-      // Build Parameter Table Rows with Clean Severity Badges & PII Warnings
-      let paramRows = '';
+      // 2. Actionable Parameter Errors Box
+      let issueBannerHtml = '';
       const params = evt.parameters || {};
-      for (const [key, val] of Object.entries(params)) {
-        const valRes = (evt.validation && evt.validation.parameterResults && evt.validation.parameterResults[key]) || {};
-        
-        let paramSeverity = 'valid';
-        let paramLabel = 'Valid';
-        if (valRes.severity === 'error' || valRes.valid === false) {
-          paramSeverity = 'error';
-          paramLabel = 'Error';
-        } else if (valRes.severity === 'warning') {
-          paramSeverity = 'warning';
-          paramLabel = 'Warning';
-        } else if (valRes.severity === 'info') {
-          paramSeverity = 'info';
-          paramLabel = 'Info';
-        }
+      const validation = evt.validation || {};
+      const valResults = validation.parameterResults || {};
+      
+      const errorKeys = Object.keys(valResults).filter(k => valResults[k].severity === 'error' || valResults[k].valid === false);
+      const warningKeys = Object.keys(valResults).filter(k => valResults[k].severity === 'warning');
 
+      if (errorKeys.length > 0) {
+        const errDetails = errorKeys.map(k => {
+          const res = valResults[k];
+          return `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(res.message || 'Invalid parameter format')}</div>`;
+        }).join('');
+        issueBannerHtml = `
+          <div class="event-issue-banner">
+            <div><strong>${errorKeys.length} parameter error(s):</strong></div>
+            ${errDetails}
+          </div>
+        `;
+      } else if (warningKeys.length > 0) {
+        const warnDetails = warningKeys.map(k => {
+          const res = valResults[k];
+          return `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(res.message || 'Suboptimal parameter')}</div>`;
+        }).join('');
+        issueBannerHtml = `
+          <div class="event-issue-banner" style="background: var(--status-warning-bg); border-left-color: var(--status-warning); color: var(--status-warning);">
+            <div><strong>${warningKeys.length} parameter warning(s):</strong></div>
+            ${warnDetails}
+          </div>
+        `;
+      }
+
+      // 3. Parameter Table Rows
+      let paramRows = '';
+      for (const [key, val] of Object.entries(params)) {
+        const valRes = valResults[key] || {};
         let piiBadge = '';
         if (valRes.pii && valRes.piiDetails) {
-          piiBadge = `<span class="badge-pii" title="${escapeHtml(valRes.piiDetails.message)}">PII: ${valRes.piiDetails.type}</span>`;
+          piiBadge = `<span class="badge badge-error" style="font-size:10px; padding:1px 4px; margin-left:4px;">PII: ${valRes.piiDetails.type}</span>`;
         }
 
-        const paramStatusBadge = renderStatusBadge(paramSeverity, paramLabel, valRes.message);
+        let statusText = 'Valid';
+        let statusSev = 'valid';
+        if (valRes.severity === 'error' || valRes.valid === false) {
+          statusText = 'Error';
+          statusSev = 'error';
+        } else if (valRes.severity === 'warning') {
+          statusText = 'Warning';
+          statusSev = 'warning';
+        } else if (valRes.severity === 'info') {
+          statusText = 'Info';
+          statusSev = 'info';
+        }
 
         let displayVal = '';
         if (typeof val === 'object' && val !== null) {
-          displayVal = `<div class="param-json-block">${escapeHtml(JSON.stringify(val, null, 2))}</div>`;
+          displayVal = `<code>${escapeHtml(JSON.stringify(val))}</code>`;
         } else {
           displayVal = escapeHtml(String(val));
         }
 
         paramRows += `
           <tr>
-            <td>${escapeHtml(key)} ${piiBadge}</td>
-            <td>${displayVal}</td>
-            <td style="text-align:center;">${paramStatusBadge}</td>
+            <td class="param-name-cell">${escapeHtml(key)}${piiBadge}</td>
+            <td class="param-val-cell">${displayVal}</td>
+            <td class="param-status-cell">${renderStatusBadge(statusSev, statusText, valRes.message)}</td>
           </tr>
         `;
       }
 
       if (Object.keys(params).length === 0) {
-        paramRows = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center;">No parameters passed</td></tr>';
+        paramRows = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center; padding:8px;">No parameters passed</td></tr>';
       }
 
-      // Strictly real Event ID rendering (no fake IDs)
-      const eventIdDisplay = evt.eventId ? `<code>${escapeHtml(evt.eventId)}</code>` : '<span style="color:var(--text-muted); font-style: italic;">Not Sent</span>';
+      const eventIdDisplay = evt.eventId ? `<code>${escapeHtml(evt.eventId)}</code>` : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
 
+      item.className = `event-card ${isExpanded ? 'open' : ''}`;
       item.innerHTML = `
-        <div class="event-header">
-          <div class="event-name-group">
-            <span class="event-badge-type ${isCustom ? 'event-badge-custom' : 'event-badge-std'}">
-              ${isCustom ? 'Custom' : 'Standard'}
-            </span>
-            <span class="event-name">${escapeHtml(evt.displayName || evt.name)}</span>
+        <div class="event-card-header">
+          <div class="event-card-top">
+            <div class="event-title-group">
+              <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">
+                ${isCustom ? 'Custom' : 'Standard'}
+              </span>
+              <span class="event-name">${escapeHtml(evt.displayName || evt.name)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${triggerBadgeHtml}
+              <span class="event-time-text">${formatTimestamp(evt.timestamp)}</span>
+            </div>
           </div>
-          <div class="event-meta-group">
-            ${statusBadgeHtml}
-            <span class="event-time">${formatTimestamp(evt.timestamp)}</span>
-            <svg class="event-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          <div class="event-meta-line">
+            <span class="event-path-text truncate">${escapeHtml(evt.pathname || evt.url || '/')}</span>
+            <span style="font-size: 11px; color: var(--text-muted);">${Object.keys(params).length} parameter(s)</span>
           </div>
         </div>
+
+        ${issueBannerHtml}
+
         <div class="event-details-drawer">
-          <div style="margin-bottom:8px; color:var(--text-secondary); font-size:12px; line-height: 1.6;">
-            <div><strong>Page Path:</strong> <code>${escapeHtml(evt.pathname || evt.url || '/')}</code></div>
-            <div><strong>Event ID:</strong> ${eventIdDisplay} ${evt.pixelId ? ` | <strong>Pixel:</strong> <code>${escapeHtml(evt.pixelId)}</code>` : ''}</div>
-            ${evt.duplicateReason ? `<div style="color:var(--color-rose); margin-top:3px;"><strong>Duplicate:</strong> ${escapeHtml(evt.duplicateReason)}</div>` : ''}
+          <div class="event-spec-grid">
+            <div class="event-spec-item">
+              <span class="event-spec-label">Event ID</span>
+              <span class="event-spec-val">${eventIdDisplay}</span>
+            </div>
+            <div class="event-spec-item">
+              <span class="event-spec-label">Pixel ID</span>
+              <span class="event-spec-val">${evt.pixelId ? `<code>${escapeHtml(evt.pixelId)}</code>` : '<span style="color:var(--text-muted)">Default</span>'}</span>
+            </div>
           </div>
 
           <table class="param-table">
@@ -478,7 +579,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <tr>
                 <th>Parameter</th>
                 <th>Value</th>
-                <th style="text-align:center;">Status</th>
+                <th style="text-align:right;">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -486,14 +587,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             </tbody>
           </table>
 
-          <div class="drawer-actions">
-            <button class="btn btn-secondary btn-xs btn-inspect-raw">Inspect Raw JSON</button>
-          </div>
+          <details class="payload-details">
+            <summary>View JSON Payload ▾</summary>
+            <pre class="payload-code">${escapeHtml(JSON.stringify(evt.parameters, null, 2))}</pre>
+          </details>
         </div>
       `;
 
-      // Toggle drawer accordion & preserve open state
-      const header = item.querySelector('.event-header');
+      // Accordion click handler
+      const header = item.querySelector('.event-card-header');
       header.addEventListener('click', () => {
         if (expandedEventIds.has(itemKey)) {
           expandedEventIds.delete(itemKey);
@@ -504,50 +606,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
 
-      // Raw button
-      const rawBtn = item.querySelector('.btn-inspect-raw');
-      rawBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openRawModal(`Event: ${evt.displayName || evt.name}`, evt);
-      });
-
       eventsListContainer.appendChild(item);
     });
   }
 
   // ==========================================
-  // 8. Funnel & CAPI Deduplication Renderer
+  // 8. Funnel Journey Renderer (Vertical Flow)
   // ==========================================
   function renderFunnel() {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
     const funnel = report.funnel;
-    const capi = report.capiDeduplication;
 
     funnelRateBadge.textContent = `${funnel.completionPercentage}% Completed (${funnel.completedCount}/5)`;
     funnelRateBadge.className = funnel.completionPercentage === 100 ? 'badge badge-success' : (funnel.completionPercentage > 0 ? 'badge badge-warning' : 'badge badge-neutral');
 
     let funnelHtml = '';
     funnel.steps.forEach((step) => {
-      const isDone = step.detected;
-      const statusPill = isDone ? renderStatusBadge('valid', 'Reached') : renderStatusBadge('neutral', 'Not Triggered');
-      const timeStr = step.latestTimestamp ? formatTimestamp(step.latestTimestamp) : '--:--:--';
-      const eventIdStr = step.hasEventId ? `<code>${escapeHtml(step.eventId)}</code>` : '<span style="color:var(--text-muted)">Not Sent</span>';
+      const isTriggered = step.detected;
+      const statusBadge = isTriggered ? renderStatusBadge('triggered', 'Triggered') : renderStatusBadge('neutral', 'Not triggered');
+      const timeStr = step.latestTimestamp ? formatTimestamp(step.latestTimestamp) : '';
 
       funnelHtml += `
-        <div class="funnel-step-card ${isDone ? 'completed' : 'pending'}">
-          <div class="funnel-step-left">
-            <span class="funnel-step-num">${step.stepNumber}</span>
-            <div class="funnel-step-info">
-              <span class="funnel-step-name">${escapeHtml(step.label)}</span>
-              <span class="funnel-step-sub">
-                Event ID: ${eventIdStr} ${step.hasAmount ? ' • Amount Set' : ''} ${step.hasCurrency ? ' • Currency Set' : ''}
-              </span>
-            </div>
+        <div class="funnel-step-row ${isTriggered ? 'completed' : 'pending'}">
+          <div class="funnel-step-disc">${step.stepNumber}</div>
+          <div class="funnel-step-content">
+            <span class="funnel-step-title">${escapeHtml(step.label)}</span>
+            <span class="funnel-step-sub">
+              ${isTriggered ? `Event ID: ${step.hasEventId ? `<code>${escapeHtml(step.eventId)}</code>` : 'Not sent'} ${step.hasAmount ? ' • Amount set' : ''}` : 'Action pending in session'}
+            </span>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="text-muted font-mono" style="font-size: 11.5px;">${timeStr}</span>
-            ${statusPill}
+          <div class="funnel-step-meta">
+            ${timeStr ? `<span class="mono" style="font-size: 11px; color: var(--text-muted);">${timeStr}</span>` : ''}
+            ${statusBadge}
           </div>
         </div>
       `;
@@ -556,7 +647,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 9. GTM & Data Layer Renderer
+  // 9. Data Layer Developer Feed Renderer
   // ==========================================
   function renderDataLayer() {
     if (!currentTabState) return;
@@ -564,21 +655,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dataLayerEvents = currentTabState.dataLayer || [];
 
     if (gtmContainers.length > 0) {
-      gtmContainerBadge.textContent = `${gtmContainers.length} Container(s)`;
+      gtmContainerBadge.textContent = `${gtmContainers.length} Detected`;
       gtmContainerBadge.className = 'badge badge-success';
-      gtmContainerPills.innerHTML = gtmContainers.map((gId) => `<span class="gtm-pill">${escapeHtml(gId)}</span>`).join(' ');
+      gtmContainerPills.innerHTML = gtmContainers.map((gId) => `
+        <span class="gtm-pill">
+          <span>${escapeHtml(gId)}</span>
+          <button class="btn-copy-inline" data-gtm="${escapeHtml(gId)}" title="Copy GTM ID">${ICONS.copy}</button>
+        </span>
+      `).join(' ');
+
+      gtmContainerPills.querySelectorAll('.btn-copy-inline').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          copyToClipboard(btn.dataset.gtm, btn);
+        });
+      });
     } else {
       gtmContainerBadge.textContent = 'None Detected';
       gtmContainerBadge.className = 'badge badge-neutral';
-      gtmContainerPills.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No Google Tag Manager containers detected on page.</span>';
+      gtmContainerPills.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No Google Tag Manager containers detected.</span>';
     }
 
     if (dataLayerEvents.length === 0) {
       datalayerListContainer.innerHTML = `
         <div class="empty-state">
           <span class="empty-icon">${ICONS.emptyEvents}</span>
-          <p class="empty-text">No window.dataLayer pushes captured.</p>
-          <span class="empty-subtext">Events pushed to window.dataLayer will appear here in real time.</span>
+          <p class="empty-text">No window.dataLayer pushes recorded.</p>
+          <span class="empty-subtext">Events pushed to window.dataLayer appear here in real time.</span>
         </div>
       `;
       return;
@@ -586,66 +689,83 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     datalayerListContainer.innerHTML = '';
     dataLayerEvents.slice().reverse().forEach((dl, idx) => {
-      const card = document.createElement('div');
-      card.className = 'network-card';
-
+      const isExpanded = expandedDlIndices.has(idx);
       const evtName = dl.event || dl.data?.event || 'dataLayer.push';
       const timeStr = formatTimestamp(dl.timestamp);
 
-      card.innerHTML = `
-        <div class="network-header">
-          <div class="network-method-group">
-            <span class="badge-post" style="background: rgba(56, 189, 248, 0.15); color: var(--color-blue);">GTM DL</span>
-            <span style="font-weight: 600; font-size: 13px;">${escapeHtml(evtName)}</span>
+      const row = document.createElement('div');
+      row.className = `dl-row ${isExpanded ? 'open' : ''}`;
+      row.innerHTML = `
+        <div class="dl-row-header">
+          <div class="dl-row-left">
+            <span class="dl-time">${timeStr}</span>
+            <span class="dl-badge">GTM DL</span>
+            <span class="dl-name">${escapeHtml(evtName)}</span>
           </div>
-          <span class="text-muted font-mono" style="font-size: 11.5px;">${timeStr}</span>
+          <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${Object.keys(dl.data || {}).length} keys</span>
         </div>
-        <div class="network-meta" style="margin-top: 4px;">
-          <span>Keys: <code>${Object.keys(dl.data || {}).join(', ')}</code></span>
-        </div>
-        <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
-          <button class="btn btn-secondary btn-xs btn-inspect-dl-raw">Inspect Push Payload</button>
+        <div class="dl-drawer">
+          <pre class="payload-code">${escapeHtml(JSON.stringify(dl.data || dl, null, 2))}</pre>
         </div>
       `;
 
-      const dlRawBtn = card.querySelector('.btn-inspect-dl-raw');
-      dlRawBtn.addEventListener('click', () => {
-        openRawModal(`dataLayer: ${evtName}`, dl.data || dl);
+      row.addEventListener('click', () => {
+        if (expandedDlIndices.has(idx)) {
+          expandedDlIndices.delete(idx);
+          row.classList.remove('open');
+        } else {
+          expandedDlIndices.add(idx);
+          row.classList.add('open');
+        }
       });
 
-      datalayerListContainer.appendChild(card);
+      datalayerListContainer.appendChild(row);
     });
   }
 
+  // ==========================================
+  // 10. Attribution (oppref) Renderer
+  // ==========================================
   function renderAttribution() {
     if (!currentTabState) return;
     const attribution = currentTabState.attribution || {};
 
     if (attribution.oppref) {
-      opprefStatusBadge.textContent = 'Active';
+      opprefStatusBadge.textContent = 'Detected';
       opprefStatusBadge.className = 'badge badge-success';
     } else {
       opprefStatusBadge.textContent = 'Not detected';
       opprefStatusBadge.className = 'badge badge-neutral';
     }
 
-    attrUrlVal.textContent = attribution.urlDetected ? attribution.details.urlParam : 'Not present in URL';
-    attrCookieVal.textContent = attribution.cookieDetected ? attribution.details.cookieValue : 'Not found in cookies';
-    attrStorageVal.textContent = attribution.storageDetected ? attribution.details.localStorage : 'Not found in storage';
-    attrActiveKey.textContent = attribution.oppref || 'None';
+    attrUrlVal.innerHTML = attribution.urlDetected ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.details.urlParam)}</span>` : '<span style="color:var(--text-muted);">Not found</span>';
+    attrCookieVal.innerHTML = attribution.cookieDetected ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.details.cookieValue)}</span>` : '<span style="color:var(--text-muted);">Not found</span>';
+    attrStorageVal.innerHTML = attribution.storageDetected ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.details.localStorage)}</span>` : '<span style="color:var(--text-muted);">Not found</span>';
+    attrActiveKey.innerHTML = attribution.oppref ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.oppref)}</span>` : '<span style="color:var(--text-muted);">None</span>';
   }
 
+  // ==========================================
+  // 11. Issues & Diagnostics Renderer
+  // ==========================================
   function renderIssues() {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
     const issues = report.issues || [];
 
+    const errorCount = issues.filter(i => i.severity === 'critical' || i.severity === 'error').length;
+    const warningCount = issues.filter(i => i.severity === 'warning').length;
+    const infoCount = issues.filter(i => i.severity === 'info').length;
+
+    issuesStatusBadge.textContent = `${issues.length} Issue${issues.length === 1 ? '' : 's'}`;
+    issuesStatusBadge.className = errorCount > 0 ? 'badge badge-error' : (warningCount > 0 ? 'badge badge-warning' : 'badge badge-neutral');
+    issuesSummarySubtitle.textContent = `${errorCount} Error${errorCount === 1 ? '' : 's'} · ${warningCount} Warning${warningCount === 1 ? '' : 's'} · ${infoCount} Info`;
+
     if (issues.length === 0) {
       issuesListContainer.innerHTML = `
         <div class="empty-state">
           <span class="empty-icon">${ICONS.emptyCheck}</span>
-          <p class="empty-text">No implementation issues, double fires, or warnings found.</p>
-          <span class="empty-subtext">All parameters, journey actions, and tracking calls match OpenAI specifications.</span>
+          <p class="empty-text">No implementation issues found.</p>
+          <span class="empty-subtext">All observed tracking calls match OpenAI Pixel specifications.</span>
         </div>
       `;
       return;
@@ -654,21 +774,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     issuesListContainer.innerHTML = '';
     issues.forEach((iss) => {
       const card = document.createElement('div');
-      card.className = `issue-card issue-card-${iss.severity || 'warning'}`;
+      const sev = iss.severity || 'warning';
+      card.className = `issue-item issue-item-${sev}`;
+
+      // Map human-readable headline
+      let headline = iss.title || iss.code;
+      if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') headline = 'Invalid Item Amount Minor Units';
+      else if (iss.code === 'PII_LEAK_DETECTED') headline = 'PII Data Privacy Violation';
+      else if (iss.code === 'DOUBLE_FIRING_DETECTED') headline = 'Duplicate Event Double Fired';
+      else if (iss.code === 'OPPREF_NOT_DETECTED') headline = 'No Attribution Identifier (Direct Visit)';
+      else if (iss.code === 'PIXEL_NOT_INITIALIZED') headline = 'Pixel SDK Not Initialized';
+
       card.innerHTML = `
-        <div class="issue-header">
-          <span class="issue-code">${escapeHtml(iss.code)}</span>
-          <span class="badge ${iss.severity === 'critical' || iss.severity === 'error' ? 'badge-error' : (iss.severity === 'warning' ? 'badge-warning' : 'badge-neutral')}">
-            ${(iss.severity || 'warning').toUpperCase()}
-          </span>
+        <div class="issue-item-top">
+          <span class="issue-headline">${escapeHtml(headline)}</span>
+          ${renderStatusBadge(sev, sev.toUpperCase())}
         </div>
-        <p class="issue-msg">${escapeHtml(iss.message)}</p>
-        ${iss.recommendation ? `<div class="issue-rec"><strong>Recommendation:</strong> ${escapeHtml(iss.recommendation)}</div>` : ''}
+        <span class="issue-code-meta">${escapeHtml(iss.code)}</span>
+        <p class="issue-desc">${escapeHtml(iss.message)}</p>
+        ${iss.recommendation ? `<div class="issue-action-box"><strong>Fix:</strong> ${escapeHtml(iss.recommendation)}</div>` : ''}
       `;
       issuesListContainer.appendChild(card);
     });
   }
 
+  // ==========================================
+  // 12. Audit Summary & Export Renderer
+  // ==========================================
   function renderAudit() {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
@@ -677,101 +809,80 @@ document.addEventListener('DOMContentLoaded', async () => {
       auditScoreBadge.textContent = 'Healthy (Pass)';
       auditScoreBadge.className = 'badge badge-success';
     } else if (report.overallStatus === 'warning') {
-      auditScoreBadge.textContent = 'Warnings / Duplicates';
+      auditScoreBadge.textContent = 'Needs Attention';
       auditScoreBadge.className = 'badge badge-warning';
     } else {
       auditScoreBadge.textContent = 'Errors Detected';
       auditScoreBadge.className = 'badge badge-error';
     }
 
-    // Top Summary Box
+    // 4 Logical Executive Cards
     auditSummaryBox.innerHTML = `
-      <div><strong>Session ID:</strong> <code>${escapeHtml(report.sessionId || 'SESSION')}</code></div>
-      <div><strong>Target Host:</strong> ${escapeHtml(report.hostname || 'Unknown')}</div>
-      <div><strong>Visited Pages:</strong> ${report.scores.pagesVisitedCount} page(s) in session</div>
-      <div><strong>Total Events Recorded:</strong> ${report.scores.totalEvents} (${report.scores.standardEvents} Standard, ${report.scores.customEvents} Custom)</div>
-      <div><strong>Funnel Completion:</strong> ${report.funnel.completionPercentage}% (${report.funnel.completedCount}/5 steps)</div>
-      <div><strong>PII Privacy Violations:</strong> ${report.scores.piiViolationsCount > 0 ? `<span style="color:var(--color-rose); font-weight:600;">${report.scores.piiViolationsCount} detected</span>` : '<span style="color:var(--color-emerald); font-weight:600;">0 (Compliant)</span>'}</div>
-      <div><strong>Duplicate / Double Fires:</strong> ${report.scores.duplicateEvents > 0 ? `<span style="color:var(--color-rose); font-weight:600;">${report.scores.duplicateEvents} detected</span>` : '<span style="color:var(--color-emerald); font-weight:600;">0 (Clean)</span>'}</div>
-      <div><strong>Issues Count:</strong> ${report.issues.length} (${report.scores.errorEvents} errors, ${report.scores.warningEvents} warnings)</div>
+      <div class="audit-stat-card">
+        <span class="audit-stat-label">Session</span>
+        <span class="audit-stat-val mono truncate">${escapeHtml(report.sessionId || 'SESSION')}</span>
+      </div>
+      <div class="audit-stat-card">
+        <span class="audit-stat-label">Journey</span>
+        <span class="audit-stat-val">${report.scores.pagesVisitedCount} page(s) · ${report.scores.totalEvents} events · ${report.funnel.completionPercentage}% funnel</span>
+      </div>
+      <div class="audit-stat-card">
+        <span class="audit-stat-label">Data Quality</span>
+        <span class="audit-stat-val ${report.scores.duplicateEvents > 0 ? 'text-rose' : 'text-emerald'}">${report.scores.duplicateEvents} duplicate(s) · ${report.scores.piiViolationsCount} PII</span>
+      </div>
+      <div class="audit-stat-card">
+        <span class="audit-stat-label">Issues</span>
+        <span class="audit-stat-val ${report.scores.errorEvents > 0 ? 'text-rose' : 'text-emerald'}">${report.scores.errorEvents} error(s) · ${report.scores.warningEvents} warning(s)</span>
+      </div>
     `;
 
-    // 1. Render Journey Timeline Table
+    // Stacked Journey List
     if (report.journeyTable && report.journeyTable.length > 0) {
-      let journeyRows = '';
+      let rowsHtml = '';
       report.journeyTable.forEach((row) => {
         const isDup = row.duplicateStatus.includes('Double Fired') || row.duplicateStatus.includes('Duplicate');
-        const statusColor = isDup ? 'var(--color-rose)' : 'var(--color-emerald)';
-        const pathDisplay = row.pathname || row.url || '/';
-
-        journeyRows += `
-          <tr>
-            <td>${row.step}</td>
-            <td><strong>${escapeHtml(row.name)}</strong></td>
-            <td title="${escapeHtml(row.url || pathDisplay)}"><code>${escapeHtml(pathDisplay)}</code></td>
-            <td>${row.count}</td>
-            <td style="color: ${statusColor}; font-weight: 600;">${escapeHtml(row.duplicateStatus)}</td>
-          </tr>
+        rowsHtml += `
+          <div class="audit-stacked-row">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="mono" style="color: var(--text-muted); font-size: 11px;">#${row.step}</span>
+              <strong style="color: var(--text-main);">${escapeHtml(row.name)}</strong>
+              <span class="mono truncate" style="color: var(--text-secondary); max-width: 140px; font-size: 11px;">${escapeHtml(row.pathname || '/')}</span>
+            </div>
+            <div>
+              ${isDup ? renderStatusBadge('duplicate', 'Duplicate') : renderStatusBadge('success', 'Clean')}
+            </div>
+          </div>
         `;
       });
-
-      journeyTableContainer.innerHTML = `
-        <table class="journey-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Event</th>
-              <th>Page URL</th>
-              <th style="text-align: center;">Count</th>
-              <th>Duplicate Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${journeyRows}
-          </tbody>
-        </table>
-      `;
+      journeyTableContainer.innerHTML = `<div class="audit-stacked-list">${rowsHtml}</div>`;
     } else {
       journeyTableContainer.innerHTML = '<div class="empty-state-sm">No journey steps recorded yet.</div>';
     }
 
-    // 2. Render Event Health Summary Table
+    // Event Summary Breakdown
     if (report.eventSummaries && report.eventSummaries.length > 0) {
-      let summaryRows = '';
+      let sumHtml = '';
       report.eventSummaries.forEach((sum) => {
-        const isDup = sum.duplicates > 0;
-        summaryRows += `
-          <tr>
-            <td><strong>${escapeHtml(sum.displayName || sum.name)}</strong></td>
-            <td>${sum.detected}</td>
-            <td style="color: ${isDup ? 'var(--color-rose)' : 'var(--color-emerald)'}; font-weight: 600;">
+        sumHtml += `
+          <div class="audit-stacked-row">
+            <div>
+              <strong style="color: var(--text-main);">${escapeHtml(sum.displayName || sum.name)}</strong>
+              <span style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">(${sum.detected} observed)</span>
+            </div>
+            <span style="font-size: 11.5px; font-weight: 600; color: ${sum.duplicates > 0 ? 'var(--status-error)' : 'var(--status-success)'};">
               ${escapeHtml(sum.audit)}
-            </td>
-          </tr>
+            </span>
+          </div>
         `;
       });
-
-      eventSummaryTableContainer.innerHTML = `
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>Event</th>
-              <th style="text-align: center;">Detected</th>
-              <th>Audit Assessment</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${summaryRows}
-          </tbody>
-        </table>
-      `;
+      eventSummaryTableContainer.innerHTML = `<div class="audit-stacked-list">${sumHtml}</div>`;
     } else {
       eventSummaryTableContainer.innerHTML = '<div class="empty-state-sm">No events to summarize.</div>';
     }
   }
 
   // ==========================================
-  // 11. Action Handlers
+  // 13. Action Handlers
   // ==========================================
   btnRefresh.addEventListener('click', async () => {
     btnRefresh.style.transform = 'rotate(180deg)';
@@ -785,6 +896,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnClear.addEventListener('click', async () => {
     if (activeTab) {
       expandedEventIds.clear();
+      expandedDlIndices.clear();
       await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
       await updateState();
     }
@@ -818,25 +930,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       `- **Duplicate / Double Fires:** ${report.scores.duplicateEvents}`,
       `- **Pages Visited:** ${report.scores.pagesVisitedCount}`,
       ``,
-      `## 5. Journey Steps Audit Table`,
-      `| Step | Event Name | Page Path | Request Count | Duplicate Status |`,
-      `|---|---|---|---|---|`,
-      ...(report.journeyTable || []).map((j) => `| ${j.step} | ${j.name} | ${j.pathname} | ${j.count} | ${j.duplicateStatus} |`),
-      ``,
-      `## 6. Event Health Breakdown`,
-      `| Event Name | Detected | Audit Assessment |`,
-      `|---|---|---|`,
-      ...(report.eventSummaries || []).map((s) => `| ${s.displayName || s.name} | ${s.detected} | ${s.audit} |`),
-      ``,
-      `## 7. Issues & Recommendations`,
+      `## 4. Issues & Recommendations`,
       report.issues.length === 0 ? `*No issues found. Tracking implementation is clean!*` : report.issues.map((i) => `- **[${i.severity.toUpperCase()}] ${i.code}**: ${i.message}\n  *Recommendation:* ${i.recommendation || 'N/A'}`).join('\n')
     ].join('\n');
 
-    navigator.clipboard.writeText(md);
-    btnCopyMarkdown.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> <span>Copied!</span>`;
-    setTimeout(() => {
-      btnCopyMarkdown.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>Copy Markdown</span>`;
-    }, 2000);
+    copyToClipboard(md, btnCopyMarkdown);
   });
 
   btnExportCsv.addEventListener('click', () => {
@@ -845,8 +943,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       'Step',
       'Timestamp',
       'Event Name',
-      'Data Type',
-      'Page URL',
       'Page Path',
       'Event ID',
       'Pixel ID',
@@ -864,12 +960,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         idx + 1,
         new Date(evt.timestamp).toISOString(),
         `"${evt.displayName || evt.name}"`,
-        evt.validation ? evt.validation.dataShape : 'contents',
-        `"${evt.url || ''}"`,
         `"${evt.pathname || ''}"`,
         `"${evt.eventId || 'Not Sent'}"`,
         `"${evt.pixelId || ''}"`,
-        `"${evt.duplicateStatus || 'Correct'}"`,
+        `"${evt.duplicateStatus || 'Clean'}"`,
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
@@ -881,7 +975,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map((e) => e.join(',')).join('\n'));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', csvContent);
-    dlAnchor.setAttribute('download', `openai_pixel_journey_audit_${Date.now()}.csv`);
+    dlAnchor.setAttribute('download', `openai_pixel_audit_${Date.now()}.csv`);
     dlAnchor.click();
   });
 
@@ -894,7 +988,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, null, 2));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', dataStr);
-    dlAnchor.setAttribute('download', `openai_pixel_session_audit_${Date.now()}.json`);
+    dlAnchor.setAttribute('download', `openai_pixel_audit_${Date.now()}.json`);
     dlAnchor.click();
   });
 

@@ -12,126 +12,125 @@
 <body>
   <div class="app-container">
     <!-- Header -->
-    <!-- Header -->
     <header class="app-header">
       <div class="brand-row">
         <div class="logo-group">
-          <img src="../icons/icon48.png" width="28" height="28" style="border-radius: 50%; display: block;" alt="OpenAI Logo">
-          <div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <h1 class="brand-title">OpenAI Pixel</h1>
-              <span class="brand-badge-pill">Debugger</span>
-            </div>
-            <span class="brand-subtitle">Real-Time Tracking & Journey Audit</span>
+          <img src="../icons/icon48.png" width="22" height="22" class="brand-logo" alt="OpenAI Logo">
+          <div class="brand-text">
+            <h1 class="brand-title">OpenAI Ads Pixel Inspector</h1>
+            <span class="brand-subtitle">Debugger · Real-time tracking audit</span>
           </div>
         </div>
         <div class="header-actions">
-          <button id="btn-sidepanel" class="icon-button" title="Open in Side Panel (Full Wide View)">
+          <button id="btn-sidepanel" class="icon-button" title="Side Panel (Wide View)">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
           </button>
-          <button id="btn-theme" class="icon-button" title="Toggle Light/Dark Theme">
+          <button id="btn-theme" class="icon-button" title="Toggle Theme">
             <span id="theme-icon" style="display:flex;align-items:center;justify-content:center;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             </span>
           </button>
-          <button id="btn-clear" class="icon-button" title="Reset Session & Clear Journey">
+          <button id="btn-clear" class="icon-button" title="Reset Session & Clear Events">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           </button>
-          <button id="btn-refresh" class="icon-button" title="Rescan Tab">
+          <button id="btn-refresh" class="icon-button" title="Rescan Active Tab">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
           </button>
         </div>
       </div>
 
-      <!-- Tab Target Banner (Pill Style) -->
-      <div class="tab-target-bar">
-        <span id="target-host" class="target-host truncate">Loading active tab...</span>
-        <span id="badge-tab-id" class="badge badge-subtle">Tab #--</span>
+      <!-- Compact Workspace Bar -->
+      <div class="workspace-bar">
+        <div class="workspace-host-group">
+          <span class="workspace-status-dot"></span>
+          <span id="target-host" class="workspace-host truncate">Loading active tab...</span>
+          <button class="btn-copy-inline" id="btn-copy-host" title="Copy domain URL">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+        <div class="workspace-meta">
+          <span id="badge-tab-id" class="workspace-tag">Tab #--</span>
+          <span id="pixel-status-badge" class="badge badge-neutral">Scanning</span>
+        </div>
       </div>
 
-      <!-- Segmented Pill Navigation Tabs with Left/Right Scroll Chevrons -->
-      <div class="nav-tabs-wrapper">
-        <button id="nav-scroll-left" class="nav-scroll-btn" title="Scroll left">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <nav class="nav-tabs" id="nav-tabs-scroll">
+      <!-- Option B: Primary + Secondary Navigation -->
+      <nav class="nav-system">
+        <div class="nav-primary">
           <button class="nav-tab active" data-tab="overview">
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
             <span>Overview</span>
           </button>
           <button class="nav-tab" data-tab="events">
-            <span class="tab-pill-badge" id="tab-count-events">0</span>
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span>Events</span>
+            <span class="tab-count-tag" id="tab-count-events">0</span>
           </button>
           <button class="nav-tab" data-tab="funnel">
-            <span class="tab-pill-badge" id="tab-count-funnel">0/5</span>
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
             <span>Funnel</span>
+            <span class="tab-count-tag" id="tab-count-funnel">0/5</span>
           </button>
           <button class="nav-tab" data-tab="datalayer">
-            <span class="tab-pill-badge" id="tab-count-datalayer">0</span>
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
             <span>Data Layer</span>
+            <span class="tab-count-tag" id="tab-count-datalayer">0</span>
           </button>
-          <button class="nav-tab" data-tab="attribution">
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            <span>oppref</span>
-          </button>
-          <button class="nav-tab" data-tab="issues">
-            <span class="tab-pill-badge tab-pill-badge-error" id="tab-count-issues">0</span>
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="nav-secondary">
+          <button class="nav-tab-secondary" data-tab="attribution">oppref</button>
+          <button class="nav-tab-secondary" data-tab="issues">
             <span>Issues</span>
+            <span class="tab-count-tag-issues" id="tab-count-issues">0</span>
           </button>
-          <button class="nav-tab" data-tab="audit">
-            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <span>Audit</span>
-          </button>
-        </nav>
-        <button id="nav-scroll-right" class="nav-scroll-btn" title="Scroll right">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
+          <button class="nav-tab-secondary" data-tab="audit">Audit</button>
+        </div>
+      </nav>
     </header>
 
     <!-- Main Content Area -->
     <main class="app-main">
       
-      <!-- TAB 1: OVERVIEW -->
+      <!-- TAB 1: OVERVIEW (Tracking Health Dashboard) -->
       <div class="tab-pane active" id="pane-overview">
 
-        <!-- Status Summary Card -->
-        <section class="card summary-card">
+        <!-- Tracking Health Card -->
+        <section class="card health-card">
           <div class="card-header">
-            <span class="card-title">Tracking Summary</span>
-            <span id="pixel-status-badge" class="badge badge-neutral">Pending</span>
+            <div>
+              <span class="card-title">Tracking Health</span>
+              <span class="card-subtitle" id="health-overall-label">Implementation Status</span>
+            </div>
+            <span id="health-status-badge" class="badge badge-neutral">Scanning</span>
           </div>
           
-          <div class="status-rows">
-            <div class="status-row">
-              <span class="status-label">OpenAI Pixel SDK</span>
-              <span class="status-val font-semibold" id="val-pixel-detected">Checking...</span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">Pixel ID</span>
-              <span class="status-val mono" id="val-pixel-id">None</span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">Session ID</span>
-              <span class="status-val mono" id="val-session-id">--</span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">Attribution (oppref)</span>
-              <span class="status-val" id="val-oppref">Checking...</span>
-            </div>
-          </div>
+          <table class="health-table">
+            <tbody>
+              <tr>
+                <td class="health-component">OpenAI Pixel SDK</td>
+                <td class="health-status" id="val-pixel-detected">Checking...</td>
+              </tr>
+              <tr>
+                <td class="health-component">Pixel ID</td>
+                <td class="health-status mono" id="val-pixel-id">None</td>
+              </tr>
+              <tr>
+                <td class="health-component">Attribution (oppref)</td>
+                <td class="health-status" id="val-oppref">Not detected</td>
+              </tr>
+              <tr>
+                <td class="health-component">Server-Side Tracking</td>
+                <td class="health-status" id="val-serverside-status">No server-side activity detected during this session</td>
+              </tr>
+              <tr>
+                <td class="health-component">Session Tracking</td>
+                <td class="health-status mono" id="val-session-id">Active</td>
+              </tr>
+            </tbody>
+          </table>
         </section>
 
-        <!-- Event Metrics Grid -->
+        <!-- Metric Summary Cards -->
         <div class="metrics-grid">
           <div class="metric-card metric-card-total">
             <span class="metric-num text-emerald" id="metric-total-events">0</span>
-            <span class="metric-label">Total Events</span>
+            <span class="metric-label">Events</span>
           </div>
           <div class="metric-card metric-card-standard">
             <span class="metric-num text-blue" id="metric-standard-events">0</span>
@@ -143,15 +142,15 @@
           </div>
           <div class="metric-card metric-card-issues">
             <span class="metric-num text-rose" id="metric-issues-events">0</span>
-            <span class="metric-label">Errors / Dups</span>
+            <span class="metric-label">Issues</span>
           </div>
         </div>
 
         <!-- Latest Event Snapshot -->
-        <section class="card latest-event-card" style="margin-top: 10px;">
+        <section class="card latest-event-card">
           <div class="card-header">
             <span class="card-title">Latest Observed Event</span>
-            <span id="latest-event-time" class="text-muted font-mono" style="font-size: 11.5px;">--:--:--</span>
+            <span id="latest-event-time" class="text-muted font-mono" style="font-size: 11px;">--:--:--</span>
           </div>
           <div id="latest-event-content">
             <div class="empty-state-sm">No events detected yet.</div>
@@ -164,7 +163,7 @@
         <!-- Search & Filter Controls -->
         <div class="events-toolbar">
           <div class="search-box">
-            <span class="search-icon" style="display:flex;align-items:center;">
+            <span class="search-icon">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </span>
             <input type="text" id="event-search-input" placeholder="Search event names, URLs, parameters...">
@@ -173,9 +172,9 @@
             <button class="filter-chip active" data-filter="all">All</button>
             <button class="filter-chip" data-filter="standard">Standard</button>
             <button class="filter-chip" data-filter="custom">Custom</button>
-            <button class="filter-chip" data-filter="duplicates">Duplicates</button>
             <button class="filter-chip" data-filter="errors">Errors</button>
             <button class="filter-chip" data-filter="warnings">Warnings</button>
+            <button class="filter-chip" data-filter="duplicates">Duplicates</button>
           </div>
         </div>
 
@@ -185,17 +184,17 @@
         </div>
       </div>
 
-      <!-- TAB 3: FUNNEL & CAPI DEDUPLICATION -->
+      <!-- TAB 3: FUNNEL JOURNEY -->
       <div class="tab-pane" id="pane-funnel">
         <section class="card">
           <div class="card-header">
-            <span class="card-title">E-Commerce Journey Funnel</span>
+            <div>
+              <span class="card-title">E-Commerce Funnel Journey</span>
+              <span class="card-subtitle">5-step conversion pipeline</span>
+            </div>
             <span id="funnel-rate-badge" class="badge badge-neutral">0% Completed</span>
           </div>
-          <p class="section-desc">
-            Visual progression of the standard 5-step user journey from Page View to Order Purchase.
-          </p>
-          <div class="funnel-pipeline" id="funnel-pipeline-container" style="margin-top: 12px;">
+          <div class="funnel-pipeline" id="funnel-pipeline-container">
             <!-- Dynamically populated -->
           </div>
         </section>
@@ -205,108 +204,129 @@
       <div class="tab-pane" id="pane-datalayer">
         <section class="card">
           <div class="card-header">
-            <span class="card-title">Google Tag Manager & Data Layer</span>
+            <div>
+              <span class="card-title">Google Tag Manager</span>
+              <span class="card-subtitle">Container Detection</span>
+            </div>
             <span id="gtm-container-badge" class="badge badge-neutral">Scanning</span>
           </div>
-          <p class="section-desc">
-            Real-time feed of <code>window.dataLayer.push()</code> pushes and GTM container detection.
-          </p>
-          <div id="gtm-container-pills" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+          <div id="gtm-container-pills" class="gtm-pills-container">
             <!-- Dynamically populated -->
           </div>
         </section>
 
-        <div class="events-list" id="datalayer-list-container" style="margin-top: 8px;">
-          <!-- Dynamically populated -->
-        </div>
+        <section class="card" style="margin-top: 10px;">
+          <div class="card-header">
+            <div>
+              <span class="card-title">Data Layer Feed</span>
+              <span class="card-subtitle">window.dataLayer pushes</span>
+            </div>
+          </div>
+          <div class="datalayer-feed" id="datalayer-list-container">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
       </div>
 
       <!-- TAB 5: ATTRIBUTION (oppref) -->
       <div class="tab-pane" id="pane-attribution">
         <section class="card">
           <div class="card-header">
-            <span class="card-title">OpenAI Click Reference (oppref)</span>
-            <span id="oppref-status-badge" class="badge badge-neutral">Scanning</span>
+            <div>
+              <span class="card-title">OpenAI Click Reference (oppref)</span>
+              <span class="card-subtitle">Advertising attribution identifier</span>
+            </div>
+            <span id="oppref-status-badge" class="badge badge-neutral">Not detected</span>
           </div>
-          <p class="section-desc">
-            <code>oppref</code> is OpenAI's privacy-preserving click identifier passed via URL query parameters and stored in the <code>__oppref</code> cookie for conversion attribution.
-          </p>
-          <div class="status-rows" style="margin-top: 12px;">
-            <div class="status-row">
-              <span class="status-label">URL Query Parameter</span>
-              <span class="status-val font-mono" id="attr-url-val">Not present</span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">Cookie (__oppref)</span>
-              <span class="status-val font-mono" id="attr-cookie-val">Not present</span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">Local / Session Storage</span>
-              <span class="status-val font-mono" id="attr-storage-val">Not present</span>
-            </div>
-            <div class="status-row">
-              <span class="status-label">Active Attribution Key</span>
-              <span class="status-val font-mono text-emerald" id="attr-active-key">None</span>
-            </div>
-          </div>
-        </section>
 
-        <section class="card" style="margin-top: 10px;">
-          <div class="card-header">
-            <span class="card-title">Attribution Guidance</span>
-          </div>
-          <ul class="guidance-list">
-            <li><strong>Ads Ingestion:</strong> When users click on ChatGPT/OpenAI Ads, OpenAI automatically appends <code>?oppref=gAAAA...</code>.</li>
-            <li><strong>Cookie TTL:</strong> The official SDK persists this into the <code>__oppref</code> cookie (approx. 30-day lifetime).</li>
-            <li><strong>CAPI Pairing:</strong> Pass the same <code>oppref</code> in your server Conversions API payload for hybrid attribution.</li>
-          </ul>
+          <table class="health-table" style="margin-top: 8px;">
+            <tbody>
+              <tr>
+                <td class="health-component">URL Parameter</td>
+                <td class="health-status mono" id="attr-url-val">Not found</td>
+              </tr>
+              <tr>
+                <td class="health-component">Cookie (__oppref)</td>
+                <td class="health-status mono" id="attr-cookie-val">Not found</td>
+              </tr>
+              <tr>
+                <td class="health-component">Storage</td>
+                <td class="health-status mono" id="attr-storage-val">Not found</td>
+              </tr>
+              <tr>
+                <td class="health-component">Active Attribution</td>
+                <td class="health-status mono" id="attr-active-key">None</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <details class="learn-disclosure">
+            <summary>Learn about oppref</summary>
+            <ul class="guidance-list">
+              <li><strong>Ad Clicks:</strong> OpenAI automatically appends <code>?oppref=gAAAA...</code> when users click OpenAI Ads.</li>
+              <li><strong>Cookie Lifetime:</strong> The official SDK persists this into the <code>__oppref</code> cookie for 30-day conversion attribution.</li>
+              <li><strong>CAPI Tracking:</strong> Pass the same <code>oppref</code> in your server Conversions API payload for hybrid attribution.</li>
+            </ul>
+          </details>
         </section>
       </div>
 
-      <!-- TAB 7: ISSUES & DEDUPLICATION -->
+      <!-- TAB 7: ISSUES & DIAGNOSTICS -->
       <div class="tab-pane" id="pane-issues">
-        <div id="issues-list-container">
-          <!-- Dynamically populated -->
-        </div>
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <span class="card-title">Issues & Diagnostics</span>
+              <span class="card-subtitle" id="issues-summary-subtitle">Tracking verification</span>
+            </div>
+            <span id="issues-status-badge" class="badge badge-neutral">0 Issues</span>
+          </div>
+          <div id="issues-list-container" class="issues-container">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
       </div>
 
       <!-- TAB 8: AUDIT & EXPORT -->
       <div class="tab-pane" id="pane-audit">
         <section class="card">
           <div class="card-header">
-            <span class="card-title">Full Journey Tracking Audit</span>
+            <div>
+              <span class="card-title">Tracking Audit Summary</span>
+              <span class="card-subtitle">Executive health overview</span>
+            </div>
             <span id="audit-score-badge" class="badge badge-success">Audit Ready</span>
           </div>
           
-          <div class="audit-summary-box" id="audit-summary-box">
+          <div class="audit-grid" id="audit-summary-box">
             <!-- Dynamically populated -->
           </div>
 
-          <!-- Journey Audit Table Section -->
-          <div style="margin-top: 14px;">
-            <h3 style="font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">User Journey Timeline</h3>
-            <div id="journey-table-container" style="overflow-x: auto; max-height: 240px;">
+          <!-- Journey Audit Section -->
+          <div class="audit-section-group">
+            <h3 class="section-heading">Journey Timeline</h3>
+            <div id="journey-table-container">
               <!-- Dynamically populated -->
             </div>
           </div>
 
           <!-- Event Summary Breakdown Section -->
-          <div style="margin-top: 14px;">
-            <h3 style="font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">Event Health Summary</h3>
-            <div id="event-summary-table-container" style="overflow-x: auto;">
+          <div class="audit-section-group">
+            <h3 class="section-heading">Event Health Breakdown</h3>
+            <div id="event-summary-table-container">
               <!-- Dynamically populated -->
             </div>
           </div>
 
           <!-- Export Actions -->
-          <div class="export-actions" style="margin-top: 16px;">
+          <div class="export-actions">
             <button class="btn btn-primary" id="btn-copy-markdown">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               <span>Copy Markdown</span>
             </button>
             <button class="btn btn-secondary" id="btn-export-csv">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-              <span>Export CSV (Sheets/Excel)</span>
+              <span>Export CSV</span>
             </button>
             <button class="btn btn-secondary" id="btn-export-json">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -337,10 +357,10 @@
     <footer class="app-footer">
       <div class="footer-left">
         <span class="pulse-dot"></span>
-        <span id="footer-status-text">Full Journey Inspector Active</span>
+        <span id="footer-status-text">Ready</span>
       </div>
       <div class="footer-right">
-        <span class="version-tag">v1.1.2</span>
+        <span class="version-tag">v1.2.0</span>
       </div>
     </footer>
   </div>
