@@ -353,18 +353,9 @@ html, body {
 .nav-secondary {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   padding: 3px 0 6px 0;
   border-top: 1px solid var(--border-subtle);
-}
-
-.nav-secondary-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0 4px;
 }
 
 .nav-tab-secondary {
