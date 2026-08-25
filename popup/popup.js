@@ -279,6 +279,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
     }
 
+    // Proactively request scan from content script
+    if (activeTab && activeTab.id) {
+      chrome.tabs.sendMessage(activeTab.id, { action: 'REQUEST_SCAN' }).catch(() => {});
+    }
+
     try {
       const response = await chrome.runtime.sendMessage({
         action: 'GET_TAB_STATE',

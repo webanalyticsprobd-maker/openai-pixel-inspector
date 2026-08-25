@@ -524,6 +524,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
     }
 
+    case 'GET_TAB_STATE':
     case 'GET_ACTIVE_TAB_STATE': {
       const targetId = message.tabId;
       const curState = targetId ? getOrCreateTabState(targetId) : null;
