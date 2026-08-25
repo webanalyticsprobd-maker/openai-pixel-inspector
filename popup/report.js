@@ -105,6 +105,45 @@ function renderFullReport(rep) {
         `;
       }
 
+      let contentsTable = '';
+      if (evt.contents && evt.contents.length > 0) {
+        contentsTable = `
+          <div style="margin-top:12px; border-top:1px dashed var(--border); padding-top:8px;">
+            <div style="font-weight:600; font-size:12px; color:var(--text-main); margin-bottom:6px;">
+              📦 Contents Array Item Breakdown (${evt.contents.length} item${evt.contents.length > 1 ? 's' : ''})
+            </div>
+            <table style="margin-top:4px; font-size:11.5px;">
+              <thead>
+                <tr>
+                  <th style="width:6%; text-align:center;">#</th>
+                  <th style="width:20%;">Item ID</th>
+                  <th style="width:24%;">Item Name</th>
+                  <th style="width:8%; text-align:center;">Qty</th>
+                  <th style="width:14%; text-align:right;">Amount</th>
+                  <th style="width:8%; text-align:center;">Curr</th>
+                  <th style="width:10%; text-align:center;">Status</th>
+                  <th style="width:10%;">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${evt.contents.map(c => `
+                  <tr>
+                    <td style="text-align:center;">#${c.itemIndex}</td>
+                    <td><code class="mono">${escapeHtml(c.id)}</code></td>
+                    <td>${escapeHtml(c.name)}</td>
+                    <td style="text-align:center;">${c.quantity}</td>
+                    <td style="text-align:right;">${c.amount !== null ? (c.status === 'valid' ? c.amount : '<span style="color:#dc2626; font-weight:700;">' + c.amount + '</span>') : '-'}</td>
+                    <td style="text-align:center;">${escapeHtml(c.currency)}</td>
+                    <td style="text-align:center;"><span class="badge ${c.status === 'valid' ? 'badge-pass' : 'badge-error'}">${c.status === 'valid' ? '✅ Valid' : '❌ Issue'}</span></td>
+                    <td style="font-size:10.5px; color:${c.status === 'valid' ? 'var(--text-muted)' : '#dc2626'};">${escapeHtml(c.message || '')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
       return `
         <div class="event-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -124,6 +163,7 @@ function renderFullReport(rep) {
             <strong>Recommendation:</strong> ${escapeHtml(evt.recommendation)}
           </div>
           ${paramsTable}
+          ${contentsTable}
         </div>
       `;
     }).join('');
@@ -143,9 +183,9 @@ function renderFullReport(rep) {
               <td><code class="mono">${escapeHtml(c.id)}</code></td>
               <td>${escapeHtml(c.name)}</td>
               <td>${c.quantity}</td>
-              <td>${c.amount !== null ? c.amount : '-'}</td>
+              <td>${c.amount !== null ? (c.status === 'valid' ? c.amount : '<span style="color:#dc2626; font-weight:700;">' + c.amount + ' (major units)</span>') : '-'}</td>
               <td>${escapeHtml(c.currency)}</td>
-              <td style="text-align:right;">${c.status === 'valid' ? '✅ Passed' : '❌ Error'}</td>
+              <td style="text-align:right;"><span class="badge ${c.status === 'valid' ? 'badge-pass' : 'badge-error'}">${c.status === 'valid' ? '✅ Passed' : '❌ Error'}</span></td>
             </tr>
           `;
         });

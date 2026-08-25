@@ -111,9 +111,24 @@ export function auditParameter(paramKey, paramVal, eventContext = {}) {
           if (typeof itemAmt !== 'number' || isNaN(itemAmt) || itemAmt < 0) {
             hasItemErrors = true;
             itemErrorMsg = 'Invalid item amount at index ' + idx;
-          } else if (mult > 1 && itemAmt > 0 && itemAmt < 1000 && !Number.isInteger(itemAmt)) {
-            hasItemErrors = true;
-            itemErrorMsg = 'contents[' + idx + '].amount was sent in major units ($' + itemAmt + '). OpenAI expects minor units: ' + (itemAmt * mult) + ' (' + itemAmt + ' × ' + mult + ').';
+          } else {
+            let isMajor = false;
+            if (!Number.isInteger(itemAmt)) {
+              isMajor = true;
+            } else if (mult > 1 && itemAmt > 0) {
+              if (eventContext.amount !== undefined && typeof eventContext.amount === 'number') {
+                if (itemAmt * mult === eventContext.amount || eventContext.amount >= itemAmt * mult) {
+                  isMajor = true;
+                }
+              } else if (itemAmt < 1000) {
+                isMajor = true;
+              }
+            }
+
+            if (isMajor) {
+              hasItemErrors = true;
+              itemErrorMsg = 'contents[' + idx + '].amount was sent in major units ($' + itemAmt + '). OpenAI expects minor units: ' + (itemAmt * mult) + ' (' + itemAmt + ' × ' + mult + ').';
+            }
           }
         }
       }
@@ -144,7 +159,7 @@ export function auditParameter(paramKey, paramVal, eventContext = {}) {
 /**
  * Deep inspection of contents[] array objects
  */
-export function auditContentsArray(contents = [], eventCurrency = 'USD') {
+export function auditContentsArray(contents = [], eventCurrency = 'USD', eventContext = {}) {
   if (!Array.isArray(contents)) return [];
 
   return contents.map((item, idx) => {
@@ -175,8 +190,22 @@ export function auditContentsArray(contents = [], eventCurrency = 'USD') {
     if (amount !== null) {
       if (typeof amount !== 'number' || isNaN(amount) || amount < 0) {
         issues.push('Invalid amount');
-      } else if (mult > 1 && amount > 0 && amount < 1000 && !Number.isInteger(amount)) {
-        issues.push('Amount sent in major units ($' + amount + ') instead of minor units (' + (amount * mult) + ')');
+      } else {
+        let isMajor = false;
+        if (!Number.isInteger(amount)) {
+          isMajor = true;
+        } else if (mult > 1 && amount > 0) {
+          if (eventContext.amount !== undefined && typeof eventContext.amount === 'number') {
+            if (amount * mult === eventContext.amount || eventContext.amount >= amount * mult) {
+              isMajor = true;
+            }
+          } else if (amount < 1000) {
+            isMajor = true;
+          }
+        }
+        if (isMajor) {
+          issues.push('Amount sent in major units ($' + amount + ') instead of minor units (' + (amount * mult) + ')');
+        }
       }
     }
 
@@ -327,7 +356,7 @@ export function generateComprehensiveAudit(tabState = {}) {
     // D. Contents Array Audit
     let contentsAudit = [];
     if (Array.isArray(allParams.contents)) {
-      contentsAudit = auditContentsArray(allParams.contents, allParams.currency || 'USD');
+      contentsAudit = auditContentsArray(allParams.contents, allParams.currency || 'USD', allParams);
       const itemErrors = contentsAudit.filter(i => i.status === 'error').length;
       const itemWarns = contentsAudit.filter(i => i.status === 'warning').length;
 
