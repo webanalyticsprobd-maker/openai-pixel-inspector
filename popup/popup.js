@@ -1052,27 +1052,51 @@ document.addEventListener('DOMContentLoaded', async () => {
       </div>
     `;
 
-    // Stacked Journey List (Clear duplicate & validation terms)
+    // Redesigned Developer Journey Timeline (Vertical Flow & No Overflow)
     if (report.journeyTable && report.journeyTable.length > 0) {
-      let rowsHtml = '';
-      report.journeyTable.forEach((row) => {
+      let timelineHtml = '';
+      const totalSteps = report.journeyTable.length;
+      report.journeyTable.forEach((row, idx) => {
+        const isLast = idx === totalSteps - 1;
         const isDup = row.duplicateStatus === 'Duplicate';
-        const hasErr = row.paramAuditStatus && row.paramAuditStatus.includes('error');
-        rowsHtml += `
-          <div class="audit-stacked-row">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="mono" style="color: var(--text-muted); font-size: 11px;">#${row.step}</span>
-              <strong style="color: var(--text-main);">${escapeHtml(row.name)}</strong>
-              <span class="mono truncate" style="color: var(--text-secondary); max-width: 130px; font-size: 11px;">${escapeHtml(row.pathname || '/')}</span>
+        const hasErr = row.paramAuditStatus && (row.paramAuditStatus.includes('error') || row.hasErrors);
+        const hasWarn = row.paramAuditStatus && (row.paramAuditStatus.includes('warning') || row.hasWarnings);
+        const timeFormatted = row.timestamp ? formatTimestamp(row.timestamp) : '';
+
+        let paramBadgeHtml = '';
+        if (hasErr) {
+          paramBadgeHtml = renderStatusBadge('error', row.paramAuditStatus || 'Parameter error');
+        } else if (hasWarn) {
+          paramBadgeHtml = renderStatusBadge('warning', row.paramAuditStatus || 'Parameter warning');
+        } else {
+          paramBadgeHtml = renderStatusBadge('valid', 'Valid parameters');
+        }
+
+        const dupBadgeHtml = isDup ? renderStatusBadge('duplicate', 'Duplicate') : renderStatusBadge('valid', 'Unique');
+
+        timelineHtml += `
+          <div class="timeline-entry ${isLast ? 'timeline-last' : ''}">
+            <div class="timeline-indicator-col">
+              <span class="timeline-step-badge ${hasErr ? 'badge-step-error' : (isDup ? 'badge-step-dup' : 'badge-step-valid')}">#${row.step}</span>
+              ${!isLast ? '<div class="timeline-v-line"></div>' : ''}
             </div>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              ${isDup ? renderStatusBadge('duplicate', 'Duplicate') : renderStatusBadge('valid', 'No duplicates')}
-              ${hasErr ? renderStatusBadge('error', row.paramAuditStatus) : renderStatusBadge('valid', row.paramAuditStatus || 'Valid parameters')}
+            <div class="timeline-card">
+              <div class="timeline-card-header">
+                <div class="timeline-title-row">
+                  <strong class="timeline-event-name">${escapeHtml(row.name)}</strong>
+                  <span class="timeline-path-tag truncate">${escapeHtml(row.pathname || '/')}</span>
+                </div>
+                ${timeFormatted ? `<span class="timeline-time">${timeFormatted}</span>` : ''}
+              </div>
+              <div class="timeline-status-bar">
+                ${dupBadgeHtml}
+                ${paramBadgeHtml}
+              </div>
             </div>
           </div>
         `;
       });
-      journeyTableContainer.innerHTML = '<div class="audit-stacked-list">' + rowsHtml + '</div>';
+      journeyTableContainer.innerHTML = '<div class="timeline-flow-list">' + timelineHtml + '</div>';
     } else {
       journeyTableContainer.innerHTML = '<div class="empty-state-sm">No journey steps recorded yet.</div>';
     }
@@ -1083,16 +1107,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       report.eventSummaries.forEach((sum) => {
         const sev = sum.severity || 'valid';
         sumHtml += `
-          <div class="audit-stacked-row">
-            <div>
-              <strong style="color: var(--text-main);">${escapeHtml(sum.displayName || sum.name)}</strong>
-              <span style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">(${sum.detected} observed)</span>
+          <div class="event-summary-card">
+            <div class="event-summary-left">
+              <strong class="event-summary-title">${escapeHtml(sum.displayName || sum.name)}</strong>
+              <span class="event-summary-meta">(${sum.detected} observed)</span>
             </div>
-            ${renderStatusBadge(sev, sum.audit)}
+            <div class="event-summary-right">
+              ${renderStatusBadge(sev, sum.audit)}
+            </div>
           </div>
         `;
       });
-      eventSummaryTableContainer.innerHTML = '<div class="audit-stacked-list">' + sumHtml + '</div>';
+      eventSummaryTableContainer.innerHTML = '<div class="event-summary-list">' + sumHtml + '</div>';
     } else {
       eventSummaryTableContainer.innerHTML = '<div class="empty-state-sm">No events to summarize.</div>';
     }
