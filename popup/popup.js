@@ -387,7 +387,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       healthStatusBadge.className = 'badge badge-success';
       healthOverallLabel.textContent = 'All tracking criteria verified';
     } else if (report.overallStatus === 'warning') {
-      healthStatusBadge.textContent = 'Needs Attention';
+      healthStatusBadge.textContent = 'Needs Attention · ' + warningsCount + ' warning' + (warningsCount === 1 ? '' : 's');
       healthStatusBadge.className = 'badge badge-warning';
       healthOverallLabel.textContent = warningsCount + ' warning(s) detected';
     } else {
@@ -401,7 +401,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pidStr = pixel.pixelIds.join(', ');
       valPixelId.innerHTML = makeCopyable(pidStr, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11.5px;">(' + escapeHtml(pidStr) + ')</span>');
     } else {
-      valPixelId.innerHTML = '<span style="color:var(--text-muted);">None</span>';
+      valPixelId.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
     }
 
     // Session ID Row
@@ -415,23 +415,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       valOppref.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
     }
 
-    // Server-Side Activity Check
+    // Server-Side Activity Check (Clean short status + detailed tooltip)
     const hasCapi = currentTabState.events ? currentTabState.events.some(e => e.isCapi || e.requestOrigin === 'server' || (e.url && e.url.includes('/api/'))) : false;
     if (hasCapi) {
       valServersideStatus.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span style="color:var(--text-secondary); font-size:11.5px;">(First-party endpoint)</span>';
     } else {
-      valServersideStatus.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No server-side activity detected during this session</span>';
+      valServersideStatus.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No activity detected</span>';
     }
 
-    // Metric Summary Cards
+    // Metric Summary Cards (Clean & neutral by default, highlight only meaningful issues)
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
+    metricCustomEvents.textContent = stats.customEvents || 0;
     
-    // Custom Events (Neutral gray if 0 as requested)
-    const customCount = stats.customEvents || 0;
-    metricCustomEvents.textContent = customCount;
-    metricCustomEvents.className = customCount > 0 ? 'metric-num text-purple' : 'metric-num text-muted';
-
     // Issues Metric Card (Matches shared source of truth)
     metricIssuesEvents.textContent = totalDiagnostics;
     if (errorsCount > 0) {
@@ -450,11 +446,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabCountDatalayer.textContent = dataLayer.length || 0;
     tabCountIssues.textContent = totalDiagnostics;
 
-    // Latest Observed Event Snapshot
+    // Latest Observed Event Snapshot (Clean, compact 3-line layout)
     if (events.length > 0) {
       const latest = events[events.length - 1];
       latestEventTime.textContent = formatTimestamp(latest.timestamp);
-      const paramCount = Object.keys(latest.parameters || {}).length;
       
       let latestTriggerBadge = '';
       if (latest.isDuplicate) {
@@ -463,23 +458,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         latestTriggerBadge = renderStatusBadge('triggered', 'Triggered');
       }
 
+      const isCustom = latest.validation && latest.validation.isCustom;
+
       latestEventContent.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="event-type-badge ${latest.validation && latest.validation.isCustom ? 'event-type-custom' : 'event-type-std'}">
-              ${latest.validation && latest.validation.isCustom ? 'Custom' : 'Standard'}
-            </span>
-            <strong style="font-size: 13.5px; color: var(--text-main); font-weight: 600;">${escapeHtml(latest.displayName || latest.name)}</strong>
+        <div class="latest-event-compact">
+          <div class="latest-event-top-line">
+            <strong class="latest-event-name">${escapeHtml(latest.displayName || latest.name)}</strong>
+            ${latestTriggerBadge}
           </div>
-          ${latestTriggerBadge}
-        </div>
-        <div class="event-meta-line" style="margin-top: 5px; font-size: 11.5px; color: var(--text-secondary);">
-          <span>${paramCount} parameter(s) &bull; <code class="mono" style="font-size: 11px;">${escapeHtml(latest.pathname || '/')}</code></span>
-          <span style="font-size: 11px; color: var(--text-muted);">ID: ${latest.eventId ? `<code>${escapeHtml(latest.eventId)}</code>` : '<em>Not Sent</em>'}</span>
+          <div class="latest-event-meta-line">
+            <span>${formatTimestamp(latest.timestamp)} &bull; <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">${isCustom ? 'Custom' : 'Standard'}</span></span>
+          </div>
+          <div class="latest-event-path-line">
+            <code class="mono truncate">${escapeHtml(latest.pathname || '/')}</code>
+          </div>
         </div>
       `;
     } else {
-      latestEventContent.innerHTML = '<div class="empty-state-sm">No events detected yet.</div>';
+      latestEventContent.innerHTML = '<div class="empty-state-sm" style="padding: 6px 0;">No events detected yet.</div>';
       latestEventTime.textContent = '--:--:--';
     }
 

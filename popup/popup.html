@@ -54,32 +54,45 @@
         </div>
       </div>
 
-      <!-- Option B: Primary + Secondary Navigation (Workflow vs Diagnostics) -->
+      <!-- Option B: Primary Pill Toolbar + Secondary Underline Navigation -->
       <nav class="nav-system">
-        <div class="nav-primary">
-          <button class="nav-tab active" data-tab="overview">
-            <span>Overview</span>
-          </button>
-          <button class="nav-tab" data-tab="events">
-            <span>Events</span>
-            <span class="tab-count-tag" id="tab-count-events">0</span>
-          </button>
-          <button class="nav-tab" data-tab="funnel">
-            <span>Funnel</span>
-            <span class="tab-count-tag" id="tab-count-funnel">0/5</span>
-          </button>
-          <button class="nav-tab" data-tab="datalayer">
-            <span>Data Layer</span>
-            <span class="tab-count-tag" id="tab-count-datalayer">0</span>
-          </button>
+        <div class="nav-toolbar-container">
+          <div class="nav-primary">
+            <button class="nav-tab active" data-tab="overview">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Overview</span>
+            </button>
+            <button class="nav-tab" data-tab="events">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>Events</span>
+              <span class="tab-count-tag" id="tab-count-events">0</span>
+            </button>
+            <button class="nav-tab" data-tab="funnel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              <span>Funnel</span>
+              <span class="tab-count-tag" id="tab-count-funnel">0/5</span>
+            </button>
+            <button class="nav-tab" data-tab="datalayer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              <span>Data Layer</span>
+              <span class="tab-count-tag" id="tab-count-datalayer">0</span>
+            </button>
+          </div>
         </div>
         <div class="nav-secondary">
-          <button class="nav-tab-secondary" data-tab="attribution">oppref</button>
+          <button class="nav-tab-secondary" data-tab="attribution">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            <span>oppref</span>
+          </button>
           <button class="nav-tab-secondary" data-tab="issues">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>Issues</span>
             <span class="tab-count-tag-issues" id="tab-count-issues">0</span>
           </button>
-          <button class="nav-tab-secondary" data-tab="audit">Audit</button>
+          <button class="nav-tab-secondary" data-tab="audit">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14l2 2 4-4"/></svg>
+            <span>Audit</span>
+          </button>
         </div>
       </nav>
     </header>
@@ -104,7 +117,7 @@
             <tbody>
               <tr>
                 <td class="health-component">Pixel ID</td>
-                <td class="health-status" id="val-pixel-id">None</td>
+                <td class="health-status" id="val-pixel-id">Not detected</td>
               </tr>
               <tr>
                 <td class="health-component">Attribution (oppref)</td>
@@ -113,9 +126,9 @@
               <tr>
                 <td class="health-component">
                   <span>Server-Side Tracking</span>
-                  <span class="info-tooltip-trigger" title="The inspector has not observed evidence of server-side delivery in this browser session. This does not preclude independent backend-to-backend integrations.">ⓘ</span>
+                  <span class="info-tooltip-trigger" title="No server-side activity was observed during this session. This does not necessarily mean server-side tracking is not configured.">ⓘ</span>
                 </td>
-                <td class="health-status" id="val-serverside-status">No server-side activity detected during this session</td>
+                <td class="health-status" id="val-serverside-status">No activity detected</td>
               </tr>
               <tr>
                 <td class="health-component">Session Tracking</td>
@@ -368,7 +381,7 @@
         <span id="footer-status-text">Ready</span>
       </div>
       <div class="footer-right">
-        <span class="version-tag">v1.3.4</span>
+        <span class="version-tag">v1.4.0</span>
       </div>
     </footer>
   </div>

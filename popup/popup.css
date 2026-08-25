@@ -224,12 +224,12 @@ html, body {
   border-color: var(--border-subtle);
 }
 
-/* Compact Workspace Bar */
+/* Dominant Domain Bar */
 .workspace-bar {
   background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -239,14 +239,14 @@ html, body {
 .workspace-host-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
   flex: 1;
 }
 
 .workspace-status-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--status-success);
   flex-shrink: 0;
@@ -254,7 +254,7 @@ html, body {
 
 .workspace-host {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
   letter-spacing: -0.01em;
@@ -286,42 +286,59 @@ html, body {
 
 .workspace-tag {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-muted);
   background: var(--bg-card);
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   border: 1px solid var(--border-subtle);
 }
 
-/* Option B Navigation System */
+/* 1. Primary Navigation Pill Toolbar & 2. Secondary Underline Bar */
 .nav-system {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   margin-top: 2px;
+}
+
+.nav-toolbar-container {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 4px;
 }
 
 .nav-primary {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
 .nav-tab {
-  background: transparent;
-  border: none;
-  padding: 6px 10px;
+  flex: 1;
+  height: 36px;
+  padding: 0 8px;
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 18px;
+  border: 1px solid transparent;
+  background: transparent;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 5px;
   transition: all 0.15s ease;
+  user-select: none;
+}
+
+.nav-tab svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+  transition: opacity 0.15s;
 }
 
 .nav-tab:hover {
@@ -329,65 +346,102 @@ html, body {
   color: var(--text-main);
 }
 
+.nav-tab:hover svg {
+  opacity: 1;
+}
+
 .nav-tab.active {
-  color: var(--accent-brand);
-  background: var(--accent-brand-subtle);
+  background: var(--accent-brand);
+  color: #ffffff;
   font-weight: 600;
+  border-color: transparent;
+  box-shadow: 0 2px 5px rgba(16, 163, 127, 0.25);
+}
+
+.nav-tab.active svg {
+  opacity: 1;
+  stroke: #ffffff;
+}
+
+.nav-tab.active:hover {
+  background: var(--accent-brand-hover);
 }
 
 .tab-count-tag {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--bg-hover);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
   color: var(--text-secondary);
+  line-height: 1.2;
 }
 
 .nav-tab.active .tab-count-tag {
-  background: rgba(16, 163, 127, 0.18);
-  color: var(--accent-brand);
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
 }
 
+/* Secondary Underline Tabs */
 .nav-secondary {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 0 6px 0;
-  border-top: 1px solid var(--border-subtle);
+  gap: 16px;
+  padding: 2px 8px 4px 8px;
+  border-top: none;
 }
 
 .nav-tab-secondary {
   background: transparent;
   border: none;
-  padding: 3px 8px;
+  padding: 4px 0;
   font-family: var(--font-sans);
   font-size: 11.5px;
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
   display: flex;
   align-items: center;
-  gap: 5px;
-  transition: all 0.15s ease;
+  gap: 4px;
+  position: relative;
+  transition: color 0.15s ease;
+}
+
+.nav-tab-secondary svg {
+  flex-shrink: 0;
 }
 
 .nav-tab-secondary:hover {
   color: var(--text-main);
-  background: var(--bg-hover);
+  background: transparent;
 }
 
 .nav-tab-secondary.active {
-  color: var(--text-main);
-  background: var(--bg-active);
+  color: var(--accent-brand);
+  background: transparent;
   font-weight: 600;
+}
+
+.nav-tab-secondary.active svg {
+  stroke: var(--accent-brand);
+}
+
+.nav-tab-secondary.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-brand);
+  border-radius: 2px;
 }
 
 .tab-count-tag-issues {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   padding: 0 4px;
   border-radius: 3px;
@@ -591,6 +645,7 @@ html, body {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.1;
+  color: var(--text-main);
 }
 
 .metric-label {
@@ -603,6 +658,40 @@ html, body {
 .text-blue { color: var(--status-info); }
 .text-purple { color: #7c3aed; }
 .text-rose { color: var(--status-error); }
+.text-amber { color: var(--status-warning); }
+
+/* Latest Observed Event Card (Compact) */
+.latest-event-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.latest-event-top-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.latest-event-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.latest-event-meta-line {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.latest-event-path-line {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
 
 /* ==========================================================================
    Events Tab (Timeline & Parameter Inspection)
