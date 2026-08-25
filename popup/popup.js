@@ -382,19 +382,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       const item = document.createElement('div');
       const itemKey = evt._id || `evt_${idx}`;
       const isExpanded = expandedEventIds.has(itemKey);
-      item.className = `event-item ${isExpanded ? 'open' : ''}`;
 
       const isCustom = evt.validation.isCustom;
       let statusBadgeHtml = '';
+      let statusClass = 'event-status-valid';
 
       if (evt.isDuplicate) {
         statusBadgeHtml = renderStatusBadge('error', 'Double Fired');
+        statusClass = 'event-status-error';
       } else if (evt.requestCount > 1) {
         statusBadgeHtml = renderStatusBadge('error', `Fired ${evt.requestCount}x`);
+        statusClass = 'event-status-error';
       } else {
         const statusLabel = evt.validation.status === 'valid' ? 'Valid' : (evt.validation.status === 'warning' ? 'Warning' : 'Error');
         statusBadgeHtml = renderStatusBadge(evt.validation.status, statusLabel);
+        if (evt.validation.status === 'error') statusClass = 'event-status-error';
+        else if (evt.validation.status === 'warning') statusClass = 'event-status-warning';
+        else statusClass = 'event-status-valid';
       }
+
+      item.className = `event-item ${statusClass} ${isExpanded ? 'open' : ''}`;
 
       // Build Parameter Table Rows with Clean Severity Badges & PII Warnings
       let paramRows = '';
@@ -456,6 +463,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="event-meta-group">
             ${statusBadgeHtml}
             <span class="event-time">${formatTimestamp(evt.timestamp)}</span>
+            <svg class="event-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
         </div>
         <div class="event-details-drawer">
