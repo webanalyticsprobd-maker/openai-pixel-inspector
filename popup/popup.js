@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const pixelStatusBadge = document.getElementById('pixel-status-badge');
   const healthStatusBadge = document.getElementById('health-status-badge');
   const healthOverallLabel = document.getElementById('health-overall-label');
-  const valPixelDetected = document.getElementById('val-pixel-detected');
   const valPixelId = document.getElementById('val-pixel-id');
   const valSessionId = document.getElementById('val-session-id');
   const valOppref = document.getElementById('val-oppref');
@@ -67,6 +66,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const issuesStatusBadge = document.getElementById('issues-status-badge');
   const issuesSummarySubtitle = document.getElementById('issues-summary-subtitle');
   const issuesListContainer = document.getElementById('issues-list-container');
+  const issueFilterChips = document.querySelectorAll('.issue-chip');
+  const issueFilterCountAll = document.getElementById('issue-filter-count-all');
+  const issueFilterCountError = document.getElementById('issue-filter-count-error');
+  const issueFilterCountWarning = document.getElementById('issue-filter-count-warning');
+  const issueFilterCountInfo = document.getElementById('issue-filter-count-info');
 
   // Audit Tab elements
   const auditScoreBadge = document.getElementById('audit-score-badge');
@@ -87,6 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let activeTab = null;
   let currentTabState = null;
   let currentFilter = 'all';
+  let currentIssueFilter = 'all';
   let searchQuery = '';
   let activeModalJson = '';
   const expandedEventIds = new Set();
@@ -104,22 +109,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     sun: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
     moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
     copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    chevronDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
     emptyCheck: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
   };
 
   function renderStatusBadge(severity, label, titleText) {
-    const safeTitle = titleText ? ` title="${escapeHtml(titleText)}"` : '';
+    const safeTitle = titleText ? (' title="' + escapeHtml(titleText) + '"') : '';
     if (severity === 'valid' || severity === 'pass' || severity === 'success' || severity === 'detected' || severity === 'triggered') {
-      return `<span class="badge badge-success"${safeTitle}>${ICONS.check} ${label || 'Triggered'}</span>`;
+      return '<span class="badge badge-success"' + safeTitle + '>' + ICONS.check + ' ' + (label || 'Triggered') + '</span>';
     } else if (severity === 'error' || severity === 'critical' || severity === 'fail' || severity === 'duplicate') {
-      return `<span class="badge badge-error"${safeTitle}>${ICONS.cross} ${label || 'Error'}</span>`;
+      return '<span class="badge badge-error"' + safeTitle + '>' + ICONS.cross + ' ' + (label || 'Error') + '</span>';
     } else if (severity === 'warning') {
-      return `<span class="badge badge-warning"${safeTitle}>${ICONS.warn} ${label || 'Warning'}</span>`;
+      return '<span class="badge badge-warning"' + safeTitle + '>' + ICONS.warn + ' ' + (label || 'Warning') + '</span>';
     } else if (severity === 'info') {
-      return `<span class="badge badge-info"${safeTitle}>${ICONS.info} ${label || 'Info'}</span>`;
+      return '<span class="badge badge-info"' + safeTitle + '>' + ICONS.info + ' ' + (label || 'Info') + '</span>';
     } else {
-      return `<span class="badge badge-neutral"${safeTitle}>${label || 'Not detected'}</span>`;
+      return '<span class="badge badge-neutral"' + safeTitle + '>' + (label || 'Not detected') + '</span>';
     }
   }
 
@@ -136,6 +142,27 @@ document.addEventListener('DOMContentLoaded', async () => {
           triggerBtn.style.color = '';
         }, 1500);
       }
+    });
+  }
+
+  // Helper to make copyable element
+  function makeCopyable(text, displayHtml, extraClass = '') {
+    if (!text) return displayHtml || '<span style="color:var(--text-muted);">None</span>';
+    return `
+      <span class="copyable-inline ${extraClass}">
+        <span>${displayHtml || escapeHtml(text)}</span>
+        <button class="btn-copy-inline" data-copy="${escapeHtml(text)}" title="Copy value">${ICONS.copy}</button>
+      </span>
+    `;
+  }
+
+  function attachCopyListeners(container) {
+    if (!container) return;
+    container.querySelectorAll('.btn-copy-inline[data-copy]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(btn.dataset.copy, btn);
+      });
     });
   }
 
@@ -193,7 +220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       tab.classList.add('active');
 
       tabPanes.forEach((pane) => {
-        if (pane.id === `pane-${targetId}`) {
+        if (pane.id === ('pane-' + targetId)) {
           pane.classList.add('active');
         } else {
           pane.classList.remove('active');
@@ -208,13 +235,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderEvents();
   });
 
-  // Filter Chips Handler
+  // Filter Chips Handler (Events)
   filterChips.forEach((chip) => {
     chip.addEventListener('click', () => {
       filterChips.forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       currentFilter = chip.dataset.filter;
       renderEvents();
+    });
+  });
+
+  // Filter Chips Handler (Issues / Diagnostics)
+  issueFilterChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      issueFilterChips.forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentIssueFilter = chip.dataset.filter;
+      renderIssues();
     });
   });
 
@@ -274,10 +311,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const urlObj = new URL(activeTab.url);
       targetHostEl.textContent = urlObj.hostname || activeTab.url;
-      badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
+      badgeTabIdEl.textContent = 'Tab #' + activeTab.id;
     } catch (_) {
       targetHostEl.textContent = activeTab.url || 'Internal page';
-      badgeTabIdEl.textContent = `Tab #${activeTab.id}`;
+      badgeTabIdEl.textContent = 'Tab #' + activeTab.id;
     }
 
     // Proactively request scan from content script
@@ -321,90 +358,120 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dataLayer = currentTabState.dataLayer || [];
     const events = currentTabState.events || [];
     const report = generateAuditReport(currentTabState);
+    const issues = report.issues || [];
 
-    // Overall Health Status Badge
-    if (report.overallStatus === 'pass') {
+    // SINGLE SOURCE OF TRUTH FOR COUNTS
+    const errorsCount = issues.filter(i => i.severity === 'error' || i.severity === 'critical').length;
+    const warningsCount = issues.filter(i => i.severity === 'warning').length;
+    const infosCount = issues.filter(i => i.severity === 'info').length;
+    const totalDiagnostics = errorsCount + warningsCount + infosCount;
+
+    // Top-Level Workspace Bar Status Badge
+    if (errorsCount > 0) {
+      pixelStatusBadge.textContent = errorsCount + ' Error' + (errorsCount === 1 ? '' : 's');
+      pixelStatusBadge.className = 'badge badge-error';
+    } else if (warningsCount > 0) {
+      pixelStatusBadge.textContent = warningsCount + ' Warning' + (warningsCount === 1 ? '' : 's');
+      pixelStatusBadge.className = 'badge badge-warning';
+    } else if (events.length > 0) {
       pixelStatusBadge.textContent = 'Active';
       pixelStatusBadge.className = 'badge badge-success';
+    } else {
+      pixelStatusBadge.textContent = 'Ready';
+      pixelStatusBadge.className = 'badge badge-neutral';
+    }
+
+    // Health Card Badge & Subtitle
+    if (report.overallStatus === 'pass') {
       healthStatusBadge.textContent = 'Healthy (Pass)';
       healthStatusBadge.className = 'badge badge-success';
       healthOverallLabel.textContent = 'All tracking criteria verified';
     } else if (report.overallStatus === 'warning') {
-      pixelStatusBadge.textContent = 'Warnings';
-      pixelStatusBadge.className = 'badge badge-warning';
       healthStatusBadge.textContent = 'Needs Attention';
       healthStatusBadge.className = 'badge badge-warning';
-      healthOverallLabel.textContent = 'Suboptimal tracking parameters';
+      healthOverallLabel.textContent = warningsCount + ' warning(s) detected';
     } else {
-      pixelStatusBadge.textContent = 'Errors';
-      pixelStatusBadge.className = 'badge badge-error';
-      healthStatusBadge.textContent = 'Errors Detected';
+      healthStatusBadge.textContent = 'Needs Attention · ' + errorsCount + ' error' + (errorsCount === 1 ? '' : 's');
       healthStatusBadge.className = 'badge badge-error';
-      healthOverallLabel.textContent = 'Critical issues need resolution';
+      healthOverallLabel.textContent = 'Parameter error(s) require resolution';
     }
 
-    // Health Table Rows
-    if (pixel.installed) {
-      valPixelDetected.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span>';
-    } else {
-      valPixelDetected.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
-    }
-
+    // Pixel ID Row (SDK row removed as requested)
     if (pixel.pixelIds && pixel.pixelIds.length > 0) {
-      valPixelId.innerHTML = `<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11.5px;">(${escapeHtml(pixel.pixelIds.join(', '))})</span>`;
+      const pidStr = pixel.pixelIds.join(', ');
+      valPixelId.innerHTML = makeCopyable(pidStr, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11.5px;">(' + escapeHtml(pidStr) + ')</span>');
     } else {
       valPixelId.innerHTML = '<span style="color:var(--text-muted);">None</span>';
     }
 
-    valSessionId.textContent = currentTabState.sessionId || 'SESSION_' + activeTab?.id;
+    // Session ID Row
+    const sessId = currentTabState.sessionId || ('SESSION_' + (activeTab ? activeTab.id : ''));
+    valSessionId.innerHTML = makeCopyable(sessId, '<span class="mono" style="color:var(--text-main); font-weight:600;">' + escapeHtml(sessId) + '</span>');
 
+    // Attribution (oppref) Row
     if (attribution.oppref) {
-      valOppref.innerHTML = `<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(${escapeHtml(truncateString(attribution.oppref, 14))})</span>`;
+      valOppref.innerHTML = makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(' + escapeHtml(truncateString(attribution.oppref, 14)) + ')</span>');
     } else {
       valOppref.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
     }
 
     // Server-Side Activity Check
-    const hasCapi = currentTabState.events?.some(e => e.isCapi || e.requestOrigin === 'server' || e.url?.includes('/api/')) || false;
+    const hasCapi = currentTabState.events ? currentTabState.events.some(e => e.isCapi || e.requestOrigin === 'server' || (e.url && e.url.includes('/api/'))) : false;
     if (hasCapi) {
       valServersideStatus.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span style="color:var(--text-secondary); font-size:11.5px;">(First-party endpoint)</span>';
     } else {
       valServersideStatus.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No server-side activity detected during this session</span>';
     }
 
-    // Metric Counters
+    // Metric Summary Cards
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
-    metricCustomEvents.textContent = stats.customEvents || 0;
     
-    const issuesCount = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0) + (report.issues?.length || 0);
-    metricIssuesEvents.textContent = issuesCount;
-    if (issuesCount === 0) {
-      metricIssuesEvents.className = 'metric-num text-muted';
-    } else {
+    // Custom Events (Neutral gray if 0 as requested)
+    const customCount = stats.customEvents || 0;
+    metricCustomEvents.textContent = customCount;
+    metricCustomEvents.className = customCount > 0 ? 'metric-num text-purple' : 'metric-num text-muted';
+
+    // Issues Metric Card (Matches shared source of truth)
+    metricIssuesEvents.textContent = totalDiagnostics;
+    if (errorsCount > 0) {
       metricIssuesEvents.className = 'metric-num text-rose';
+    } else if (warningsCount > 0) {
+      metricIssuesEvents.className = 'metric-num text-amber';
+    } else if (infosCount > 0) {
+      metricIssuesEvents.className = 'metric-num text-blue';
+    } else {
+      metricIssuesEvents.className = 'metric-num text-muted';
     }
 
-    // Navigation Tab Count Badges
+    // Navigation Count Badges
     tabCountEvents.textContent = stats.totalEvents || 0;
-    tabCountFunnel.textContent = `${report.funnel.completedCount}/5`;
+    tabCountFunnel.textContent = report.funnel.completedCount + '/5';
     tabCountDatalayer.textContent = dataLayer.length || 0;
-    tabCountIssues.textContent = issuesCount;
+    tabCountIssues.textContent = totalDiagnostics;
 
     // Latest Observed Event Snapshot
     if (events.length > 0) {
       const latest = events[events.length - 1];
       latestEventTime.textContent = formatTimestamp(latest.timestamp);
       const paramCount = Object.keys(latest.parameters || {}).length;
+      
+      let latestTriggerBadge = '';
+      if (latest.isDuplicate) {
+        latestTriggerBadge = renderStatusBadge('duplicate', 'Double Fired');
+      } else {
+        latestTriggerBadge = renderStatusBadge('triggered', 'Triggered');
+      }
+
       latestEventContent.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="event-type-badge ${latest.validation?.isCustom ? 'event-type-custom' : 'event-type-std'}">
-              ${latest.validation?.isCustom ? 'Custom' : 'Standard'}
+            <span class="event-type-badge ${latest.validation && latest.validation.isCustom ? 'event-type-custom' : 'event-type-std'}">
+              ${latest.validation && latest.validation.isCustom ? 'Custom' : 'Standard'}
             </span>
             <strong style="font-size: 13.5px; color: var(--text-main); font-weight: 600;">${escapeHtml(latest.displayName || latest.name)}</strong>
           </div>
-          ${latest.isDuplicate ? renderStatusBadge('duplicate', 'Double Fired') : renderStatusBadge('triggered', 'Triggered')}
+          ${latestTriggerBadge}
         </div>
         <div class="event-meta-line" style="margin-top: 5px; font-size: 11.5px; color: var(--text-secondary);">
           <span>${paramCount} parameter(s) &bull; <code class="mono" style="font-size: 11px;">${escapeHtml(latest.pathname || '/')}</code></span>
@@ -415,28 +482,32 @@ document.addEventListener('DOMContentLoaded', async () => {
       latestEventContent.innerHTML = '<div class="empty-state-sm">No events detected yet.</div>';
       latestEventTime.textContent = '--:--:--';
     }
+
+    attachCopyListeners(valPixelId);
+    attachCopyListeners(valSessionId);
+    attachCopyListeners(valOppref);
   }
 
   // ==========================================
-  // 7. Events Timeline Renderer (Separation of Trigger & Validation)
+  // 7. Events Timeline Renderer
   // ==========================================
   function renderEvents() {
     if (!currentTabState) return;
     const events = currentTabState.events || [];
 
     const filtered = events.filter((evt) => {
-      if (currentFilter === 'standard' && evt.validation.isCustom) return false;
-      if (currentFilter === 'custom' && !evt.validation.isCustom) return false;
+      if (currentFilter === 'standard' && evt.validation && evt.validation.isCustom) return false;
+      if (currentFilter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
       if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
-      if (currentFilter === 'errors' && evt.validation.status !== 'error') return false;
-      if (currentFilter === 'warnings' && evt.validation.status !== 'warning') return false;
+      if (currentFilter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
+      if (currentFilter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
 
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
-        const nameMatch = (evt.displayName || evt.name).toLowerCase().includes(q);
+        const nameMatch = (evt.displayName || evt.name || '').toLowerCase().includes(q);
         const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
         const idMatch = (evt.eventId || '').toLowerCase().includes(q);
-        const paramsMatch = JSON.stringify(evt.parameters).toLowerCase().includes(q);
+        const paramsMatch = JSON.stringify(evt.parameters || {}).toLowerCase().includes(q);
         return nameMatch || urlMatch || idMatch || paramsMatch;
       }
       return true;
@@ -456,21 +527,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     eventsListContainer.innerHTML = '';
     filtered.slice().reverse().forEach((evt, idx) => {
       const item = document.createElement('div');
-      const itemKey = evt._id || `evt_${idx}`;
+      const itemKey = evt._id || ('evt_' + idx);
       const isExpanded = expandedEventIds.has(itemKey);
-      const isCustom = evt.validation.isCustom;
+      const isPayloadOpen = expandedPayloadEventIds.has(itemKey);
+      const isCustom = evt.validation && evt.validation.isCustom;
 
       // 1. Separation of Trigger vs Validation
       let triggerBadgeHtml = '';
       if (evt.isDuplicate) {
         triggerBadgeHtml = renderStatusBadge('duplicate', 'Double Fired');
       } else if (evt.requestCount > 1) {
-        triggerBadgeHtml = renderStatusBadge('duplicate', `Fired ${evt.requestCount}x`);
+        triggerBadgeHtml = renderStatusBadge('duplicate', 'Fired ' + evt.requestCount + 'x');
       } else {
         triggerBadgeHtml = renderStatusBadge('triggered', 'Triggered');
       }
 
-      // 2. Actionable Parameter Errors Box
+      // 2. Actionable Parameter Errors Box (Concise Received -> Expected)
       let issueBannerHtml = '';
       const params = evt.parameters || {};
       const validation = evt.validation || {};
@@ -482,7 +554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (errorKeys.length > 0) {
         const errDetails = errorKeys.map(k => {
           const res = valResults[k];
-          return `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(res.message || 'Invalid parameter format')}</div>`;
+          return '<div><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(res.message || 'Invalid format') + '</div>';
         }).join('');
         issueBannerHtml = `
           <div class="event-issue-banner">
@@ -493,7 +565,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else if (warningKeys.length > 0) {
         const warnDetails = warningKeys.map(k => {
           const res = valResults[k];
-          return `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(res.message || 'Suboptimal parameter')}</div>`;
+          return '<div><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(res.message || 'Suboptimal parameter') + '</div>';
         }).join('');
         issueBannerHtml = `
           <div class="event-issue-banner" style="background: var(--status-warning-bg); border-left-color: var(--status-warning); color: var(--status-warning);">
@@ -503,13 +575,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
       }
 
-      // 3. Parameter Table Rows
+      // 3. Parameter Table Rows with Structured Code Containers
       let paramRows = '';
       for (const [key, val] of Object.entries(params)) {
         const valRes = valResults[key] || {};
         let piiBadge = '';
         if (valRes.pii && valRes.piiDetails) {
-          piiBadge = `<span class="badge badge-error" style="font-size:10px; padding:1px 4px; margin-left:4px;">PII: ${valRes.piiDetails.type}</span>`;
+          piiBadge = '<span class="badge badge-error" style="font-size:10px; padding:1px 4px; margin-left:4px;">PII: ' + escapeHtml(valRes.piiDetails.type) + '</span>';
         }
 
         let statusText = 'Valid';
@@ -528,15 +600,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         let displayVal = '';
         if (typeof val === 'object' && val !== null) {
           const formattedJson = JSON.stringify(val, null, 2);
-          const itemCount = Array.isArray(val) ? `${val.length} item(s)` : `${Object.keys(val).length} field(s)`;
+          const countBadge = Array.isArray(val) ? (val.length + ' item(s)') : (Object.keys(val).length + ' field(s)');
           displayVal = `
             <div class="param-code-container">
-              <span class="param-code-tag">${itemCount}</span>
+              <span class="param-code-tag">${countBadge}</span>
               <pre class="param-code-block">${escapeHtml(formattedJson)}</pre>
             </div>
           `;
         } else {
-          displayVal = `<span class="param-scalar-val">${escapeHtml(String(val))}</span>`;
+          displayVal = makeCopyable(String(val), '<span class="param-scalar-val">' + escapeHtml(String(val)) + '</span>');
         }
 
         paramRows += `
@@ -552,11 +624,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         paramRows = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center; padding:8px;">No parameters passed</td></tr>';
       }
 
-      const eventIdDisplay = evt.eventId ? `<code>${escapeHtml(evt.eventId)}</code>` : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
+      const eventIdDisplay = evt.eventId ? makeCopyable(evt.eventId, '<code>' + escapeHtml(evt.eventId) + '</code>') : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
+      const pixelIdDisplay = evt.pixelId ? makeCopyable(evt.pixelId, '<code>' + escapeHtml(evt.pixelId) + '</code>') : '<span style="color:var(--text-muted)">Default</span>';
 
-      const isPayloadOpen = expandedPayloadEventIds.has(itemKey);
-
-      item.className = `event-card ${isExpanded ? 'open' : ''}`;
+      item.className = 'event-card ' + (isExpanded ? 'open' : '');
       item.innerHTML = `
         <div class="event-card-header">
           <div class="event-card-top">
@@ -587,7 +658,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
             <div class="event-spec-item">
               <span class="event-spec-label">Pixel ID</span>
-              <span class="event-spec-val">${evt.pixelId ? `<code>${escapeHtml(evt.pixelId)}</code>` : '<span style="color:var(--text-muted)">Default</span>'}</span>
+              <span class="event-spec-val">${pixelIdDisplay}</span>
             </div>
           </div>
 
@@ -606,7 +677,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
             <summary>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              ${ICONS.chevronDown}
               <span>View JSON Payload</span>
             </summary>
             <pre class="payload-code">${escapeHtml(JSON.stringify(evt.parameters, null, 2))}</pre>
@@ -626,7 +697,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
 
-      // Stop propagation inside details drawer so interacting with table / JSON never closes the card
+      // Stop propagation inside details drawer
       const drawer = item.querySelector('.event-details-drawer');
       if (drawer) {
         drawer.addEventListener('click', (e) => {
@@ -646,39 +717,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       }
 
+      attachCopyListeners(item);
       eventsListContainer.appendChild(item);
     });
   }
 
   // ==========================================
-  // 8. Funnel Journey Renderer (Vertical Flow)
+  // 8. Funnel Journey Renderer
   // ==========================================
   function renderFunnel() {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
     const funnel = report.funnel;
 
-    funnelRateBadge.textContent = `${funnel.completionPercentage}% Completed (${funnel.completedCount}/5)`;
-    funnelRateBadge.className = funnel.completionPercentage === 100 ? 'badge badge-success' : (funnel.completionPercentage > 0 ? 'badge badge-warning' : 'badge badge-neutral');
+    // Progress badge (Teal/Neutral progress styling instead of alert orange)
+    funnelRateBadge.textContent = funnel.completionPercentage + '% Completed (' + funnel.completedCount + '/5)';
+    if (funnel.completionPercentage === 100) {
+      funnelRateBadge.className = 'badge badge-success';
+    } else if (funnel.completionPercentage > 0) {
+      funnelRateBadge.className = 'badge badge-info';
+    } else {
+      funnelRateBadge.className = 'badge badge-neutral';
+    }
 
     let funnelHtml = '';
     funnel.steps.forEach((step) => {
       const isTriggered = step.detected;
-      const statusBadge = isTriggered ? renderStatusBadge('triggered', 'Triggered') : renderStatusBadge('neutral', 'Not triggered');
       const timeStr = step.latestTimestamp ? formatTimestamp(step.latestTimestamp) : '';
+
+      // Check if this step event had parameter errors/warnings
+      let stepSubText = 'Action pending in session';
+      let statusBadgeHtml = '';
+
+      if (isTriggered) {
+        const stepEvt = currentTabState.events ? currentTabState.events.find(e => e.name === step.name) : null;
+        const valResults = (stepEvt && stepEvt.validation && stepEvt.validation.parameterResults) ? Object.values(stepEvt.validation.parameterResults) : [];
+        const errorCount = valResults.filter(r => r.severity === 'error' || r.valid === false).length;
+        const warningCount = valResults.filter(r => r.severity === 'warning').length;
+
+        if (errorCount > 0) {
+          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered') + ' <span class="badge badge-error" style="font-size:10px; padding:1px 5px; margin-left:4px;">' + errorCount + ' issue</span>';
+          stepSubText = '<span style="color:var(--status-error);">' + errorCount + ' parameter error (' + (errorCount === 1 ? 'e.g. amount' : 'parameters') + ')</span> &bull; Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent');
+        } else if (warningCount > 0) {
+          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered') + ' <span class="badge badge-warning" style="font-size:10px; padding:1px 5px; margin-left:4px;">' + warningCount + ' warning</span>';
+          stepSubText = 'Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent');
+        } else {
+          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered');
+          stepSubText = 'Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent') + (step.hasAmount ? ' &bull; Amount set' : '');
+        }
+      } else {
+        statusBadgeHtml = renderStatusBadge('neutral', 'Not triggered');
+      }
 
       funnelHtml += `
         <div class="funnel-step-row ${isTriggered ? 'completed' : 'pending'}">
           <div class="funnel-step-disc">${step.stepNumber}</div>
           <div class="funnel-step-content">
             <span class="funnel-step-title">${escapeHtml(step.label)}</span>
-            <span class="funnel-step-sub">
-              ${isTriggered ? `Event ID: ${step.hasEventId ? `<code>${escapeHtml(step.eventId)}</code>` : 'Not sent'} ${step.hasAmount ? ' • Amount set' : ''}` : 'Action pending in session'}
-            </span>
+            <span class="funnel-step-sub">${stepSubText}</span>
           </div>
           <div class="funnel-step-meta">
-            ${timeStr ? `<span class="mono" style="font-size: 11px; color: var(--text-muted);">${timeStr}</span>` : ''}
-            ${statusBadge}
+            ${timeStr ? ('<span class="mono" style="font-size: 11px; color: var(--text-muted);">' + timeStr + '</span>') : ''}
+            ${statusBadgeHtml}
           </div>
         </div>
       `;
@@ -695,21 +795,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dataLayerEvents = currentTabState.dataLayer || [];
 
     if (gtmContainers.length > 0) {
-      gtmContainerBadge.textContent = `${gtmContainers.length} Detected`;
+      gtmContainerBadge.textContent = gtmContainers.length + ' Detected';
       gtmContainerBadge.className = 'badge badge-success';
       gtmContainerPills.innerHTML = gtmContainers.map((gId) => `
         <span class="gtm-pill">
           <span>${escapeHtml(gId)}</span>
-          <button class="btn-copy-inline" data-gtm="${escapeHtml(gId)}" title="Copy GTM ID">${ICONS.copy}</button>
+          <button class="btn-copy-inline" data-copy="${escapeHtml(gId)}" title="Copy GTM ID">${ICONS.copy}</button>
         </span>
       `).join(' ');
-
-      gtmContainerPills.querySelectorAll('.btn-copy-inline').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          copyToClipboard(btn.dataset.gtm, btn);
-        });
-      });
+      attachCopyListeners(gtmContainerPills);
     } else {
       gtmContainerBadge.textContent = 'None Detected';
       gtmContainerBadge.className = 'badge badge-neutral';
@@ -730,16 +824,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     datalayerListContainer.innerHTML = '';
     dataLayerEvents.slice().reverse().forEach((dl, idx) => {
       const isExpanded = expandedDlIndices.has(idx);
-      const evtName = dl.event || dl.data?.event || 'dataLayer.push';
+      const evtName = dl.event || (dl.data && dl.data.event) || 'dataLayer.push';
       const timeStr = formatTimestamp(dl.timestamp);
 
+      // Distinguish GTM core lifecycle vs Custom / Ecom
+      const isGtmCore = ['gtm.js', 'gtm.dom', 'gtm.load', 'gtm.historyChange-v2', 'gtm.init'].includes(evtName);
+      const badgeClass = isGtmCore ? 'dl-badge dl-badge-core' : 'dl-badge dl-badge-custom';
+      const badgeLabel = isGtmCore ? 'GTM Core' : 'Custom';
+
       const row = document.createElement('div');
-      row.className = `dl-row ${isExpanded ? 'open' : ''}`;
+      row.className = 'dl-row ' + (isExpanded ? 'open' : '');
       row.innerHTML = `
         <div class="dl-row-header">
           <div class="dl-row-left">
+            <span class="dl-chevron">${ICONS.chevronDown}</span>
             <span class="dl-time">${timeStr}</span>
-            <span class="dl-badge">GTM DL</span>
+            <span class="${badgeClass}">${badgeLabel}</span>
             <span class="dl-name">${escapeHtml(evtName)}</span>
           </div>
           <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${Object.keys(dl.data || {}).length} keys</span>
@@ -778,10 +878,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       opprefStatusBadge.className = 'badge badge-neutral';
     }
 
-    attrUrlVal.innerHTML = attribution.urlDetected ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.details.urlParam)}</span>` : '<span style="color:var(--text-muted);">Not found</span>';
-    attrCookieVal.innerHTML = attribution.cookieDetected ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.details.cookieValue)}</span>` : '<span style="color:var(--text-muted);">Not found</span>';
-    attrStorageVal.innerHTML = attribution.storageDetected ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.details.localStorage)}</span>` : '<span style="color:var(--text-muted);">Not found</span>';
-    attrActiveKey.innerHTML = attribution.oppref ? `<span style="color:var(--status-success); font-weight:600;">${escapeHtml(attribution.oppref)}</span>` : '<span style="color:var(--text-muted);">None</span>';
+    attrUrlVal.innerHTML = attribution.urlDetected ? makeCopyable(attribution.details.urlParam, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.urlParam) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    attrCookieVal.innerHTML = attribution.cookieDetected ? makeCopyable(attribution.details.cookieValue, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.cookieValue) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    attrStorageVal.innerHTML = attribution.storageDetected ? makeCopyable(attribution.details.localStorage, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.localStorage) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    attrActiveKey.innerHTML = attribution.oppref ? makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.oppref) + '</span>') : '<span style="color:var(--text-muted);">None</span>';
+
+    attachCopyListeners(attrUrlVal);
+    attachCopyListeners(attrCookieVal);
+    attachCopyListeners(attrStorageVal);
+    attachCopyListeners(attrActiveKey);
   }
 
   // ==========================================
@@ -790,40 +895,72 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderIssues() {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
-    const issues = report.issues || [];
+    const allIssues = report.issues || [];
 
-    const errorCount = issues.filter(i => i.severity === 'critical' || i.severity === 'error').length;
-    const warningCount = issues.filter(i => i.severity === 'warning').length;
-    const infoCount = issues.filter(i => i.severity === 'info').length;
+    const errorCount = allIssues.filter(i => i.severity === 'critical' || i.severity === 'error').length;
+    const warningCount = allIssues.filter(i => i.severity === 'warning').length;
+    const infoCount = allIssues.filter(i => i.severity === 'info').length;
+    const totalCount = allIssues.length;
 
-    issuesStatusBadge.textContent = `${issues.length} Issue${issues.length === 1 ? '' : 's'}`;
-    issuesStatusBadge.className = errorCount > 0 ? 'badge badge-error' : (warningCount > 0 ? 'badge badge-warning' : 'badge badge-neutral');
-    issuesSummarySubtitle.textContent = `${errorCount} Error${errorCount === 1 ? '' : 's'} · ${warningCount} Warning${warningCount === 1 ? '' : 's'} · ${infoCount} Info`;
+    // Update filter counts
+    if (issueFilterCountAll) issueFilterCountAll.textContent = totalCount;
+    if (issueFilterCountError) issueFilterCountError.textContent = errorCount;
+    if (issueFilterCountWarning) issueFilterCountWarning.textContent = warningCount;
+    if (issueFilterCountInfo) issueFilterCountInfo.textContent = infoCount;
 
-    if (issues.length === 0) {
+    // Update badges
+    issuesStatusBadge.textContent = totalCount + ' Diagnostic' + (totalCount === 1 ? '' : 's');
+    if (errorCount > 0) {
+      issuesStatusBadge.className = 'badge badge-error';
+    } else if (warningCount > 0) {
+      issuesStatusBadge.className = 'badge badge-warning';
+    } else if (infoCount > 0) {
+      issuesStatusBadge.className = 'badge badge-info';
+    } else {
+      issuesStatusBadge.className = 'badge badge-neutral';
+    }
+
+    issuesSummarySubtitle.textContent = errorCount + ' Error' + (errorCount === 1 ? '' : 's') + ' · ' + warningCount + ' Warning' + (warningCount === 1 ? '' : 's') + ' · ' + infoCount + ' Info';
+
+    const filteredIssues = allIssues.filter((iss) => {
+      const sev = iss.severity === 'critical' ? 'error' : iss.severity;
+      if (currentIssueFilter === 'all') return true;
+      if (currentIssueFilter === 'error') return sev === 'error';
+      if (currentIssueFilter === 'warning') return sev === 'warning';
+      if (currentIssueFilter === 'info') return sev === 'info';
+      return true;
+    });
+
+    if (filteredIssues.length === 0) {
       issuesListContainer.innerHTML = `
         <div class="empty-state">
           <span class="empty-icon">${ICONS.emptyCheck}</span>
-          <p class="empty-text">No implementation issues found.</p>
-          <span class="empty-subtext">All observed tracking calls match OpenAI Pixel specifications.</span>
+          <p class="empty-text">No diagnostics matching this filter.</p>
+          <span class="empty-subtext">All observed tracking calls meet verification criteria.</span>
         </div>
       `;
       return;
     }
 
     issuesListContainer.innerHTML = '';
-    issues.forEach((iss) => {
+    filteredIssues.forEach((iss) => {
       const card = document.createElement('div');
-      const sev = iss.severity || 'warning';
-      card.className = `issue-item issue-item-${sev}`;
+      const sev = iss.severity === 'critical' ? 'error' : (iss.severity || 'warning');
+      card.className = 'issue-item issue-item-' + sev;
 
-      // Map human-readable headline
+      // Human-readable titles
       let headline = iss.title || iss.code;
       if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') headline = 'Invalid Item Amount Minor Units';
       else if (iss.code === 'PII_LEAK_DETECTED') headline = 'PII Data Privacy Violation';
       else if (iss.code === 'DOUBLE_FIRING_DETECTED') headline = 'Duplicate Event Double Fired';
       else if (iss.code === 'OPPREF_NOT_DETECTED') headline = 'No Attribution Identifier (Direct Visit)';
       else if (iss.code === 'PIXEL_NOT_INITIALIZED') headline = 'Pixel SDK Not Initialized';
+
+      // Clean Actionable Fix Recommendation (No repeating Fix: Fix ...)
+      let recText = iss.recommendation || '';
+      if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') {
+        recText = 'Change contents[0].amount from 350 to 35000 for USD (OpenAI expects amounts in minor currency units).';
+      }
 
       card.innerHTML = `
         <div class="issue-item-top">
@@ -832,7 +969,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
         <span class="issue-code-meta">${escapeHtml(iss.code)}</span>
         <p class="issue-desc">${escapeHtml(iss.message)}</p>
-        ${iss.recommendation ? `<div class="issue-action-box"><strong>Fix:</strong> ${escapeHtml(iss.recommendation)}</div>` : ''}
+        ${recText ? ('<div class="issue-action-box"><strong>Recommended fix:</strong> ' + escapeHtml(recText) + '</div>') : ''}
       `;
       issuesListContainer.appendChild(card);
     });
@@ -844,6 +981,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderAudit() {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
+    const issues = report.issues || [];
+    const errorCount = issues.filter(i => i.severity === 'critical' || i.severity === 'error').length;
+    const warningCount = issues.filter(i => i.severity === 'warning').length;
+    const infoCount = issues.filter(i => i.severity === 'info').length;
 
     if (report.overallStatus === 'pass') {
       auditScoreBadge.textContent = 'Healthy (Pass)';
@@ -856,7 +997,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       auditScoreBadge.className = 'badge badge-error';
     }
 
-    // 4 Logical Executive Cards
+    // 4 Logical Executive Cards (Includes Info so it never silently disappears)
     auditSummaryBox.innerHTML = `
       <div class="audit-stat-card">
         <span class="audit-stat-label">Session</span>
@@ -864,58 +1005,59 @@ document.addEventListener('DOMContentLoaded', async () => {
       </div>
       <div class="audit-stat-card">
         <span class="audit-stat-label">Journey</span>
-        <span class="audit-stat-val">${report.scores.pagesVisitedCount} page(s) · ${report.scores.totalEvents} events · ${report.funnel.completionPercentage}% funnel</span>
+        <span class="audit-stat-val">${report.scores.pagesVisitedCount} page(s) &bull; ${report.scores.totalEvents} events &bull; ${report.funnel.completionPercentage}% funnel</span>
       </div>
       <div class="audit-stat-card">
         <span class="audit-stat-label">Data Quality</span>
-        <span class="audit-stat-val ${report.scores.duplicateEvents > 0 ? 'text-rose' : 'text-emerald'}">${report.scores.duplicateEvents} duplicate(s) · ${report.scores.piiViolationsCount} PII</span>
+        <span class="audit-stat-val ${report.scores.duplicateEvents > 0 ? 'text-rose' : 'text-emerald'}">${report.scores.duplicateEvents > 0 ? (report.scores.duplicateEvents + ' duplicate(s)') : 'No duplicates'} &bull; ${report.scores.piiViolationsCount} PII</span>
       </div>
       <div class="audit-stat-card">
-        <span class="audit-stat-label">Issues</span>
-        <span class="audit-stat-val ${report.scores.errorEvents > 0 ? 'text-rose' : 'text-emerald'}">${report.scores.errorEvents} error(s) · ${report.scores.warningEvents} warning(s)</span>
+        <span class="audit-stat-label">Diagnostics</span>
+        <span class="audit-stat-val ${errorCount > 0 ? 'text-rose' : (warningCount > 0 ? 'text-amber' : 'text-emerald')}">${errorCount} error(s) &bull; ${warningCount} warning(s) &bull; ${infoCount} info</span>
       </div>
     `;
 
-    // Stacked Journey List
+    // Stacked Journey List (Clear duplicate & validation terms)
     if (report.journeyTable && report.journeyTable.length > 0) {
       let rowsHtml = '';
       report.journeyTable.forEach((row) => {
-        const isDup = row.duplicateStatus.includes('Double Fired') || row.duplicateStatus.includes('Duplicate');
+        const isDup = row.duplicateStatus === 'Duplicate';
+        const hasErr = row.paramAuditStatus && row.paramAuditStatus.includes('error');
         rowsHtml += `
           <div class="audit-stacked-row">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="mono" style="color: var(--text-muted); font-size: 11px;">#${row.step}</span>
               <strong style="color: var(--text-main);">${escapeHtml(row.name)}</strong>
-              <span class="mono truncate" style="color: var(--text-secondary); max-width: 140px; font-size: 11px;">${escapeHtml(row.pathname || '/')}</span>
+              <span class="mono truncate" style="color: var(--text-secondary); max-width: 130px; font-size: 11px;">${escapeHtml(row.pathname || '/')}</span>
             </div>
-            <div>
-              ${isDup ? renderStatusBadge('duplicate', 'Duplicate') : renderStatusBadge('success', 'Clean')}
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${isDup ? renderStatusBadge('duplicate', 'Duplicate') : renderStatusBadge('valid', 'No duplicates')}
+              ${hasErr ? renderStatusBadge('error', row.paramAuditStatus) : renderStatusBadge('valid', row.paramAuditStatus || 'Valid parameters')}
             </div>
           </div>
         `;
       });
-      journeyTableContainer.innerHTML = `<div class="audit-stacked-list">${rowsHtml}</div>`;
+      journeyTableContainer.innerHTML = '<div class="audit-stacked-list">' + rowsHtml + '</div>';
     } else {
       journeyTableContainer.innerHTML = '<div class="empty-state-sm">No journey steps recorded yet.</div>';
     }
 
-    // Event Summary Breakdown
+    // Event Summary Breakdown (Data Quality breakdown per event)
     if (report.eventSummaries && report.eventSummaries.length > 0) {
       let sumHtml = '';
       report.eventSummaries.forEach((sum) => {
+        const sev = sum.severity || 'valid';
         sumHtml += `
           <div class="audit-stacked-row">
             <div>
               <strong style="color: var(--text-main);">${escapeHtml(sum.displayName || sum.name)}</strong>
               <span style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">(${sum.detected} observed)</span>
             </div>
-            <span style="font-size: 11.5px; font-weight: 600; color: ${sum.duplicates > 0 ? 'var(--status-error)' : 'var(--status-success)'};">
-              ${escapeHtml(sum.audit)}
-            </span>
+            ${renderStatusBadge(sev, sum.audit)}
           </div>
         `;
       });
-      eventSummaryTableContainer.innerHTML = `<div class="audit-stacked-list">${sumHtml}</div>`;
+      eventSummaryTableContainer.innerHTML = '<div class="audit-stacked-list">' + sumHtml + '</div>';
     } else {
       eventSummaryTableContainer.innerHTML = '<div class="empty-state-sm">No events to summarize.</div>';
     }
@@ -936,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnClear.addEventListener('click', async () => {
     if (activeTab) {
       expandedEventIds.clear();
+      expandedPayloadEventIds.clear();
       expandedDlIndices.clear();
       await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
       await updateState();
@@ -946,32 +1089,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentTabState) return;
     const report = generateAuditReport(currentTabState);
     const md = [
-      `# OpenAI Ads Pixel Tracking & Journey Audit Report`,
-      `**Session ID:** ${report.sessionId || 'SESSION'}`,
-      `**Website:** ${report.hostname || report.website}`,
-      `**Generated:** ${report.generatedAt}`,
-      `**Status:** ${report.overallStatus.toUpperCase()}`,
-      ``,
-      `## 1. Pixel & Attribution Health`,
-      `- **Pixel Installed:** ${report.scores.pixelInstalled ? 'Yes' : 'No'}`,
-      `- **Pixel ID(s):** ${(report.scores.pixelIds || []).join(', ') || 'None'}`,
-      `- **Initialized:** ${report.scores.initialized ? 'Yes' : 'No'}`,
-      `- **oppref Detected:** ${report.scores.opprefPresent ? 'Yes' : 'No'}`,
-      `- **GTM Containers:** ${(report.gtmContainers || []).join(', ') || 'None'}`,
-      ``,
-      `## 2. E-Commerce Funnel Completion`,
-      `- **Funnel Completion:** ${report.funnel.completionPercentage}% (${report.funnel.completedCount}/5 steps)`,
-      `- **PII Privacy Violations:** ${report.scores.piiViolationsCount}`,
-      ``,
-      `## 3. Event Journey Summary`,
-      `- **Total Events:** ${report.scores.totalEvents}`,
-      `- **Standard Events:** ${report.scores.standardEvents}`,
-      `- **Custom Events:** ${report.scores.customEvents}`,
-      `- **Duplicate / Double Fires:** ${report.scores.duplicateEvents}`,
-      `- **Pages Visited:** ${report.scores.pagesVisitedCount}`,
-      ``,
-      `## 4. Issues & Recommendations`,
-      report.issues.length === 0 ? `*No issues found. Tracking implementation is clean!*` : report.issues.map((i) => `- **[${i.severity.toUpperCase()}] ${i.code}**: ${i.message}\n  *Recommendation:* ${i.recommendation || 'N/A'}`).join('\n')
+      '# OpenAI Ads Pixel Tracking & Journey Audit Report',
+      '**Session ID:** ' + (report.sessionId || 'SESSION'),
+      '**Website:** ' + (report.hostname || report.website),
+      '**Generated:** ' + report.generatedAt,
+      '**Status:** ' + report.overallStatus.toUpperCase(),
+      '',
+      '## 1. Pixel & Attribution Health',
+      '- **Pixel ID(s):** ' + ((report.scores.pixelIds || []).join(', ') || 'None'),
+      '- **Initialized:** ' + (report.scores.initialized ? 'Yes' : 'No'),
+      '- **oppref Detected:** ' + (report.scores.opprefPresent ? 'Yes' : 'No'),
+      '- **GTM Containers:** ' + ((report.gtmContainers || []).join(', ') || 'None'),
+      '',
+      '## 2. E-Commerce Funnel Completion',
+      '- **Funnel Completion:** ' + report.funnel.completionPercentage + '% (' + report.funnel.completedCount + '/5 steps)',
+      '- **PII Privacy Violations:** ' + report.scores.piiViolationsCount,
+      '',
+      '## 3. Event Journey Summary',
+      '- **Total Events:** ' + report.scores.totalEvents,
+      '- **Standard Events:** ' + report.scores.standardEvents,
+      '- **Custom Events:** ' + report.scores.customEvents,
+      '- **Duplicate / Double Fires:** ' + report.scores.duplicateEvents,
+      '- **Pages Visited:** ' + report.scores.pagesVisitedCount,
+      '',
+      '## 4. Issues & Recommendations',
+      report.issues.length === 0 ? '*No issues found. Tracking implementation is clean!*' : report.issues.map((i) => '- **[' + i.severity.toUpperCase() + '] ' + i.code + '**: ' + i.message + '\n  *Recommended fix:* ' + (i.recommendation || 'N/A')).join('\n')
     ].join('\n');
 
     copyToClipboard(md, btnCopyMarkdown);
@@ -999,23 +1141,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       rows.push([
         idx + 1,
         new Date(evt.timestamp).toISOString(),
-        `"${evt.displayName || evt.name}"`,
-        `"${evt.pathname || ''}"`,
-        `"${evt.eventId || 'Not Sent'}"`,
-        `"${evt.pixelId || ''}"`,
-        `"${evt.duplicateStatus || 'Clean'}"`,
+        '"' + (evt.displayName || evt.name) + '"',
+        '"' + (evt.pathname || '') + '"',
+        '"' + (evt.eventId || 'Not Sent') + '"',
+        '"' + (evt.pixelId || '') + '"',
+        '"' + (evt.isDuplicate ? 'Duplicate' : 'No duplicates') + '"',
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
-        `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`,
-        `"${evt.attribution.oppref || ''}"`
+        '"' + JSON.stringify(evt.parameters).replace(/"/g, '""') + '"',
+        '"' + (evt.attribution.oppref || '') + '"'
       ]);
     });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map((e) => e.join(',')).join('\n'));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', csvContent);
-    dlAnchor.setAttribute('download', `openai_pixel_audit_${Date.now()}.csv`);
+    dlAnchor.setAttribute('download', 'openai_pixel_audit_' + Date.now() + '.csv');
     dlAnchor.click();
   });
 
@@ -1028,11 +1170,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, null, 2));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', dataStr);
-    dlAnchor.setAttribute('download', `openai_pixel_audit_${Date.now()}.json`);
+    dlAnchor.setAttribute('download', 'openai_pixel_audit_' + Date.now() + '.json');
     dlAnchor.click();
   });
 
   // Initial Load and Polling interval
   await updateState();
-  setInterval(updateState, 1500);
+  setInterval(updateState, 2000);
 });

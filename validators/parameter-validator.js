@@ -228,7 +228,8 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         const mult = (curr === 'JPY' || curr === 'KRW') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
         
         if (mult > 1 && itemsTotalAmount * mult === allParams.amount) {
-          itemIssues.push(`Item amount in contents (${itemsTotalAmount}) was sent in major units. For ${curr}, OpenAI expects minor units: ${allParams.amount} (${itemsTotalAmount} × ${mult})!`);
+          const expectedMinor = allParams.amount;
+          itemIssues.push(`contents[0].amount: Received ${itemsTotalAmount} → Expected ${expectedMinor} (${curr} minor units)`);
         }
       }
 

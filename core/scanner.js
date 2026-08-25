@@ -251,6 +251,17 @@ export function generateAuditReport(tabState) {
     }
 
     // Build Journey Row
+    const paramResults = (evt.validation && evt.validation.parameterResults) ? Object.values(evt.validation.parameterResults) : [];
+    const paramErrors = paramResults.filter(r => r.severity === 'error' || r.valid === false).length;
+    const paramWarnings = paramResults.filter(r => r.severity === 'warning').length;
+
+    let paramAuditStatus = 'Valid parameters';
+    if (paramErrors > 0) {
+      paramAuditStatus = `${paramErrors} parameter error${paramErrors === 1 ? '' : 's'}`;
+    } else if (paramWarnings > 0) {
+      paramAuditStatus = `${paramWarnings} parameter warning${paramWarnings === 1 ? '' : 's'}`;
+    }
+
     summary.journeyTable.push({
       step: idx + 1,
       name: evt.displayName || evt.name,
@@ -262,7 +273,8 @@ export function generateAuditReport(tabState) {
       eventId: evt.eventId || 'Not Sent',
       parameters: evt.parameters || {},
       count: evt.requestCount || 1,
-      duplicateStatus: evt.duplicateStatus || 'Correct',
+      duplicateStatus: evt.isDuplicate ? 'Duplicate' : 'No duplicates',
+      paramAuditStatus: paramAuditStatus,
       auditStatus: evt.validation ? evt.validation.status : 'valid'
     });
 
@@ -275,21 +287,33 @@ export function generateAuditReport(tabState) {
         isCustom: isCustom,
         count: 0,
         duplicates: 0,
+        paramErrors: 0,
+        paramWarnings: 0,
         uniquePages: new Set()
       };
     }
     eventGroupMap[grpName].count++;
     if (evt.pathname) eventGroupMap[grpName].uniquePages.add(evt.pathname);
     if (evt.isDuplicate) eventGroupMap[grpName].duplicates++;
+    if (paramErrors > 0) eventGroupMap[grpName].paramErrors += paramErrors;
+    if (paramWarnings > 0) eventGroupMap[grpName].paramWarnings += paramWarnings;
   });
 
-  // Build Event Summaries
+  // Build Event Summaries (Accurate Data Quality Breakdown)
   summary.eventSummaries = Object.values(eventGroupMap).map((grp) => {
-    let auditMsg = 'Valid';
-    if (grp.duplicates > 0) {
-      auditMsg = `${grp.duplicates} duplicate(s) detected`;
+    let auditMsg = 'Triggered · Valid parameters';
+    let severity = 'valid';
+    if (grp.paramErrors > 0) {
+      auditMsg = `Triggered · ${grp.paramErrors} parameter error${grp.paramErrors === 1 ? '' : 's'}`;
+      severity = 'error';
+    } else if (grp.paramWarnings > 0) {
+      auditMsg = `Triggered · ${grp.paramWarnings} parameter warning${grp.paramWarnings === 1 ? '' : 's'}`;
+      severity = 'warning';
+    } else if (grp.duplicates > 0) {
+      auditMsg = `Triggered · ${grp.duplicates} duplicate(s)`;
+      severity = 'error';
     } else if (grp.name === 'page_viewed') {
-      auditMsg = `Valid across ${grp.uniquePages.size} page(s)`;
+      auditMsg = `Triggered · ${grp.uniquePages.size} page(s)`;
     }
     return {
       name: grp.name,
@@ -297,6 +321,9 @@ export function generateAuditReport(tabState) {
       isCustom: grp.isCustom,
       detected: grp.count,
       duplicates: grp.duplicates,
+      paramErrors: grp.paramErrors,
+      paramWarnings: grp.paramWarnings,
+      severity: severity,
       audit: auditMsg
     };
   });

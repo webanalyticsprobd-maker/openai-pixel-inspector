@@ -353,9 +353,18 @@ html, body {
 .nav-secondary {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 0 6px 0;
+  gap: 3px;
+  padding: 3px 0 6px 0;
   border-top: 1px solid var(--border-subtle);
+}
+
+.nav-secondary-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 4px;
 }
 
 .nav-tab-secondary {
@@ -393,6 +402,26 @@ html, body {
   border-radius: 3px;
   background: var(--status-error-bg);
   color: var(--status-error);
+}
+
+.copyable-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-tooltip-trigger {
+  display: inline-block;
+  cursor: help;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  vertical-align: middle;
+  transition: color 0.15s;
+}
+
+.info-tooltip-trigger:hover {
+  color: var(--accent-brand);
 }
 
 /* ==========================================================================
@@ -1074,7 +1103,18 @@ html, body {
 .dl-row-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.dl-chevron {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  transition: transform 0.15s ease;
+}
+
+.dl-row.open .dl-chevron {
+  transform: rotate(180deg);
 }
 
 .dl-time {
@@ -1085,12 +1125,22 @@ html, body {
 
 .dl-badge {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 3px;
-  background: var(--status-info-bg);
-  color: var(--status-info);
+}
+
+.dl-badge-core {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.dl-badge-custom {
+  background: var(--accent-brand-subtle);
+  color: var(--accent-brand);
+  border: 1px solid var(--accent-brand-border);
 }
 
 .dl-name {
@@ -1136,8 +1186,38 @@ html, body {
 }
 
 /* ==========================================================================
-   Issues Tab
+   Issues & Diagnostics Tab
    ========================================================================== */
+.issue-filter-chips {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.issue-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.issue-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.issue-chip.active {
+  background: var(--accent-brand-subtle);
+  border-color: var(--accent-brand-border);
+  color: var(--accent-brand);
+  font-weight: 600;
+}
+
 .issues-container {
   display: flex;
   flex-direction: column;
