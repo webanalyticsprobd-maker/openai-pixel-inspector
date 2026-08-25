@@ -121,7 +121,7 @@ body {
 
 /* Header */
 .app-header {
-  padding: 12px 14px 0;
+  padding: 12px 14px 4px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
@@ -131,7 +131,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .logo-group {
@@ -145,12 +145,20 @@ body {
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.brand-subtitle {
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  display: block;
+.brand-badge-pill {
+  background: #ea580c;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.3;
 }
 
 .header-actions {
@@ -181,16 +189,13 @@ body {
 .tab-target-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 6px 12px;
   background: var(--bg-primary);
-  border-radius: var(--radius-sm);
+  border-radius: 9999px;
   border: 1px solid var(--border-subtle);
-  margin-bottom: 8px;
-}
-
-.target-icon {
-  font-size: 13px;
+  margin-bottom: 10px;
 }
 
 .target-host {
@@ -207,53 +212,101 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Nav Tabs */
+/* ==========================================================================
+   Segmented Capsule / Pill Navigation Tabs
+   ========================================================================== */
+.nav-tabs-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-bottom: 8px;
+  width: 100%;
+}
+
 .nav-tabs {
   display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--border-subtle);
+  align-items: center;
+  gap: 6px;
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 2px 2px;
+  width: 100%;
+}
+
+.nav-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-tab {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 13px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 9px 12px;
+  padding: 6px 12px;
+  border-radius: 9999px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  border-bottom: 2px solid transparent;
+  gap: 6px;
   transition: all 0.15s ease;
   white-space: nowrap;
   font-family: var(--font-sans);
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .nav-tab:hover {
-  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .nav-tab.active {
-  color: var(--accent-emerald);
-  border-bottom-color: var(--accent-emerald);
+  background: #ea580c;
+  color: #ffffff;
+  border-color: #c2410c;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
 }
 
-.tab-count {
+.nav-tab.active .tab-icon {
+  color: #ffffff;
+}
+
+.nav-tab.active .tab-pill-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.tab-pill-badge {
   font-size: 11px;
   font-family: var(--font-mono);
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 9999px;
-  background: var(--bg-surface-elevated);
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-surface);
   color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  line-height: 1.2;
+  min-width: 16px;
+  text-align: center;
 }
 
-.tab-count-error {
-  background: rgba(244, 63, 94, 0.2);
+.tab-pill-badge-error {
+  background: rgba(244, 63, 94, 0.15);
   color: var(--color-rose);
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+.tab-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.nav-tab.active .tab-icon {
+  opacity: 1;
 }
 
 /* Main Area */

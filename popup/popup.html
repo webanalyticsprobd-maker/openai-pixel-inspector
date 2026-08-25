@@ -12,13 +12,14 @@
 <body>
   <div class="app-container">
     <!-- Header -->
+    <!-- Header -->
     <header class="app-header">
       <div class="brand-row">
         <div class="logo-group">
-          <img src="../icons/icon48.png" width="28" height="28" style="border-radius: 50%; display: block;" alt="OpenAI Logo">
-          <div>
-            <h1 class="brand-title">OpenAI Pixel Inspector</h1>
-            <span class="brand-subtitle">Real-Time Tracking & Journey Audit</span>
+          <img src="../icons/icon48.png" width="24" height="24" style="border-radius: 50%; display: block;" alt="OpenAI Logo">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <h1 class="brand-title">OpenAI Pixel</h1>
+            <span class="brand-badge-pill">Debugger</span>
           </div>
         </div>
         <div class="header-actions">
@@ -39,25 +40,49 @@
         </div>
       </div>
 
-      <!-- Tab Target Banner -->
+      <!-- Tab Target Banner (Pill Style) -->
       <div class="tab-target-bar">
-        <span class="target-icon">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        </span>
         <span id="target-host" class="target-host truncate">Loading active tab...</span>
         <span id="badge-tab-id" class="badge badge-subtle">Tab #--</span>
       </div>
 
-      <!-- Navigation Tabs -->
-      <nav class="nav-tabs">
-        <button class="nav-tab active" data-tab="overview">Overview</button>
-        <button class="nav-tab" data-tab="events">Events <span class="tab-count" id="tab-count-events">0</span></button>
-        <button class="nav-tab" data-tab="funnel">Funnel <span class="tab-count" id="tab-count-funnel">0/5</span></button>
-        <button class="nav-tab" data-tab="datalayer">Data Layer <span class="tab-count" id="tab-count-datalayer">0</span></button>
-        <button class="nav-tab" data-tab="attribution">oppref</button>
-        <button class="nav-tab" data-tab="issues">Issues <span class="tab-count tab-count-error" id="tab-count-issues">0</span></button>
-        <button class="nav-tab" data-tab="audit">Journey Audit</button>
-      </nav>
+      <!-- Segmented Pill Navigation Tabs -->
+      <div class="nav-tabs-wrapper">
+        <nav class="nav-tabs" id="nav-tabs-scroll">
+          <button class="nav-tab active" data-tab="overview">
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>Overview</span>
+          </button>
+          <button class="nav-tab" data-tab="events">
+            <span class="tab-pill-badge" id="tab-count-events">0</span>
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Events</span>
+          </button>
+          <button class="nav-tab" data-tab="funnel">
+            <span class="tab-pill-badge" id="tab-count-funnel">0/5</span>
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span>Funnel</span>
+          </button>
+          <button class="nav-tab" data-tab="datalayer">
+            <span class="tab-pill-badge" id="tab-count-datalayer">0</span>
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            <span>Data Layer</span>
+          </button>
+          <button class="nav-tab" data-tab="attribution">
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            <span>oppref</span>
+          </button>
+          <button class="nav-tab" data-tab="issues">
+            <span class="tab-pill-badge tab-pill-badge-error" id="tab-count-issues">0</span>
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Issues</span>
+          </button>
+          <button class="nav-tab" data-tab="audit">
+            <svg class="tab-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span>Audit</span>
+          </button>
+        </nav>
+      </div>
     </header>
 
     <!-- Main Content Area -->
