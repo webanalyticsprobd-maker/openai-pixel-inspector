@@ -677,3 +677,197 @@ export function formatAuditMarkdown(report) {
 
   return lines.join('\n');
 }
+
+/**
+ * Formats full 14-section comprehensive audit report into standard multi-section CSV format
+ */
+export function formatAuditCsv(report, tabState = {}) {
+  const sections = [];
+
+  const escapeCsv = (str) => {
+    if (str === null || str === undefined) return '""';
+    const s = String(str).replace(/"/g, '""');
+    return '"' + s + '"';
+  };
+
+  // Section 1: Executive Audit Summary
+  sections.push(['# 1. EXECUTIVE AUDIT SUMMARY', '', '', '', '', '', '', '', '', '']);
+  sections.push(['Website', 'Audit Date', 'Overall Health Score', 'Overall Status', 'Total Events', 'Standard Events', 'Custom Events', 'Passed', 'Warnings', 'Critical Issues'].map(escapeCsv));
+  sections.push([
+    report.website,
+    report.auditDate,
+    report.overallHealthScore + '%',
+    report.overallStatus,
+    report.counts.total,
+    report.counts.standard,
+    report.counts.custom,
+    report.counts.passed,
+    report.counts.warnings,
+    report.counts.critical
+  ].map(escapeCsv));
+  sections.push([]);
+
+  // Section 2: Event Tracking Overview
+  sections.push(['# 2. EVENT TRACKING OVERVIEW', '', '', '', '', '', '']);
+  sections.push(['Event Name', 'Classification Type', 'Trigger Status', 'Parameters Status', 'Duplicate Status', 'Occurrences', 'Overall Status'].map(escapeCsv));
+  if (report.overviewTable && report.overviewTable.length > 0) {
+    report.overviewTable.forEach(row => {
+      sections.push([
+        row.name,
+        row.type,
+        row.trigger,
+        row.parameters,
+        row.duplicate,
+        row.occurrences,
+        row.status
+      ].map(escapeCsv));
+    });
+  } else {
+    sections.push(['No events detected', '-', '-', '-', '-', '0', '-'].map(escapeCsv));
+  }
+  sections.push([]);
+
+  // Section 3: Tracking Health Category Scores
+  sections.push(['# 3. TRACKING HEALTH CATEGORY SCORES', '', '', '']);
+  sections.push(['Pillar / Category', 'Score (%)', 'Target', 'Status'].map(escapeCsv));
+  sections.push(['Overall Tracking Health', report.overallHealthScore + '%', '100%', report.overallHealthScore >= 80 ? 'Optimal' : 'Needs Improvement'].map(escapeCsv));
+  sections.push(['Event Coverage', report.scores.coverage + '%', '100%', report.scores.coverage >= 80 ? 'Optimal' : 'Warning'].map(escapeCsv));
+  sections.push(['Event Payload Quality', report.scores.payloadQuality + '%', '100%', report.scores.payloadQuality >= 80 ? 'Optimal' : 'Warning'].map(escapeCsv));
+  sections.push(['Ecommerce Data Quality', report.scores.ecommerceData + '%', '100%', report.scores.ecommerceData >= 80 ? 'Optimal' : 'Warning'].map(escapeCsv));
+  sections.push(['Parameter Quality', report.scores.parameterQuality + '%', '100%', report.scores.parameterQuality >= 80 ? 'Optimal' : 'Warning'].map(escapeCsv));
+  sections.push(['Duplicate Prevention', report.scores.duplicatePrevention + '%', '100%', report.scores.duplicatePrevention >= 80 ? 'Optimal' : 'Warning'].map(escapeCsv));
+  sections.push(['Custom Event Quality', report.scores.customEventQuality + '%', '100%', report.scores.customEventQuality >= 80 ? 'Optimal' : 'Warning'].map(escapeCsv));
+  sections.push([]);
+
+  // Section 4-9: Dynamic Event & Parameter Validations
+  sections.push(['# 4-9. DYNAMIC EVENT & PARAMETER VALIDATION DETAILS', '', '', '', '', '']);
+  sections.push(['Event Name', 'Event Type', 'Parameter Name', 'Received Value', 'Validation Status', 'Finding / Diagnostic Message'].map(escapeCsv));
+  if (report.eventDetails && report.eventDetails.length > 0) {
+    report.eventDetails.forEach(evt => {
+      if (evt.parameters && evt.parameters.length > 0) {
+        evt.parameters.forEach(p => {
+          sections.push([
+            evt.name,
+            evt.type,
+            p.parameter,
+            p.value,
+            p.status.toUpperCase(),
+            p.message || ''
+          ].map(escapeCsv));
+        });
+      } else {
+        sections.push([
+          evt.name,
+          evt.type,
+          '(No parameters)',
+          '-',
+          evt.status.toUpperCase(),
+          evt.finding || ''
+        ].map(escapeCsv));
+      }
+    });
+  }
+  sections.push([]);
+
+  // Section 10: Contents Array Inspection
+  sections.push(['# 10. CONTENTS[] ARRAY INSPECTION', '', '', '', '', '', '', '', '']);
+  sections.push(['Event Name', 'Item Index', 'Item ID', 'Item Name', 'Quantity', 'Amount', 'Currency', 'Validation Status', 'Diagnostic Message'].map(escapeCsv));
+  let hasContents = false;
+  if (report.eventDetails && report.eventDetails.length > 0) {
+    report.eventDetails.forEach(evt => {
+      if (evt.contents && evt.contents.length > 0) {
+        hasContents = true;
+        evt.contents.forEach(c => {
+          sections.push([
+            evt.name,
+            c.itemIndex,
+            c.id,
+            c.name,
+            c.quantity,
+            c.amount !== null ? c.amount : '',
+            c.currency || '',
+            c.status.toUpperCase(),
+            c.message || ''
+          ].map(escapeCsv));
+        });
+      }
+    });
+  }
+  if (!hasContents) {
+    sections.push(['No contents items detected in session events', '-', '-', '-', '-', '-', '-', '-', '-'].map(escapeCsv));
+  }
+  sections.push([]);
+
+  // Section 11: Duplicate Event Inspection Log
+  sections.push(['# 11. DUPLICATE EVENT INSPECTION LOG', '', '', '', '']);
+  sections.push(['Event Name', 'Occurrences', 'Duplicate Detected', 'Finding', 'Recommendation'].map(escapeCsv));
+  if (report.eventDetails && report.eventDetails.length > 0) {
+    report.eventDetails.forEach(evt => {
+      sections.push([
+        evt.name,
+        evt.occurrences,
+        evt.duplicateCheck ? 'No (Passed)' : 'Yes (Failed)',
+        evt.finding,
+        evt.recommendation
+      ].map(escapeCsv));
+    });
+  }
+  sections.push([]);
+
+  // Section 12: Issues Found by Severity
+  sections.push(['# 12. ISSUES FOUND BY SEVERITY', '', '', '', '', '']);
+  sections.push(['Severity', 'Issue Code', 'Event Name', 'Parameter', 'Diagnostic Message', 'Fix Recommendation'].map(escapeCsv));
+  ['critical', 'high', 'warning'].forEach(sev => {
+    (report.issues[sev] || []).forEach(iss => {
+      sections.push([
+        sev.toUpperCase(),
+        iss.code,
+        iss.event || '-',
+        iss.parameter || '-',
+        iss.message,
+        iss.recommendation || '-'
+      ].map(escapeCsv));
+    });
+  });
+  sections.push([]);
+
+  // Section 13: Recommended Actions
+  sections.push(['# 13. RECOMMENDED ACTIONS CHECKLIST', '', '']);
+  sections.push(['Step #', 'Priority', 'Action Description'].map(escapeCsv));
+  if (report.recommendations && report.recommendations.length > 0) {
+    report.recommendations.forEach((rec, i) => {
+      sections.push([
+        i + 1,
+        i === 0 ? 'High' : 'Medium',
+        rec
+      ].map(escapeCsv));
+    });
+  } else {
+    sections.push(['1', 'Low', 'No outstanding tracking actions required. Implementation is healthy.'].map(escapeCsv));
+  }
+  sections.push([]);
+
+  // Section 14: Raw Event Telemetry Stream
+  sections.push(['# 14. RAW EVENT TELEMETRY STREAM', '', '', '', '', '', '', '', '', '']);
+  sections.push(['Timestamp', 'Event Name', 'Type', 'Page Path', 'Event ID', 'Pixel ID', 'Amount', 'Currency', 'oppref Attribution', 'Parameters JSON'].map(escapeCsv));
+  if (tabState && tabState.events && tabState.events.length > 0) {
+    tabState.events.forEach(evt => {
+      const p = evt.parameters || {};
+      sections.push([
+        new Date(evt.timestamp).toISOString(),
+        evt.displayName || evt.name || '',
+        classifyEventType(evt.displayName || evt.name || ''),
+        evt.pathname || '',
+        evt.eventId || 'Not Sent',
+        evt.pixelId || '',
+        p.amount !== undefined ? p.amount : '',
+        p.currency || '',
+        evt.attribution?.oppref || '',
+        JSON.stringify(p)
+      ].map(escapeCsv));
+    });
+  }
+  sections.push([]);
+
+  return '\uFEFF' + sections.map(r => r.join(',')).join('\r\n');
+}

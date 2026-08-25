@@ -4,7 +4,7 @@
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
-import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown } from '../core/scanner.js';
+import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown, formatAuditCsv } from '../core/scanner.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
@@ -79,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const auditOverviewCount = document.getElementById('audit-overview-count');
   const auditOverviewTableContainer = document.getElementById('audit-overview-table-container');
   const auditScoresGrid = document.getElementById('audit-scores-grid');
-  const auditEventDetailsContainer = document.getElementById('audit-event-details-container');
   const auditActionsContainer = document.getElementById('audit-actions-container');
   const btnCopyMarkdown = document.getElementById('btn-copy-markdown');
   const btnExportPdf = document.getElementById('btn-export-pdf');
@@ -1150,115 +1149,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       `;
     }
 
-    // 4. Dynamic Event Details Section
-    if (auditEventDetailsContainer) {
-      if (report.eventDetails.length === 0) {
-        auditEventDetailsContainer.innerHTML = '<div class="empty-state-sm">No event details available.</div>';
-      } else {
-        let detailsHtml = '';
-        report.eventDetails.forEach((evt) => {
-          let paramsHtml = '';
-          if (evt.parameters && evt.parameters.length > 0) {
-            paramsHtml = `
-              <div style="margin-top: 4px;">
-                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Parameters (${evt.parameters.length})</span>
-                <table class="audit-inner-table">
-                  <thead>
-                    <tr>
-                      <th>Parameter</th>
-                      <th>Value</th>
-                      <th style="text-align:center;">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${evt.parameters.map(p => `
-                      <tr>
-                        <td><code>${escapeHtml(p.parameter)}</code></td>
-                        <td><code class="truncate" style="max-width: 140px;">${escapeHtml(p.value)}</code></td>
-                        <td style="text-align:center;">${p.status === 'valid' ? '✅' : (p.status === 'warning' ? '⚠️' : '❌')}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
-            `;
-          }
-
-          let contentsHtml = '';
-          if (evt.contents && evt.contents.length > 0) {
-            contentsHtml = `
-              <div style="margin-top: 6px;">
-                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Contents Items (${evt.contents.length})</span>
-                <table class="audit-inner-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>ID</th>
-                      <th>Name</th>
-                      <th>Qty</th>
-                      <th>Amount</th>
-                      <th>Curr</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${evt.contents.map(c => `
-                      <tr>
-                        <td>${c.itemIndex}</td>
-                        <td><code>${escapeHtml(c.id)}</code></td>
-                        <td>${escapeHtml(c.name)}</td>
-                        <td>${c.quantity}</td>
-                        <td>${c.amount !== null ? c.amount : '-'}</td>
-                        <td>${c.currency}</td>
-                        <td>${c.status === 'valid' ? '✅' : '❌'}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
-            `;
-          }
-
-          detailsHtml += `
-            <div class="audit-event-card">
-              <div class="audit-event-header">
-                <div class="audit-event-title-group">
-                  <strong class="audit-event-name">${escapeHtml(evt.name)}</strong>
-                  <span class="audit-event-type-badge badge-type-${evt.type.toLowerCase()}">${evt.type}</span>
-                </div>
-                <span class="badge ${evt.severity === 'valid' ? 'badge-success' : (evt.severity === 'warning' ? 'badge-warning' : 'badge-error')}">
-                  ${evt.status === 'Passed' ? '✅ Passed' : (evt.status === 'Warning' ? '⚠️ Warning' : '❌ Issue')}
-                </span>
-              </div>
-
-              <div class="audit-event-checks-grid">
-                <div class="audit-check-item">
-                  <span>Occurrences:</span> <strong>${evt.occurrences}</strong>
-                </div>
-                <div class="audit-check-item">
-                  <span>Trigger:</span> ${evt.trigger ? '✅' : '❌'}
-                </div>
-                <div class="audit-check-item">
-                  <span>Duplicate:</span> ${evt.duplicateCheck ? '✅ Passed' : '❌ Failed'}
-                </div>
-              </div>
-
-              <div class="audit-finding-box">
-                <strong>Finding:</strong> ${escapeHtml(evt.finding)}
-              </div>
-              <div class="audit-rec-box">
-                <strong>Recommendation:</strong> ${escapeHtml(evt.recommendation)}
-              </div>
-
-              ${paramsHtml}
-              ${contentsHtml}
-            </div>
-          `;
-        });
-        auditEventDetailsContainer.innerHTML = detailsHtml;
-      }
-    }
-
     // 12. Issues & 13. Recommended Actions Section
     if (auditActionsContainer) {
       let actionsHtml = '';
@@ -1274,7 +1164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         `;
       } else {
-        actionsHtml = '<div class="empty-state-sm">No outstanding actions required.</div>';
+        actionsHtml = '<div class="empty-state-sm">No outstanding actions required. Implementation is healthy.</div>';
       }
       auditActionsContainer.innerHTML = actionsHtml;
     }
@@ -1317,70 +1207,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (btnExportCsv) {
     btnExportCsv.addEventListener('click', () => {
-      if (!currentTabState || !currentTabState.events) return;
-    const headers = [
-      'Event Name',
-      'Event Type',
-      'Trigger Status',
-      'Parameters Status',
-      'Duplicate Status',
-      'Overall Status',
-      'Timestamp',
-      'Page Path',
-      'Event ID',
-      'Pixel ID',
-      'Amount',
-      'Currency',
-      'Parameters JSON',
-      'oppref'
-    ];
+      if (!currentTabState) return;
+      const report = generateComprehensiveAudit(currentTabState);
+      const csvContent = formatAuditCsv(report, currentTabState);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const filename = 'openai_pixel_audit_' + Date.now() + '.csv';
+      const blobUrl = URL.createObjectURL(blob);
 
-    const rows = [headers];
-
-    currentTabState.events.forEach((evt) => {
-      const p = evt.parameters || {};
-      const evtName = evt.displayName || evt.name || 'unnamed';
-      rows.push([
-        '"' + evtName.replace(/"/g, '""') + '"',
-        '"' + classifyEventType(evtName) + '"',
-        '"Detected"',
-        (evt.validation && evt.validation.issues && evt.validation.issues.length > 0) ? '"Suboptimal"' : '"Valid"',
-        '"' + (evt.isDuplicate ? 'Duplicate' : 'No duplicates') + '"',
-        evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
-        new Date(evt.timestamp).toISOString(),
-        '"' + (evt.pathname || '').replace(/"/g, '""') + '"',
-        '"' + (evt.eventId || 'Not Sent').replace(/"/g, '""') + '"',
-        '"' + (evt.pixelId || '').replace(/"/g, '""') + '"',
-        p.amount !== undefined ? p.amount : '',
-        p.currency || '',
-        '"' + JSON.stringify(p).replace(/"/g, '""') + '"',
-        '"' + (evt.attribution?.oppref || '').replace(/"/g, '""') + '"'
-      ]);
-    });
-
-    const csvContent = '\uFEFF' + rows.map((e) => e.join(',')).join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const filename = 'openai_pixel_audit_' + Date.now() + '.csv';
-    const blobUrl = URL.createObjectURL(blob);
-
-    if (typeof chrome !== 'undefined' && chrome.downloads && chrome.downloads.download) {
-      chrome.downloads.download({
-        url: blobUrl,
-        filename: filename,
-        saveAs: true
-      }, () => {
+      if (typeof chrome !== 'undefined' && chrome.downloads && chrome.downloads.download) {
+        chrome.downloads.download({
+          url: blobUrl,
+          filename: filename,
+          saveAs: true
+        }, () => {
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        });
+      } else {
+        const dlAnchor = document.createElement('a');
+        dlAnchor.href = blobUrl;
+        dlAnchor.download = filename;
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        document.body.removeChild(dlAnchor);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-      });
-    } else {
-      const dlAnchor = document.createElement('a');
-      dlAnchor.href = blobUrl;
-      dlAnchor.download = filename;
-      document.body.appendChild(dlAnchor);
-      dlAnchor.click();
-      document.body.removeChild(dlAnchor);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    }
-  });
+      }
+    });
+  }
 
   if (btnExportPdf) {
     btnExportPdf.addEventListener('click', () => {
