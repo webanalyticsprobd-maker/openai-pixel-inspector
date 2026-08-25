@@ -117,8 +117,8 @@
 }
 
 html, body {
-  width: 440px;
-  min-height: 540px;
+  width: 480px;
+  min-height: 560px;
   max-height: 600px;
   background-color: var(--bg-app);
   color: var(--text-main);
@@ -797,6 +797,7 @@ html, body {
 /* Parameter Table */
 .param-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -811,6 +812,7 @@ html, body {
   border-bottom: 1px solid var(--border-subtle);
   font-size: 12px;
   vertical-align: top;
+  box-sizing: border-box;
 }
 
 .param-table tr:last-child td {
@@ -831,12 +833,15 @@ html, body {
   color: var(--text-main);
   font-size: 11.5px;
   font-weight: 600;
-  width: 28%;
+  width: 22%;
+  word-break: break-word;
 }
 
 .param-val-cell {
   color: var(--text-main);
-  width: 54%;
+  width: 53%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .param-scalar-val {
@@ -851,6 +856,8 @@ html, body {
   flex-direction: column;
   gap: 3px;
   margin: 2px 0;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .param-code-tag {
@@ -870,16 +877,20 @@ html, body {
   font-size: 11px;
   line-height: 1.45;
   color: var(--text-main);
-  max-height: 160px;
+  max-height: 150px;
+  max-width: 100%;
+  overflow-x: auto;
   overflow-y: auto;
   white-space: pre;
   tab-size: 2;
   margin: 0;
+  box-sizing: border-box;
 }
 
 .param-status-cell {
   text-align: right;
-  width: 18%;
+  width: 25%;
+  white-space: nowrap;
 }
 
 .payload-details {
