@@ -12,6 +12,7 @@ import {
   CUSTOM_EVENT_RULES
 } from './schemas.js';
 import { validateParameter } from './parameter-validator.js';
+import { scanForPii } from './pii-scanner.js';
 
 export function validateEvent(event) {
   let eventName = event.name || event.eventName || '';
@@ -43,6 +44,7 @@ export function validateEvent(event) {
     dataShape: schema.dataShape || 'contents',
     parameterResults: {},
     issues: [],
+    piiIssues: [],
     errorsCount: 0,
     warningsCount: 0,
     infoCount: 0
@@ -170,7 +172,31 @@ export function validateEvent(event) {
     }
   }
 
-  // 5. Compute Final Validation Status
+  // 5. Scan Payload & Parameters for Unhashed PII Privacy Violations
+  const detectedPii = scanForPii(parameters);
+  if (detectedPii.length > 0) {
+    validation.piiIssues = detectedPii;
+    detectedPii.forEach((pii) => {
+      validation.warningsCount++;
+      validation.issues.push({
+        code: `PII_PRIVACY_${pii.type.toUpperCase()}`,
+        severity: pii.severity || 'warning',
+        event: eventName,
+        parameter: pii.path,
+        message: pii.message,
+        recommendation: pii.recommendation
+      });
+
+      // Update parameter result with PII alert
+      const rootParam = pii.path.split('.')[0].replace(/\[.*\]/, '');
+      if (validation.parameterResults[rootParam]) {
+        validation.parameterResults[rootParam].pii = true;
+        validation.parameterResults[rootParam].piiDetails = pii;
+      }
+    });
+  }
+
+  // 6. Compute Final Validation Status
   if (validation.errorsCount > 0) {
     validation.status = 'error';
   } else if (validation.warningsCount > 0) {

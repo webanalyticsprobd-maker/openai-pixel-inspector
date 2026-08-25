@@ -40,7 +40,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const latestEventContent = document.getElementById('latest-event-content');
   const latestEventTime = document.getElementById('latest-event-time');
 
+  // Tab counters
   const tabCountEvents = document.getElementById('tab-count-events');
+  const tabCountFunnel = document.getElementById('tab-count-funnel');
+  const tabCountDatalayer = document.getElementById('tab-count-datalayer');
   const tabCountNetwork = document.getElementById('tab-count-network');
   const tabCountIssues = document.getElementById('tab-count-issues');
 
@@ -48,6 +51,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   const eventSearchInput = document.getElementById('event-search-input');
   const filterChips = document.querySelectorAll('.filter-chip');
   const eventsListContainer = document.getElementById('events-list-container');
+
+  // Funnel Tab elements
+  const funnelRateBadge = document.getElementById('funnel-rate-badge');
+  const funnelPipelineContainer = document.getElementById('funnel-pipeline-container');
+  const capiStatusBadge = document.getElementById('capi-status-badge');
+  const capiStatusRows = document.getElementById('capi-status-rows');
+
+  // Data Layer Tab elements
+  const gtmContainerBadge = document.getElementById('gtm-container-badge');
+  const gtmContainerPills = document.getElementById('gtm-container-pills');
+  const datalayerListContainer = document.getElementById('datalayer-list-container');
 
   // Network Tab elements
   const networkListContainer = document.getElementById('network-list-container');
@@ -256,6 +270,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentTabState) return;
     renderOverview();
     renderEvents();
+    renderFunnel();
+    renderDataLayer();
     renderNetwork();
     renderAttribution();
     renderIssues();
@@ -268,6 +284,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const stats = currentTabState.stats || {};
     const events = currentTabState.events || [];
     const network = currentTabState.network || [];
+    const dataLayer = currentTabState.dataLayer || [];
+    const report = generateAuditReport(currentTabState);
 
     if (pixel.detected) {
       valPixelDetected.innerHTML = `<span style="color:var(--color-emerald); font-weight:600;">Detected (${escapeHtml(pixel.confidence || 'high')})</span>`;
@@ -286,11 +304,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
     metricCustomEvents.textContent = stats.customEvents || 0;
-    metricIssuesEvents.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0);
+    metricIssuesEvents.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0);
 
     tabCountEvents.textContent = stats.totalEvents || 0;
+    tabCountFunnel.textContent = `${report.funnel.completedCount}/5`;
+    tabCountDatalayer.textContent = dataLayer.length || 0;
     tabCountNetwork.textContent = network.length || 0;
-    tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0);
+    tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0);
 
     if (events.length > 0) {
       const latest = events[events.length - 1];
@@ -373,7 +393,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Compute Separate 5-Stage Lifecycle
       const lifecycle = computeEventLifecycle(evt);
 
-      // Build Parameter Table Rows with Clean Severity Badges
+      // Build Parameter Table Rows with Clean Severity Badges & PII Warnings
       let paramRows = '';
       const params = evt.parameters || {};
       for (const [key, val] of Object.entries(params)) {
@@ -392,6 +412,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           paramLabel = 'Info';
         }
 
+        let piiBadge = '';
+        if (valRes.pii && valRes.piiDetails) {
+          piiBadge = `<span class="badge-pii" title="${escapeHtml(valRes.piiDetails.message)}">PII: ${valRes.piiDetails.type}</span>`;
+        }
+
         const paramStatusBadge = renderStatusBadge(paramSeverity, paramLabel, valRes.message);
 
         let displayVal = '';
@@ -403,7 +428,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         paramRows += `
           <tr>
-            <td>${escapeHtml(key)}</td>
+            <td>${escapeHtml(key)} ${piiBadge}</td>
             <td>${displayVal}</td>
             <td style="text-align:center;">${paramStatusBadge}</td>
           </tr>
@@ -500,7 +525,132 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 8. Network Monitor Renderer
+  // 8. Funnel & CAPI Deduplication Renderer
+  // ==========================================
+  function renderFunnel() {
+    if (!currentTabState) return;
+    const report = generateAuditReport(currentTabState);
+    const funnel = report.funnel;
+    const capi = report.capiDeduplication;
+
+    funnelRateBadge.textContent = `${funnel.completionPercentage}% Completed (${funnel.completedCount}/5)`;
+    funnelRateBadge.className = funnel.completionPercentage === 100 ? 'badge badge-success' : (funnel.completionPercentage > 0 ? 'badge badge-warning' : 'badge badge-neutral');
+
+    let funnelHtml = '';
+    funnel.steps.forEach((step) => {
+      const isDone = step.detected;
+      const statusPill = isDone ? renderStatusBadge('valid', 'Reached') : renderStatusBadge('neutral', 'Not Triggered');
+      const timeStr = step.latestTimestamp ? formatTimestamp(step.latestTimestamp) : '--:--:--';
+      const eventIdStr = step.hasEventId ? `<code>${escapeHtml(step.eventId)}</code>` : '<span style="color:var(--text-muted)">Not Sent</span>';
+
+      funnelHtml += `
+        <div class="funnel-step-card ${isDone ? 'completed' : 'pending'}">
+          <div class="funnel-step-left">
+            <span class="funnel-step-num">${step.stepNumber}</span>
+            <div class="funnel-step-info">
+              <span class="funnel-step-name">${escapeHtml(step.label)}</span>
+              <span class="funnel-step-sub">
+                Event ID: ${eventIdStr} ${step.hasAmount ? ' • Amount Set' : ''} ${step.hasCurrency ? ' • Currency Set' : ''}
+              </span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="text-muted font-mono" style="font-size: 11.5px;">${timeStr}</span>
+            ${statusPill}
+          </div>
+        </div>
+      `;
+    });
+    funnelPipelineContainer.innerHTML = funnelHtml;
+
+    // Render CAPI Status Rows
+    capiStatusBadge.textContent = capi.isCapiReady ? 'CAPI Ready (Low Risk)' : (capi.status === 'warning' ? 'Partial Coverage' : 'High Risk');
+    capiStatusBadge.className = capi.isCapiReady ? 'badge badge-success' : (capi.status === 'warning' ? 'badge badge-warning' : 'badge badge-error');
+
+    capiStatusRows.innerHTML = `
+      <div class="status-row">
+        <span class="status-label">Conversion Events Tracked</span>
+        <span class="status-val font-mono">${capi.conversionEventsCount} event(s)</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Events with event_id</span>
+        <span class="status-val font-mono">${capi.eventsWithEventId} / ${capi.conversionEventsCount} (${capi.coverageScore}%)</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Duplicate event_id Collisions</span>
+        <span class="status-val font-mono">${capi.duplicateEventIds.length > 0 ? `<span style="color:var(--color-rose); font-weight:600;">${capi.duplicateEventIds.length} duplicate(s)</span>` : '<span style="color:var(--color-emerald); font-weight:600;">0 (Clean)</span>'}</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Deduplication Assessment</span>
+        <span class="status-val">${capi.isCapiReady ? '<span style="color:var(--color-emerald); font-weight:600;">Safe for Server-Side CAPI</span>' : '<span style="color:var(--color-rose); font-weight:600;">Risk of Double Counting</span>'}</span>
+      </div>
+    `;
+  }
+
+  // ==========================================
+  // 9. GTM & Data Layer Renderer
+  // ==========================================
+  function renderDataLayer() {
+    if (!currentTabState) return;
+    const gtmContainers = currentTabState.gtmContainers || [];
+    const dataLayerEvents = currentTabState.dataLayer || [];
+
+    if (gtmContainers.length > 0) {
+      gtmContainerBadge.textContent = `${gtmContainers.length} Container(s)`;
+      gtmContainerBadge.className = 'badge badge-success';
+      gtmContainerPills.innerHTML = gtmContainers.map((gId) => `<span class="gtm-pill">${escapeHtml(gId)}</span>`).join(' ');
+    } else {
+      gtmContainerBadge.textContent = 'None Detected';
+      gtmContainerBadge.className = 'badge badge-neutral';
+      gtmContainerPills.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No Google Tag Manager containers detected on page.</span>';
+    }
+
+    if (dataLayerEvents.length === 0) {
+      datalayerListContainer.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">${ICONS.emptyEvents}</span>
+          <p class="empty-text">No window.dataLayer pushes captured.</p>
+          <span class="empty-subtext">Events pushed to window.dataLayer will appear here in real time.</span>
+        </div>
+      `;
+      return;
+    }
+
+    datalayerListContainer.innerHTML = '';
+    dataLayerEvents.slice().reverse().forEach((dl, idx) => {
+      const card = document.createElement('div');
+      card.className = 'network-card';
+
+      const evtName = dl.event || dl.data?.event || 'dataLayer.push';
+      const timeStr = formatTimestamp(dl.timestamp);
+
+      card.innerHTML = `
+        <div class="network-header">
+          <div class="network-method-group">
+            <span class="badge-post" style="background: rgba(56, 189, 248, 0.15); color: var(--color-blue);">GTM DL</span>
+            <span style="font-weight: 600; font-size: 13px;">${escapeHtml(evtName)}</span>
+          </div>
+          <span class="text-muted font-mono" style="font-size: 11.5px;">${timeStr}</span>
+        </div>
+        <div class="network-meta" style="margin-top: 4px;">
+          <span>Keys: <code>${Object.keys(dl.data || {}).join(', ')}</code></span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+          <button class="btn btn-secondary btn-xs btn-inspect-dl-raw">Inspect Push Payload</button>
+        </div>
+      `;
+
+      const dlRawBtn = card.querySelector('.btn-inspect-dl-raw');
+      dlRawBtn.addEventListener('click', () => {
+        openRawModal(`dataLayer: ${evtName}`, dl.data || dl);
+      });
+
+      datalayerListContainer.appendChild(card);
+    });
+  }
+
+  // ==========================================
+  // 10. Network Monitor Renderer
   // ==========================================
   function renderNetwork() {
     if (!currentTabState) return;
@@ -533,7 +683,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusBadge = `<span class="badge badge-error">Blocked</span>`;
       }
 
-      // Extract Event Name if present in payload
       const evtName = req.payload?.name || req.payload?.event_name || req.payload?.event || 'Measurement Signal';
       const cleanUrl = req.url ? truncateString(req.url.replace(/^https?:\/\//, ''), 45) : 'bzr.openai.com/v1/sdk/events';
 
@@ -650,6 +799,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div><strong>Target Host:</strong> ${escapeHtml(report.hostname || 'Unknown')}</div>
       <div><strong>Visited Pages:</strong> ${report.scores.pagesVisitedCount} page(s) in session</div>
       <div><strong>Total Events Recorded:</strong> ${report.scores.totalEvents} (${report.scores.standardEvents} Standard, ${report.scores.customEvents} Custom)</div>
+      <div><strong>Funnel Completion:</strong> ${report.funnel.completionPercentage}% (${report.funnel.completedCount}/5 steps)</div>
+      <div><strong>CAPI Deduplication:</strong> ${report.capiDeduplication.isCapiReady ? '<span style="color:var(--color-emerald); font-weight:600;">100% Ready</span>' : '<span style="color:var(--color-rose); font-weight:600;">Risk Detected</span>'}</div>
+      <div><strong>PII Privacy Violations:</strong> ${report.scores.piiViolationsCount > 0 ? `<span style="color:var(--color-rose); font-weight:600;">${report.scores.piiViolationsCount} detected</span>` : '<span style="color:var(--color-emerald); font-weight:600;">0 (Compliant)</span>'}</div>
       <div><strong>Duplicate / Double Fires:</strong> ${report.scores.duplicateEvents > 0 ? `<span style="color:var(--color-rose); font-weight:600;">${report.scores.duplicateEvents} detected</span>` : '<span style="color:var(--color-emerald); font-weight:600;">0 (Clean)</span>'}</div>
       <div><strong>Issues Count:</strong> ${report.issues.length} (${report.scores.errorEvents} errors, ${report.scores.warningEvents} warnings)</div>
     `;
@@ -729,7 +881,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 9. Action Handlers
+  // 11. Action Handlers
   // ==========================================
   btnRefresh.addEventListener('click', async () => {
     btnRefresh.style.transform = 'rotate(180deg)';
@@ -763,25 +915,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       `- **Pixel ID(s):** ${(report.scores.pixelIds || []).join(', ') || 'None'}`,
       `- **Initialized:** ${report.scores.initialized ? 'Yes' : 'No'}`,
       `- **oppref Detected:** ${report.scores.opprefPresent ? 'Yes' : 'No'}`,
+      `- **GTM Containers:** ${(report.gtmContainers || []).join(', ') || 'None'}`,
       ``,
-      `## 2. Event Journey Summary`,
+      `## 2. E-Commerce Funnel & CAPI Deduplication`,
+      `- **Funnel Completion:** ${report.funnel.completionPercentage}% (${report.funnel.completedCount}/5 steps)`,
+      `- **CAPI Deduplication Ready:** ${report.capiDeduplication.isCapiReady ? 'Yes (Low Risk)' : 'No (Double Counting Risk)'}`,
+      `- **PII Privacy Violations:** ${report.scores.piiViolationsCount}`,
+      ``,
+      `## 3. Event Journey Summary`,
       `- **Total Events:** ${report.scores.totalEvents}`,
       `- **Standard Events:** ${report.scores.standardEvents}`,
       `- **Custom Events:** ${report.scores.customEvents}`,
       `- **Duplicate / Double Fires:** ${report.scores.duplicateEvents}`,
       `- **Pages Visited:** ${report.scores.pagesVisitedCount}`,
       ``,
-      `## 3. Journey Steps Audit Table`,
+      `## 4. Journey Steps Audit Table`,
       `| Step | Event Name | Page Path | Request Count | Duplicate Status |`,
       `|---|---|---|---|---|`,
       ...(report.journeyTable || []).map((j) => `| ${j.step} | ${j.name} | ${j.pathname} | ${j.count} | ${j.duplicateStatus} |`),
       ``,
-      `## 4. Event Health Breakdown`,
+      `## 5. Event Health Breakdown`,
       `| Event Name | Detected | Audit Assessment |`,
       `|---|---|---|`,
       ...(report.eventSummaries || []).map((s) => `| ${s.displayName || s.name} | ${s.detected} | ${s.audit} |`),
       ``,
-      `## 5. Issues & Recommendations`,
+      `## 6. Issues & Recommendations`,
       report.issues.length === 0 ? `*No issues found. Tracking implementation is clean!*` : report.issues.map((i) => `- **[${i.severity.toUpperCase()}] ${i.code}**: ${i.message}\n  *Recommendation:* ${i.recommendation || 'N/A'}`).join('\n')
     ].join('\n');
 

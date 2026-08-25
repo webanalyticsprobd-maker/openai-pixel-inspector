@@ -52,6 +52,8 @@
       <nav class="nav-tabs">
         <button class="nav-tab active" data-tab="overview">Overview</button>
         <button class="nav-tab" data-tab="events">Events <span class="tab-count" id="tab-count-events">0</span></button>
+        <button class="nav-tab" data-tab="funnel">Funnel <span class="tab-count" id="tab-count-funnel">0/5</span></button>
+        <button class="nav-tab" data-tab="datalayer">Data Layer <span class="tab-count" id="tab-count-datalayer">0</span></button>
         <button class="nav-tab" data-tab="network">Network <span class="tab-count" id="tab-count-network">0</span></button>
         <button class="nav-tab" data-tab="attribution">oppref</button>
         <button class="nav-tab" data-tab="issues">Issues <span class="tab-count tab-count-error" id="tab-count-issues">0</span></button>
@@ -116,7 +118,7 @@
         <section class="card latest-event-card">
           <div class="card-header">
             <span class="card-title">Latest Observed Event</span>
-            <span id="latest-event-time" class="text-muted font-mono" style="font-size: 11px;">--:--:--</span>
+            <span id="latest-event-time" class="text-muted font-mono" style="font-size: 11.5px;">--:--:--</span>
           </div>
           <div id="latest-event-content">
             <div class="empty-state-sm">No events detected yet.</div>
@@ -151,7 +153,54 @@
         </div>
       </div>
 
-      <!-- TAB 3: NETWORK MONITOR -->
+      <!-- TAB 3: FUNNEL & CAPI DEDUPLICATION -->
+      <div class="tab-pane" id="pane-funnel">
+        <section class="card">
+          <div class="card-header">
+            <span class="card-title">E-Commerce Journey Funnel</span>
+            <span id="funnel-rate-badge" class="badge badge-neutral">0% Completed</span>
+          </div>
+          <p class="section-desc">
+            Visual progression of the standard 5-step user journey from Page View to Order Purchase.
+          </p>
+          <div class="funnel-pipeline" id="funnel-pipeline-container" style="margin-top: 12px;">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
+        <!-- CAPI Deduplication Readiness Card -->
+        <section class="card" style="margin-top: 10px;">
+          <div class="card-header">
+            <span class="card-title">Server-Side (CAPI) Deduplication</span>
+            <span id="capi-status-badge" class="badge badge-neutral">Scanning</span>
+          </div>
+          <div class="status-rows" id="capi-status-rows" style="margin-top: 8px;">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+      </div>
+
+      <!-- TAB 4: GTM & DATA LAYER -->
+      <div class="tab-pane" id="pane-datalayer">
+        <section class="card">
+          <div class="card-header">
+            <span class="card-title">Google Tag Manager & Data Layer</span>
+            <span id="gtm-container-badge" class="badge badge-neutral">Scanning</span>
+          </div>
+          <p class="section-desc">
+            Real-time feed of <code>window.dataLayer.push()</code> pushes and GTM container detection.
+          </p>
+          <div id="gtm-container-pills" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
+        <div class="events-list" id="datalayer-list-container" style="margin-top: 8px;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- TAB 5: NETWORK MONITOR -->
       <div class="tab-pane" id="pane-network">
         <section class="card">
           <div class="card-header">
@@ -167,7 +216,7 @@
         </div>
       </div>
 
-      <!-- TAB 4: ATTRIBUTION (oppref) -->
+      <!-- TAB 6: ATTRIBUTION (oppref) -->
       <div class="tab-pane" id="pane-attribution">
         <section class="card">
           <div class="card-header">
@@ -209,14 +258,14 @@
         </section>
       </div>
 
-      <!-- TAB 5: ISSUES & DEDUPLICATION -->
+      <!-- TAB 7: ISSUES & DEDUPLICATION -->
       <div class="tab-pane" id="pane-issues">
         <div id="issues-list-container">
           <!-- Dynamically populated -->
         </div>
       </div>
 
-      <!-- TAB 6: AUDIT & EXPORT -->
+      <!-- TAB 8: AUDIT & EXPORT -->
       <div class="tab-pane" id="pane-audit">
         <section class="card">
           <div class="card-header">

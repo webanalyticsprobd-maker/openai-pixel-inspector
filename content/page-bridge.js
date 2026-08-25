@@ -276,7 +276,78 @@
   window.addEventListener('hashchange', notifyNavigation);
 
   // ==========================================
-  // 4. Message Listeners & Initial Handshake
+  // 4. Google Tag Manager & dataLayer Hook
+  // ==========================================
+  function scanGtmContainers() {
+    const gtmIds = [];
+    if (typeof window.google_tag_manager === 'object' && window.google_tag_manager !== null) {
+      for (const key of Object.keys(window.google_tag_manager)) {
+        if (/^(?:GTM|G)-[A-Z0-9]+$/i.test(key)) {
+          gtmIds.push(key);
+        }
+      }
+    }
+    return gtmIds;
+  }
+
+  function handleDataLayerPush(args) {
+    if (!args || args.length === 0) return;
+    for (let i = 0; i < args.length; i++) {
+      const item = args[i];
+      if (typeof item === 'object' && item !== null) {
+        sendToContentScript('DATALAYER_EVENT_CAPTURED', {
+          event: item.event || 'dataLayer.push',
+          data: item,
+          timestamp: Date.now(),
+          gtmContainers: scanGtmContainers()
+        });
+      }
+    }
+  }
+
+  function hookDataLayer(dl) {
+    if (!dl || dl.__OPENAI_INSPECTOR_DL_WRAPPED__) return dl;
+    
+    // Process existing items
+    if (Array.isArray(dl)) {
+      for (let i = 0; i < dl.length; i++) {
+        if (typeof dl[i] === 'object' && dl[i] !== null) {
+          handleDataLayerPush([dl[i]]);
+        }
+      }
+    }
+
+    const origPush = dl.push;
+    dl.push = function () {
+      handleDataLayerPush(arguments);
+      return origPush.apply(this, arguments);
+    };
+    dl.__OPENAI_INSPECTOR_DL_WRAPPED__ = true;
+    return dl;
+  }
+
+  if (Array.isArray(window.dataLayer)) {
+    window.dataLayer = hookDataLayer(window.dataLayer);
+  }
+
+  let internalDataLayer = window.dataLayer;
+  try {
+    Object.defineProperty(window, 'dataLayer', {
+      configurable: true,
+      enumerable: true,
+      get: function () {
+        return internalDataLayer;
+      },
+      set: function (newDl) {
+        internalDataLayer = hookDataLayer(newDl);
+      }
+    });
+  } catch (err) {
+    console.debug('[OpenAI Pixel Inspector Bridge] dataLayer define error:', err);
+  }
+
+  // ==========================================
+  // 5. Message Listeners & Initial Handshake
   // ==========================================
 
   window.addEventListener('message', (event) => {
@@ -289,7 +360,8 @@
         url: window.location.href,
         hasOaiqGlobal: typeof window.oaiq !== 'undefined',
         isInitialized: isInitialized,
-        pixelIds: Array.from(activePixelIds)
+        pixelIds: Array.from(activePixelIds),
+        gtmContainers: scanGtmContainers()
       });
     }
   });
@@ -299,6 +371,7 @@
     url: window.location.href,
     hasOaiqGlobal: typeof window.oaiq !== 'undefined',
     pixelIds: Array.from(activePixelIds),
-    isInitialized: isInitialized
+    isInitialized: isInitialized,
+    gtmContainers: scanGtmContainers()
   });
 })();

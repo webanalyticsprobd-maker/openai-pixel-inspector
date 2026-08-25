@@ -34,6 +34,8 @@ function createDefaultTabState(tabId, url = '', title = '') {
     lastUpdated: Date.now(),
     contentScriptActive: false,
     bridgeConnected: false,
+    gtmContainers: [],
+    dataLayer: [],
     pixel: {
       detected: false,
       pixelIds: [],
@@ -335,6 +337,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'BRIDGE_STATUS_UPDATE': {
       if (state) {
         state.bridgeConnected = Boolean(message.data && message.data.connected);
+        if (message.data?.details?.gtmContainers) {
+          message.data.details.gtmContainers.forEach((gId) => {
+            if (!state.gtmContainers.includes(gId)) state.gtmContainers.push(gId);
+          });
+        }
+        state.lastUpdated = Date.now();
+      }
+      sendResponse({ status: 'ok' });
+      break;
+    }
+
+    case 'DATALAYER_EVENT_CAPTURED': {
+      if (state && message.data) {
+        if (!state.dataLayer) state.dataLayer = [];
+        state.dataLayer.push(message.data);
+        if (message.data.gtmContainers && Array.isArray(message.data.gtmContainers)) {
+          message.data.gtmContainers.forEach((gId) => {
+            if (!state.gtmContainers.includes(gId)) state.gtmContainers.push(gId);
+          });
+        }
         state.lastUpdated = Date.now();
       }
       sendResponse({ status: 'ok' });

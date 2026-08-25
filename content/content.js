@@ -215,6 +215,10 @@
         sendToBackground('NETWORK_REQUEST_CAPTURED', payload);
         break;
 
+      case 'DATALAYER_EVENT_CAPTURED':
+        sendToBackground('DATALAYER_EVENT_CAPTURED', payload);
+        break;
+
       case 'SPA_NAVIGATION_DETECTED':
         performFullScan();
         sendToBackground('SPA_NAVIGATION_DETECTED', payload);
