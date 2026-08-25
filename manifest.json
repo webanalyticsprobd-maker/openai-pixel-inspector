@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OpenAI Ads Pixel Inspector",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Professional debugging, validation, journey audit, and attribution diagnostics tool for OpenAI Ads Pixel (oaiq).",
   "permissions": [
     "activeTab",
@@ -33,7 +33,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "content/page-bridge.js"
+        "content/page-bridge.js",
+        "popup/report.html",
+        "popup/report.js"
       ],
       "matches": ["<all_urls>"]
     }

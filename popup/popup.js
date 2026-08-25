@@ -79,6 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const auditOverviewCount = document.getElementById('audit-overview-count');
   const auditOverviewTableContainer = document.getElementById('audit-overview-table-container');
   const auditScoresGrid = document.getElementById('audit-scores-grid');
+  const auditInsightsContainer = document.getElementById('audit-insights-container');
   const auditActionsContainer = document.getElementById('audit-actions-container');
   const btnCopyMarkdown = document.getElementById('btn-copy-markdown');
   const btnExportPdf = document.getElementById('btn-export-pdf');
@@ -1092,12 +1093,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           <table class="audit-table">
             <thead>
               <tr>
-                <th style="width:28%;">Event</th>
-                <th style="width:18%;">Type</th>
-                <th style="width:12%; text-align:center;">Fired</th>
-                <th style="width:12%; text-align:center;">Params</th>
-                <th style="width:12%; text-align:center;">Dup</th>
-                <th style="width:18%; text-align:right;">Status</th>
+                <th style="width:36%;">Event</th>
+                <th style="width:20%;">Type</th>
+                <th style="width:11%; text-align:center;">Fired</th>
+                <th style="width:11%; text-align:center;">Params</th>
+                <th style="width:11%; text-align:center;">Dup</th>
+                <th style="width:11%; text-align:right;">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -1105,12 +1106,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         report.overviewTable.forEach((row) => {
           tableHtml += `
             <tr>
-              <td><strong class="truncate" style="display:block; max-width:85px;" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</strong></td>
-              <td><span class="audit-event-type-badge badge-type-${row.type.toLowerCase()}">${row.type}</span></td>
-              <td style="text-align:center;">${row.trigger}</td>
-              <td style="text-align:center;">${row.parameters}</td>
-              <td style="text-align:center;">${row.duplicate}</td>
-              <td style="text-align:right;"><span class="badge ${row.severity === 'valid' ? 'badge-success' : (row.severity === 'warning' ? 'badge-warning' : 'badge-error')}" style="font-size:9.5px; padding:1px 4px; white-space:nowrap;">${escapeHtml(row.status)}</span></td>
+              <td style="width:36%;"><span class="audit-event-name-cell">${escapeHtml(row.name)}</span></td>
+              <td style="width:20%;"><span class="audit-event-type-badge badge-type-${row.type.toLowerCase()}">${row.type}</span></td>
+              <td style="width:11%; text-align:center;">${row.trigger}</td>
+              <td style="width:11%; text-align:center;">${row.parameters}</td>
+              <td style="width:11%; text-align:center;">${row.duplicate}</td>
+              <td style="width:11%; text-align:right;"><span class="badge ${row.severity === 'valid' ? 'badge-success' : (row.severity === 'warning' ? 'badge-warning' : 'badge-error')}" style="font-size:9.5px; padding:1px 4px; white-space:nowrap;">${escapeHtml(row.status)}</span></td>
             </tr>
           `;
         });
@@ -1147,6 +1148,23 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="score-label">Custom Event</span>
         </div>
       `;
+    }
+
+    // Key Tracking Insights Section
+    if (auditInsightsContainer) {
+      if (report.insights && report.insights.length > 0) {
+        auditInsightsContainer.innerHTML = report.insights.map(ins => `
+          <div class="audit-insight-card insight-${ins.type || 'neutral'}">
+            <span class="insight-icon-badge">${ins.icon || 'ℹ️'}</span>
+            <div class="insight-content-col">
+              <span class="insight-title-text">${escapeHtml(ins.title)}</span>
+              <span class="insight-desc-text">${escapeHtml(ins.desc)}</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        auditInsightsContainer.innerHTML = '<div class="empty-state-sm">No insights available.</div>';
+      }
     }
 
     // 12. Issues & 13. Recommended Actions Section

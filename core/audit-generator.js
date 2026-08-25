@@ -67,11 +67,11 @@ export function auditParameter(paramKey, paramVal, eventContext = {}) {
       return { status: 'error', message: '"' + paramKey + '" cannot be negative (' + paramVal + ')' };
     }
     
-    // Check minor units vs currency if currency provided
+    // Strict minor currency unit check: e.g. for USD/EUR, $350 must be 35000 cents
     const curr = (eventContext.currency || 'USD').toUpperCase();
     const mult = (curr === 'JPY' || curr === 'KRW') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
-    if (mult > 1 && paramVal > 0 && paramVal < 10 && !Number.isInteger(paramVal)) {
-      return { status: 'warning', message: 'Amount appears to be in decimal/major units (' + paramVal + '). OpenAI expects minor units (' + (paramVal * mult) + ' for ' + curr + ').' };
+    if (mult > 1 && paramVal > 0 && paramVal < 1000 && !Number.isInteger(paramVal)) {
+      return { status: 'error', message: 'Amount was sent in major units ($' + paramVal + '). OpenAI expects minor units: ' + (paramVal * mult) + ' for ' + curr + '.' };
     }
     return { status: 'valid', message: 'Valid monetary amount' };
   }
@@ -97,13 +97,30 @@ export function auditParameter(paramKey, paramVal, eventContext = {}) {
       return { status: 'warning', message: '"contents" array is empty.' };
     }
     let hasItemErrors = false;
-    paramVal.forEach((item) => {
+    let itemErrorMsg = '';
+    const curr = (eventContext.currency || 'USD').toUpperCase();
+    const mult = (curr === 'JPY' || curr === 'KRW') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
+
+    paramVal.forEach((item, idx) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) {
         hasItemErrors = true;
+        itemErrorMsg = 'Malformed item object at index ' + idx;
+      } else {
+        const itemAmt = item.amount !== undefined ? item.amount : item.price;
+        if (itemAmt !== undefined && itemAmt !== null) {
+          if (typeof itemAmt !== 'number' || isNaN(itemAmt) || itemAmt < 0) {
+            hasItemErrors = true;
+            itemErrorMsg = 'Invalid item amount at index ' + idx;
+          } else if (mult > 1 && itemAmt > 0 && itemAmt < 1000 && !Number.isInteger(itemAmt)) {
+            hasItemErrors = true;
+            itemErrorMsg = 'contents[' + idx + '].amount was sent in major units ($' + itemAmt + '). OpenAI expects minor units: ' + (itemAmt * mult) + ' (' + itemAmt + ' × ' + mult + ').';
+          }
+        }
       }
     });
+
     if (hasItemErrors) {
-      return { status: 'error', message: '"contents" contains invalid/malformed item objects.' };
+      return { status: 'error', message: itemErrorMsg || '"contents" contains item formatting errors.' };
     }
     return { status: 'valid', message: 'Valid array with ' + paramVal.length + ' item(s)' };
   }
@@ -149,12 +166,19 @@ export function auditContentsArray(contents = [], eventCurrency = 'USD') {
     const quantity = item.quantity !== undefined ? item.quantity : 1;
     const amount = item.amount !== undefined ? item.amount : (item.price !== undefined ? item.price : null);
     const currency = (item.currency || eventCurrency || 'USD').toUpperCase();
+    const mult = (currency === 'JPY' || currency === 'KRW') ? 1 : ((currency === 'KWD' || currency === 'BHD') ? 1000 : 100);
 
     const issues = [];
     if (id === 'N/A') issues.push('Missing ID');
     if (name === 'N/A') issues.push('Missing Name');
     if (typeof quantity !== 'number' || quantity < 1) issues.push('Invalid quantity');
-    if (amount !== null && (typeof amount !== 'number' || isNaN(amount) || amount < 0)) issues.push('Invalid amount');
+    if (amount !== null) {
+      if (typeof amount !== 'number' || isNaN(amount) || amount < 0) {
+        issues.push('Invalid amount');
+      } else if (mult > 1 && amount > 0 && amount < 1000 && !Number.isInteger(amount)) {
+        issues.push('Amount sent in major units ($' + amount + ') instead of minor units (' + (amount * mult) + ')');
+      }
+    }
 
     return {
       itemIndex: idx + 1,
@@ -163,7 +187,7 @@ export function auditContentsArray(contents = [], eventCurrency = 'USD') {
       quantity: quantity,
       amount: amount,
       currency: currency,
-      status: issues.length > 0 ? (issues.some(i => i.includes('Invalid') || i.includes('Missing ID')) ? 'error' : 'warning') : 'valid',
+      status: issues.length > 0 ? (issues.some(i => i.includes('Invalid') || i.includes('Missing ID') || i.includes('major units')) ? 'error' : 'warning') : 'valid',
       message: issues.length > 0 ? issues.join(', ') : 'Valid item'
     };
   });
@@ -309,20 +333,57 @@ export function generateComprehensiveAudit(tabState = {}) {
 
       if (itemErrors > 0) {
         hasErrors = true;
+        paramErrorCount += itemErrors;
         highIssues.push({
           code: 'CONTENTS_ITEM_ERROR',
           severity: 'high',
           event: eventName,
           parameter: 'contents',
-          message: 'Event "' + eventName + '" contents array has ' + itemErrors + ' item error(s).',
-          recommendation: 'Ensure all objects in "' + eventName + '" contents[] have valid id, name, positive quantity, and minor unit amounts.'
+          message: 'Event "' + eventName + '" contents array has ' + itemErrors + ' item error(s). Minor currency units required.',
+          recommendation: 'Ensure all objects in "' + eventName + '" contents[] have valid id, name, positive quantity, and integer minor unit amounts.'
         });
       } else if (itemWarns > 0) {
         hasWarnings = true;
+        emptyParamCount += itemWarns;
       }
     }
 
-    // E. Category Specific Checks
+    // E. Synchronize issues directly from event validator results across all occurrences
+    group.forEach(({ event: evt }) => {
+      if (evt.validation && Array.isArray(evt.validation.issues)) {
+        evt.validation.issues.forEach((iss) => {
+          if (iss.severity === 'critical' || iss.severity === 'error') {
+            hasErrors = true;
+            paramErrorCount++;
+            if (!criticalIssues.some(c => c.code === iss.code && c.event === eventName && c.parameter === (iss.parameterPath || iss.parameter))) {
+              criticalIssues.push({
+                code: iss.code || 'EVENT_VALIDATION_ERROR',
+                severity: 'critical',
+                event: eventName,
+                parameter: iss.parameterPath || iss.parameter || 'payload',
+                message: iss.message || ('Validation error in ' + eventName),
+                recommendation: iss.recommendation || ('Correct parameter formatting in ' + eventName)
+              });
+            }
+          } else if (iss.severity === 'warning') {
+            hasWarnings = true;
+            emptyParamCount++;
+            if (!warningIssues.some(w => w.code === iss.code && w.event === eventName && w.parameter === (iss.parameterPath || iss.parameter))) {
+              warningIssues.push({
+                code: iss.code || 'EVENT_VALIDATION_WARNING',
+                severity: 'warning',
+                event: eventName,
+                parameter: iss.parameterPath || iss.parameter || 'payload',
+                message: iss.message || ('Validation warning in ' + eventName),
+                recommendation: iss.recommendation || ('Review parameter formatting in ' + eventName)
+              });
+            }
+          }
+        });
+      }
+    });
+
+    // F. Category Specific Checks
     if (eventType === 'Ecommerce') {
       if (eventName === 'order_created' || eventName === 'purchase') {
         if (allParams.amount === undefined || allParams.currency === undefined) {
@@ -338,7 +399,7 @@ export function generateComprehensiveAudit(tabState = {}) {
       }
     }
 
-    // F. Overall Status for this Event
+    // G. Overall Status for this Event
     let eventStatus = 'Passed';
     let eventSeverity = 'valid';
 
@@ -360,7 +421,7 @@ export function generateComprehensiveAudit(tabState = {}) {
       recommendationText = 'No immediate issue detected. Implementation is verified.';
     }
 
-    // G. Add to Event Overview Table
+    // H. Add to Event Overview Table
     eventOverviewRows.push({
       name: eventName,
       type: eventType,
@@ -372,7 +433,7 @@ export function generateComprehensiveAudit(tabState = {}) {
       occurrences: occurrences
     });
 
-    // H. Add to Dynamic Event Details Section
+    // I. Add to Dynamic Event Details Section
     eventDetails.push({
       name: eventName,
       type: eventType,
@@ -414,8 +475,8 @@ export function generateComprehensiveAudit(tabState = {}) {
 
   const eventCoverageScore = totalEvents > 0 ? (totalEvents >= 3 ? 95 : 85) : 0;
   const payloadQualityScore = totalEvents > 0 ? Math.max(20, Math.round(((totalEvents - errorEventsCount) / totalEvents) * 100)) : 100;
-  const ecommerceScore = (errorEventsCount === 0) ? (warningEventsCount === 0 ? 100 : 88) : 75;
-  const parameterScore = Math.max(30, Math.round(100 - (criticalIssues.length * 20) - (highIssues.length * 10) - (warningIssues.length * 3)));
+  const ecommerceScore = (errorEventsCount === 0) ? (warningEventsCount === 0 ? 100 : 88) : 72;
+  const parameterScore = Math.max(25, Math.round(100 - (criticalIssues.length * 15) - (highIssues.length * 8) - (warningIssues.length * 3)));
   const duplicatePreventionScore = duplicateCount > 0 ? 70 : 100;
   const customEventScore = customEventsCount > 0 ? 94 : 100;
 
@@ -446,6 +507,79 @@ export function generateComprehensiveAudit(tabState = {}) {
   });
   if (recommendations.length === 0) {
     recommendations.push('Maintain current tracking setup. All observed events meet OpenAI verification criteria.');
+  }
+
+  // 5. Generate Dynamic Executive Audit Insights
+  const insights = [];
+
+  // Insight A: Conversion Value & Revenue Integrity
+  const amountIssues = allIssues.filter(i => (i.message || '').toLowerCase().includes('amount') || (i.message || '').toLowerCase().includes('minor unit'));
+  if (amountIssues.length > 0) {
+    insights.push({
+      type: 'error',
+      icon: '❌',
+      title: 'Monetary Minor Units Discrepancy',
+      desc: 'One or more events passed item amounts in major decimal units ($350) instead of minor units (35000 cents for USD). This can miscalculate ROAS.'
+    });
+  } else {
+    insights.push({
+      type: 'success',
+      icon: '✅',
+      title: 'Monetary Amounts Formatted',
+      desc: 'All monitored monetary values adhere to OpenAI minor currency unit requirements.'
+    });
+  }
+
+  // Insight B: Attribution & oppref Tracking
+  if (attribution.oppref) {
+    insights.push({
+      type: 'success',
+      icon: '✅',
+      title: 'Ad Click Attribution Active',
+      desc: 'oppref parameter (' + attribution.oppref.substring(0, 16) + '...) captured and attached to conversion payloads.'
+    });
+  } else {
+    insights.push({
+      type: 'info',
+      icon: 'ℹ️',
+      title: 'Direct / Organic Visit Mode',
+      desc: 'No oppref click ID detected in current session. OpenAI ad campaigns will automatically append this parameter upon ad click.'
+    });
+  }
+
+  // Insight C: E-Commerce Funnel Integrity
+  const uniqueNames = new Set(events.map(e => (e.displayName || e.name || '').toLowerCase()));
+  if (uniqueNames.has('contents_viewed') && uniqueNames.has('checkout_started') && uniqueNames.has('order_created')) {
+    insights.push({
+      type: 'success',
+      icon: '⚡',
+      title: 'Full E-Commerce Journey Observed',
+      desc: 'All critical conversion funnel steps (View Content → Checkout → Order) fired in this testing session.'
+    });
+  } else {
+    insights.push({
+      type: 'neutral',
+      icon: '📊',
+      title: 'Funnel Step Coverage',
+      desc: uniqueNames.size + ' distinct event types observed. Simulate complete checkout journey to verify end-to-end attribution.'
+    });
+  }
+
+  // Insight D: Deduplication Hygiene
+  if (duplicateCount > 0) {
+    insights.push({
+      type: 'error',
+      icon: '⚠️',
+      title: 'Double-Firing Detected',
+      desc: duplicateCount + ' duplicate event firing(s) detected within 2 seconds. Ensure triggers fire once per user action.'
+    });
+  } else {
+    insights.push({
+      type: 'success',
+      icon: '🛡️',
+      title: 'Deduplication Clean',
+      desc: 'Zero double-firing or redundant payload retransmissions detected in this session.'
+    });
   }
 
   const auditDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -482,6 +616,7 @@ export function generateComprehensiveAudit(tabState = {}) {
       passed: passedChecks
     },
     recommendations: recommendations,
+    insights: insights,
     sessionId: sessionId
   };
 }

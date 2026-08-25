@@ -1,8 +1,19 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const btnPrint = document.getElementById('btn-print-report');
+  if (btnPrint) {
+    btnPrint.addEventListener('click', () => {
+      window.print();
+    });
+  }
+
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     chrome.storage.local.get(['active_audit_report'], (res) => {
       if (res && res.active_audit_report) {
         renderFullReport(res.active_audit_report);
+        // Automatically open print/PDF dialog after a brief render delay
+        setTimeout(() => {
+          window.print();
+        }, 600);
       }
     });
   }
