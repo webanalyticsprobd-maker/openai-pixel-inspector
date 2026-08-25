@@ -675,6 +675,8 @@ export function formatAuditMarkdown(report) {
   lines.push('');
   lines.push('The audit report supports standard eCommerce events, lead-generation events, custom events, and business-specific events.');
   lines.push('');
+  lines.push('> **Official Reference:** [OpenAI Measurement Pixel Commerce Flow](https://developers.openai.com/ads/measurement-pixel#commerce-flow)');
+  lines.push('');
   lines.push('---');
   lines.push('');
 
@@ -871,6 +873,7 @@ export function formatAuditCsv(report, tabState = {}) {
 
   // Section 1: Executive Audit Summary
   sections.push(['# 1. EXECUTIVE AUDIT SUMMARY', '', '', '', '', '', '', '', '', '']);
+  sections.push(['Official Standard', 'https://developers.openai.com/ads/measurement-pixel#commerce-flow', '', '', '', '', '', '', '', '']);
   sections.push(['Website', 'Audit Date', 'Overall Health Score', 'Overall Status', 'Total Events', 'Standard Events', 'Custom Events', 'Passed', 'Warnings', 'Critical Issues'].map(escapeCsv));
   sections.push([
     report.website,
