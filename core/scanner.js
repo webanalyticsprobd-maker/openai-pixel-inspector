@@ -1,9 +1,6 @@
-/**
- * OpenAI Ads Pixel Inspector - Scanner & Full Journey Audit Generator
- * 
- * Analyzes event streams, generates Funnel Progression graphs,
- * checks CAPI deduplication readiness, and inspects PII compliance.
- */
+import { analyzeServerSideTracking } from '../validators/server-side-detector.js';
+
+export { analyzeServerSideTracking };
 
 const STANDARD_FUNNEL_STEPS = [
   { key: 'page_view', names: ['page_viewed', 'page_view', 'pageview'], label: 'Page View', requiredParams: ['url'] },
@@ -168,6 +165,7 @@ export function generateAuditReport(tabState) {
     },
     funnel: computeFunnelAnalysis(events),
     capiDeduplication: computeCapiDeduplication(events),
+    serverSide: analyzeServerSideTracking(tabState),
     journeyTable: [],
     eventSummaries: [],
     piiIssues: [],

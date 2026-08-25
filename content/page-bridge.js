@@ -347,7 +347,49 @@
   }
 
   // ==========================================
-  // 5. Message Listeners & Initial Handshake
+  // 5. Server-Side Tracking Signal Scanner
+  // ==========================================
+  function scanServerSideSignals() {
+    const customLoaders = [];
+    const scriptSources = [];
+    const transportUrls = [];
+    let hasZarazGlobal = typeof window.zaraz !== 'undefined';
+
+    try {
+      const scripts = document.querySelectorAll('script[src]');
+      for (const s of scripts) {
+        const src = s.src || '';
+        if (src) {
+          scriptSources.push(src);
+          if (src.includes('gtm.js') || src.includes('gtag/js') || src.includes('zaraz') || src.includes('stape')) {
+            customLoaders.push(src);
+          }
+        }
+      }
+    } catch {}
+
+    if (Array.isArray(window.dataLayer)) {
+      for (const item of window.dataLayer) {
+        if (typeof item === 'object' && item !== null) {
+          for (const [k, v] of Object.entries(item)) {
+            if (typeof v === 'string' && (k === 'transport_url' || k === 'server_container_url' || k === 'server_url')) {
+              transportUrls.push(v);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      customLoaders: customLoaders,
+      scriptSources: scriptSources,
+      transportUrls: transportUrls,
+      hasZarazGlobal: hasZarazGlobal
+    };
+  }
+
+  // ==========================================
+  // 6. Message Listeners & Initial Handshake
   // ==========================================
 
   window.addEventListener('message', (event) => {
@@ -361,7 +403,8 @@
         hasOaiqGlobal: typeof window.oaiq !== 'undefined',
         isInitialized: isInitialized,
         pixelIds: Array.from(activePixelIds),
-        gtmContainers: scanGtmContainers()
+        gtmContainers: scanGtmContainers(),
+        serverSideSignals: scanServerSideSignals()
       });
     }
   });
@@ -372,6 +415,7 @@
     hasOaiqGlobal: typeof window.oaiq !== 'undefined',
     pixelIds: Array.from(activePixelIds),
     isInitialized: isInitialized,
-    gtmContainers: scanGtmContainers()
+    gtmContainers: scanGtmContainers(),
+    serverSideSignals: scanServerSideSignals()
   });
 })();

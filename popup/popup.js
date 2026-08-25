@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const valSessionId = document.getElementById('val-session-id');
   const valOppref = document.getElementById('val-oppref');
 
+  // Server-Side Tracking elements
+  const serversideStatusBadge = document.getElementById('serverside-status-badge');
+  const valServersideTech = document.getElementById('val-serverside-tech');
+  const valServersideEndpoint = document.getElementById('val-serverside-endpoint');
+  const valServersideConfidence = document.getElementById('val-serverside-confidence');
+  const serversideSignalsList = document.getElementById('serverside-signals-list');
+
   const metricTotalEvents = document.getElementById('metric-total-events');
   const metricStandardEvents = document.getElementById('metric-standard-events');
   const metricCustomEvents = document.getElementById('metric-custom-events');
@@ -311,6 +318,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabCountDatalayer.textContent = dataLayer.length || 0;
     tabCountNetwork.textContent = network.length || 0;
     tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0);
+
+    // Render Server-Side Tracking Diagnostics
+    const serverSide = report.serverSide || {};
+    if (serverSide.status === 'active') {
+      serversideStatusBadge.textContent = 'Active';
+      serversideStatusBadge.className = 'badge badge-success';
+    } else if (serverSide.status === 'potential') {
+      serversideStatusBadge.textContent = 'Potential';
+      serversideStatusBadge.className = 'badge badge-warning';
+    } else {
+      serversideStatusBadge.textContent = 'Not Detected';
+      serversideStatusBadge.className = 'badge badge-neutral';
+    }
+
+    valServersideTech.textContent = serverSide.primaryTechnology || 'None';
+    valServersideEndpoint.textContent = (serverSide.serverEndpoints && serverSide.serverEndpoints.length > 0) ? serverSide.serverEndpoints.join(', ') : 'None';
+    
+    let confColor = 'var(--text-muted)';
+    if (serverSide.confidence === 'HIGH') confColor = 'var(--color-emerald)';
+    else if (serverSide.confidence === 'MEDIUM') confColor = 'var(--color-amber)';
+    valServersideConfidence.innerHTML = `<span style="color:${confColor}; font-weight:600;">${serverSide.confidence || 'NONE'}</span>`;
+
+    if (serverSide.signals && serverSide.signals.length > 0) {
+      serversideSignalsList.innerHTML = serverSide.signals.map((sig) => `
+        <div style="display: flex; align-items: flex-start; gap: 6px; background: var(--bg-primary); padding: 5px 8px; border-radius: 4px; border: 1px solid var(--border-subtle); font-size: 11.5px;">
+          <span style="color: var(--color-blue); font-weight: 600; white-space: nowrap;">[${escapeHtml(sig.category)}]</span>
+          <span style="color: var(--text-primary); word-break: break-all;">${escapeHtml(sig.name)}: <code style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(sig.detail)}</code></span>
+        </div>
+      `).join('');
+    } else {
+      serversideSignalsList.innerHTML = '<div class="empty-state-sm" style="padding: 2px 0;">No server-side tagging endpoints or loaders found.</div>';
+    }
 
     if (events.length > 0) {
       const latest = events[events.length - 1];
@@ -794,10 +833,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Top Summary Box
+    const ssStatusStr = report.serverSide.status === 'active' ? `<span style="color:var(--color-emerald); font-weight:600;">Active (${escapeHtml(report.serverSide.primaryTechnology)})</span>` : (report.serverSide.status === 'potential' ? '<span style="color:var(--color-amber); font-weight:600;">Potential (CAPI Pairing)</span>' : '<span style="color:var(--text-muted);">Not Detected</span>');
+
     auditSummaryBox.innerHTML = `
       <div><strong>Session ID:</strong> <code>${escapeHtml(report.sessionId || 'SESSION')}</code></div>
       <div><strong>Target Host:</strong> ${escapeHtml(report.hostname || 'Unknown')}</div>
       <div><strong>Visited Pages:</strong> ${report.scores.pagesVisitedCount} page(s) in session</div>
+      <div><strong>Server-Side Tracking:</strong> ${ssStatusStr}</div>
       <div><strong>Total Events Recorded:</strong> ${report.scores.totalEvents} (${report.scores.standardEvents} Standard, ${report.scores.customEvents} Custom)</div>
       <div><strong>Funnel Completion:</strong> ${report.funnel.completionPercentage}% (${report.funnel.completedCount}/5 steps)</div>
       <div><strong>CAPI Deduplication:</strong> ${report.capiDeduplication.isCapiReady ? '<span style="color:var(--color-emerald); font-weight:600;">100% Ready</span>' : '<span style="color:var(--color-rose); font-weight:600;">Risk Detected</span>'}</div>
@@ -917,29 +959,36 @@ document.addEventListener('DOMContentLoaded', async () => {
       `- **oppref Detected:** ${report.scores.opprefPresent ? 'Yes' : 'No'}`,
       `- **GTM Containers:** ${(report.gtmContainers || []).join(', ') || 'None'}`,
       ``,
-      `## 2. E-Commerce Funnel & CAPI Deduplication`,
+      `## 2. Server-Side Tracking Infrastructure`,
+      `- **Status:** ${report.serverSide.status.toUpperCase()}`,
+      `- **Technology:** ${report.serverSide.primaryTechnology}`,
+      `- **Tagging Server Domain(s):** ${(report.serverSide.serverEndpoints || []).join(', ') || 'None'}`,
+      `- **Confidence:** ${report.serverSide.confidence}`,
+      `- **Summary:** ${report.serverSide.summaryText}`,
+      ``,
+      `## 3. E-Commerce Funnel & CAPI Deduplication`,
       `- **Funnel Completion:** ${report.funnel.completionPercentage}% (${report.funnel.completedCount}/5 steps)`,
       `- **CAPI Deduplication Ready:** ${report.capiDeduplication.isCapiReady ? 'Yes (Low Risk)' : 'No (Double Counting Risk)'}`,
       `- **PII Privacy Violations:** ${report.scores.piiViolationsCount}`,
       ``,
-      `## 3. Event Journey Summary`,
+      `## 4. Event Journey Summary`,
       `- **Total Events:** ${report.scores.totalEvents}`,
       `- **Standard Events:** ${report.scores.standardEvents}`,
       `- **Custom Events:** ${report.scores.customEvents}`,
       `- **Duplicate / Double Fires:** ${report.scores.duplicateEvents}`,
       `- **Pages Visited:** ${report.scores.pagesVisitedCount}`,
       ``,
-      `## 4. Journey Steps Audit Table`,
+      `## 5. Journey Steps Audit Table`,
       `| Step | Event Name | Page Path | Request Count | Duplicate Status |`,
       `|---|---|---|---|---|`,
       ...(report.journeyTable || []).map((j) => `| ${j.step} | ${j.name} | ${j.pathname} | ${j.count} | ${j.duplicateStatus} |`),
       ``,
-      `## 5. Event Health Breakdown`,
+      `## 6. Event Health Breakdown`,
       `| Event Name | Detected | Audit Assessment |`,
       `|---|---|---|`,
       ...(report.eventSummaries || []).map((s) => `| ${s.displayName || s.name} | ${s.detected} | ${s.audit} |`),
       ``,
-      `## 6. Issues & Recommendations`,
+      `## 7. Issues & Recommendations`,
       report.issues.length === 0 ? `*No issues found. Tracking implementation is clean!*` : report.issues.map((i) => `- **[${i.severity.toUpperCase()}] ${i.code}**: ${i.message}\n  *Recommendation:* ${i.recommendation || 'N/A'}`).join('\n')
     ].join('\n');
 

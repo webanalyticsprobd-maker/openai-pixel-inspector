@@ -36,6 +36,8 @@ function createDefaultTabState(tabId, url = '', title = '') {
     bridgeConnected: false,
     gtmContainers: [],
     dataLayer: [],
+    serverSideSignals: {},
+    serverHeaders: [],
     pixel: {
       detected: false,
       pixelIds: [],
@@ -293,7 +295,42 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
     { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] }
   );
 
-  // 3. Capture network errors (e.g. adblocker net::ERR_BLOCKED_BY_CLIENT)
+  // 3. Inspect Response Headers for Server-Side Tagging Containers
+  if (chrome.webRequest.onHeadersReceived) {
+    chrome.webRequest.onHeadersReceived.addListener(
+      (details) => {
+        const { tabId, responseHeaders, url } = details;
+        if (tabId < 0 || !responseHeaders) return;
+
+        const state = getOrCreateTabState(tabId);
+        for (const h of responseHeaders) {
+          const hName = (h.name || '').toLowerCase();
+          const hVal = h.value || '';
+
+          if (
+            hName === 'x-gtm-server-preview' ||
+            hName === 'x-server-gtm' ||
+            hName.includes('stape') ||
+            (hName === 'server' && hVal.toLowerCase().includes('zaraz'))
+          ) {
+            if (!state.serverHeaders.some((sh) => sh.name === h.name && sh.value === h.value)) {
+              state.serverHeaders.push({
+                name: h.name,
+                value: h.value,
+                url: url,
+                timestamp: Date.now()
+              });
+              state.lastUpdated = Date.now();
+            }
+          }
+        }
+      },
+      { urls: ['<all_urls>'] },
+      ['responseHeaders']
+    );
+  }
+
+  // 4. Capture network errors (e.g. adblocker net::ERR_BLOCKED_BY_CLIENT)
   chrome.webRequest.onErrorOccurred.addListener(
     (details) => {
       const { requestId, error, tabId } = details;
@@ -342,6 +379,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (!state.gtmContainers.includes(gId)) state.gtmContainers.push(gId);
           });
         }
+        if (message.data?.details?.serverSideSignals) {
+          state.serverSideSignals = Object.assign({}, state.serverSideSignals, message.data.details.serverSideSignals);
+        }
         state.lastUpdated = Date.now();
       }
       sendResponse({ status: 'ok' });
@@ -365,7 +405,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'FULL_PAGE_SCAN_RESULT': {
       if (state && message.data) {
-        const { domScan, attribution } = message.data;
+        const { domScan, attribution, serverSideSignals } = message.data;
         if (domScan) {
           if (domScan.detected) state.pixel.detected = true;
           if (domScan.confidence && domScan.confidence !== 'none') state.pixel.confidence = domScan.confidence;
@@ -378,6 +418,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         if (attribution) {
           state.attribution = Object.assign({}, state.attribution, attribution);
+        }
+        if (serverSideSignals) {
+          state.serverSideSignals = Object.assign({}, state.serverSideSignals, serverSideSignals);
         }
         state.lastUpdated = Date.now();
         if (state.url) scanBrowserCookiesForTab(tabId, state.url);
