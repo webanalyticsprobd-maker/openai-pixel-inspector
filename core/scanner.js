@@ -1,6 +1,7 @@
 import { analyzeServerSideTracking } from '../validators/server-side-detector.js';
+import { generateComprehensiveAudit, formatAuditMarkdown, classifyEventType, auditParameter, auditContentsArray } from './audit-generator.js';
 
-export { analyzeServerSideTracking };
+export { analyzeServerSideTracking, generateComprehensiveAudit, formatAuditMarkdown, classifyEventType, auditParameter, auditContentsArray };
 
 const STANDARD_FUNNEL_STEPS = [
   { key: 'page_view', names: ['page_viewed', 'page_view', 'pageview', 'pageviewed'], label: 'Page View', requiredParams: ['url'] },

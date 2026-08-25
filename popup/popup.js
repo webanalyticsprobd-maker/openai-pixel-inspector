@@ -4,7 +4,7 @@
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
-import { generateAuditReport } from '../core/scanner.js';
+import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown } from '../core/scanner.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
@@ -74,9 +74,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Audit Tab elements
   const auditScoreBadge = document.getElementById('audit-score-badge');
+  const auditSubtitleWebsite = document.getElementById('audit-subtitle-website');
   const auditSummaryBox = document.getElementById('audit-summary-box');
-  const journeyTableContainer = document.getElementById('journey-table-container');
-  const eventSummaryTableContainer = document.getElementById('event-summary-table-container');
+  const auditOverviewCount = document.getElementById('audit-overview-count');
+  const auditOverviewTableContainer = document.getElementById('audit-overview-table-container');
+  const auditScoresGrid = document.getElementById('audit-scores-grid');
+  const auditEventDetailsContainer = document.getElementById('audit-event-details-container');
+  const auditActionsContainer = document.getElementById('audit-actions-container');
   const btnCopyMarkdown = document.getElementById('btn-copy-markdown');
   const btnExportJson = document.getElementById('btn-export-json');
   const btnExportCsv = document.getElementById('btn-export-csv');
@@ -1027,114 +1031,240 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================
   // 12. Audit Summary & Export Renderer
   // ==========================================
+  // ==========================================
+  // 12. Audit Summary & Export Renderer (14 Sections)
+  // ==========================================
   function renderAudit() {
     if (!currentTabState) return;
-    const report = generateAuditReport(currentTabState);
-    const issues = report.issues || [];
-    const errorCount = issues.filter(i => i.severity === 'critical' || i.severity === 'error').length;
-    const warningCount = issues.filter(i => i.severity === 'warning').length;
-    const infoCount = issues.filter(i => i.severity === 'info').length;
+    const report = generateComprehensiveAudit(currentTabState);
 
-    if (report.overallStatus === 'pass') {
-      auditScoreBadge.textContent = 'Healthy (Pass)';
-      auditScoreBadge.className = 'badge badge-success';
-    } else if (report.overallStatus === 'warning') {
-      auditScoreBadge.textContent = 'Needs Attention';
-      auditScoreBadge.className = 'badge badge-warning';
-    } else {
-      auditScoreBadge.textContent = 'Errors Detected';
-      auditScoreBadge.className = 'badge badge-error';
+    // Update Header Badge & Subtitle
+    if (auditScoreBadge) {
+      auditScoreBadge.textContent = `${report.overallHealthScore}% Health`;
+      auditScoreBadge.className = `badge ${report.overallHealthScore >= 80 ? 'badge-success' : (report.overallHealthScore >= 60 ? 'badge-warning' : 'badge-error')}`;
+    }
+    if (auditSubtitleWebsite) {
+      auditSubtitleWebsite.textContent = `${report.website} · ${report.auditDate}`;
     }
 
-    // 4 Logical Executive Cards (Includes Info so it never silently disappears)
-    auditSummaryBox.innerHTML = `
-      <div class="audit-stat-card">
-        <span class="audit-stat-label">Session</span>
-        <span class="audit-stat-val mono truncate">${escapeHtml(report.sessionId || 'SESSION')}</span>
-      </div>
-      <div class="audit-stat-card">
-        <span class="audit-stat-label">Journey</span>
-        <span class="audit-stat-val">${report.scores.pagesVisitedCount} page(s) &bull; ${report.scores.totalEvents} events &bull; ${report.funnel.completionPercentage}% funnel</span>
-      </div>
-      <div class="audit-stat-card">
-        <span class="audit-stat-label">Data Quality</span>
-        <span class="audit-stat-val ${report.scores.duplicateEvents > 0 ? 'text-rose' : 'text-emerald'}">${report.scores.duplicateEvents > 0 ? (report.scores.duplicateEvents + ' duplicate(s)') : 'No duplicates'} &bull; ${report.scores.piiViolationsCount} PII</span>
-      </div>
-      <div class="audit-stat-card">
-        <span class="audit-stat-label">Diagnostics</span>
-        <span class="audit-stat-val ${errorCount > 0 ? 'text-rose' : (warningCount > 0 ? 'text-amber' : 'text-emerald')}">${errorCount} error(s) &bull; ${warningCount} warning(s) &bull; ${infoCount} info</span>
-      </div>
-    `;
+    // 1. Audit Summary Grid (Executive Metrics)
+    if (auditSummaryBox) {
+      auditSummaryBox.innerHTML = `
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Total Events</span>
+          <span class="audit-stat-val">${report.counts.total} (${report.counts.standard} Standard · ${report.counts.custom} Custom)</span>
+        </div>
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Event Health</span>
+          <span class="audit-stat-val text-emerald">${report.counts.passed} Passed · <span class="${report.counts.warnings > 0 ? 'text-amber' : ''}">${report.counts.warnings} Warnings</span></span>
+        </div>
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Critical Issues</span>
+          <span class="audit-stat-val ${report.counts.critical > 0 ? 'text-rose' : 'text-emerald'}">${report.counts.critical > 0 ? (report.counts.critical + ' Critical Issue(s)') : '0 Critical Issues'}</span>
+        </div>
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Overall Status</span>
+          <span class="audit-stat-val ${report.overallHealthScore >= 80 ? 'text-emerald' : 'text-amber'}">${report.overallStatus}</span>
+        </div>
+      `;
+    }
 
-    // Redesigned Developer Journey Timeline (Vertical Flow & No Overflow)
-    if (report.journeyTable && report.journeyTable.length > 0) {
-      let timelineHtml = '';
-      const totalSteps = report.journeyTable.length;
-      report.journeyTable.forEach((row, idx) => {
-        const isLast = idx === totalSteps - 1;
-        const isDup = row.duplicateStatus === 'Duplicate';
-        const hasErr = row.paramAuditStatus && (row.paramAuditStatus.includes('error') || row.hasErrors);
-        const hasWarn = row.paramAuditStatus && (row.paramAuditStatus.includes('warning') || row.hasWarnings);
-        const timeFormatted = row.timestamp ? formatTimestamp(row.timestamp) : '';
+    // 2. Event Tracking Overview Table
+    if (auditOverviewCount) {
+      auditOverviewCount.textContent = `${report.counts.total} Events`;
+    }
+    if (auditOverviewTableContainer) {
+      if (report.overviewTable.length === 0) {
+        auditOverviewTableContainer.innerHTML = '<div class="empty-state-sm">No events detected yet.</div>';
+      } else {
+        let tableHtml = `
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Type</th>
+                <th style="text-align:center;">Trigger</th>
+                <th style="text-align:center;">Parameters</th>
+                <th style="text-align:center;">Duplicate</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        report.overviewTable.forEach((row) => {
+          tableHtml += `
+            <tr>
+              <td><strong>${escapeHtml(row.name)}</strong></td>
+              <td><span class="audit-event-type-badge badge-type-${row.type.toLowerCase()}">${row.type}</span></td>
+              <td style="text-align:center;">${row.trigger}</td>
+              <td style="text-align:center;">${row.parameters}</td>
+              <td style="text-align:center;">${row.duplicate}</td>
+              <td><span class="badge ${row.severity === 'valid' ? 'badge-success' : (row.severity === 'warning' ? 'badge-warning' : 'badge-error')}">${escapeHtml(row.status)}</span></td>
+            </tr>
+          `;
+        });
+        tableHtml += '</tbody></table>';
+        auditOverviewTableContainer.innerHTML = tableHtml;
+      }
+    }
 
-        let paramBadgeHtml = '';
-        if (hasErr) {
-          paramBadgeHtml = renderStatusBadge('error', row.paramAuditStatus || 'Parameter error');
-        } else if (hasWarn) {
-          paramBadgeHtml = renderStatusBadge('warning', row.paramAuditStatus || 'Parameter warning');
-        } else {
-          paramBadgeHtml = renderStatusBadge('valid', 'Valid parameters');
-        }
+    // 3. Final Tracking Score Breakdown
+    if (auditScoresGrid) {
+      auditScoresGrid.innerHTML = `
+        <div class="score-card">
+          <span class="score-val">${report.scores.coverage}%</span>
+          <span class="score-label">Event Coverage</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.payloadQuality}%</span>
+          <span class="score-label">Payload Quality</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.ecommerceData}%</span>
+          <span class="score-label">Ecommerce Data</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.parameterQuality}%</span>
+          <span class="score-label">Parameter Quality</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.duplicatePrevention}%</span>
+          <span class="score-label">Duplicate Prevention</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.customEventQuality}%</span>
+          <span class="score-label">Custom Event</span>
+        </div>
+      `;
+    }
 
-        const dupBadgeHtml = isDup ? renderStatusBadge('duplicate', 'Duplicate') : renderStatusBadge('valid', 'Unique');
+    // 4. Dynamic Event Details Section
+    if (auditEventDetailsContainer) {
+      if (report.eventDetails.length === 0) {
+        auditEventDetailsContainer.innerHTML = '<div class="empty-state-sm">No event details available.</div>';
+      } else {
+        let detailsHtml = '';
+        report.eventDetails.forEach((evt) => {
+          let paramsHtml = '';
+          if (evt.parameters && evt.parameters.length > 0) {
+            paramsHtml = `
+              <div style="margin-top: 4px;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Parameters (${evt.parameters.length})</span>
+                <table class="audit-inner-table">
+                  <thead>
+                    <tr>
+                      <th>Parameter</th>
+                      <th>Value</th>
+                      <th style="text-align:center;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${evt.parameters.map(p => `
+                      <tr>
+                        <td><code>${escapeHtml(p.parameter)}</code></td>
+                        <td><code class="truncate" style="max-width: 140px;">${escapeHtml(p.value)}</code></td>
+                        <td style="text-align:center;">${p.status === 'valid' ? '✅' : (p.status === 'warning' ? '⚠️' : '❌')}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+          }
 
-        timelineHtml += `
-          <div class="timeline-entry ${isLast ? 'timeline-last' : ''}">
-            <div class="timeline-indicator-col">
-              <span class="timeline-step-badge ${hasErr ? 'badge-step-error' : (isDup ? 'badge-step-dup' : 'badge-step-valid')}">#${row.step}</span>
-              ${!isLast ? '<div class="timeline-v-line"></div>' : ''}
-            </div>
-            <div class="timeline-card">
-              <div class="timeline-card-header">
-                <div class="timeline-title-row">
-                  <strong class="timeline-event-name">${escapeHtml(row.name)}</strong>
-                  <span class="timeline-path-tag truncate">${escapeHtml(row.pathname || '/')}</span>
+          let contentsHtml = '';
+          if (evt.contents && evt.contents.length > 0) {
+            contentsHtml = `
+              <div style="margin-top: 6px;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Contents Items (${evt.contents.length})</span>
+                <table class="audit-inner-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>ID</th>
+                      <th>Name</th>
+                      <th>Qty</th>
+                      <th>Amount</th>
+                      <th>Curr</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${evt.contents.map(c => `
+                      <tr>
+                        <td>${c.itemIndex}</td>
+                        <td><code>${escapeHtml(c.id)}</code></td>
+                        <td>${escapeHtml(c.name)}</td>
+                        <td>${c.quantity}</td>
+                        <td>${c.amount !== null ? c.amount : '-'}</td>
+                        <td>${c.currency}</td>
+                        <td>${c.status === 'valid' ? '✅' : '❌'}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+          }
+
+          detailsHtml += `
+            <div class="audit-event-card">
+              <div class="audit-event-header">
+                <div class="audit-event-title-group">
+                  <strong class="audit-event-name">${escapeHtml(evt.name)}</strong>
+                  <span class="audit-event-type-badge badge-type-${evt.type.toLowerCase()}">${evt.type}</span>
                 </div>
-                ${timeFormatted ? `<span class="timeline-time">${timeFormatted}</span>` : ''}
+                <span class="badge ${evt.severity === 'valid' ? 'badge-success' : (evt.severity === 'warning' ? 'badge-warning' : 'badge-error')}">
+                  ${evt.status === 'Passed' ? '✅ Passed' : (evt.status === 'Warning' ? '⚠️ Warning' : '❌ Issue')}
+                </span>
               </div>
-              <div class="timeline-status-bar">
-                ${dupBadgeHtml}
-                ${paramBadgeHtml}
+
+              <div class="audit-event-checks-grid">
+                <div class="audit-check-item">
+                  <span>Occurrences:</span> <strong>${evt.occurrences}</strong>
+                </div>
+                <div class="audit-check-item">
+                  <span>Trigger:</span> ${evt.trigger ? '✅' : '❌'}
+                </div>
+                <div class="audit-check-item">
+                  <span>Duplicate:</span> ${evt.duplicateCheck ? '✅ Passed' : '❌ Failed'}
+                </div>
               </div>
+
+              <div class="audit-finding-box">
+                <strong>Finding:</strong> ${escapeHtml(evt.finding)}
+              </div>
+              <div class="audit-rec-box">
+                <strong>Recommendation:</strong> ${escapeHtml(evt.recommendation)}
+              </div>
+
+              ${paramsHtml}
+              ${contentsHtml}
             </div>
-          </div>
-        `;
-      });
-      journeyTableContainer.innerHTML = '<div class="timeline-flow-list">' + timelineHtml + '</div>';
-    } else {
-      journeyTableContainer.innerHTML = '<div class="empty-state-sm">No journey steps recorded yet.</div>';
+          `;
+        });
+        auditEventDetailsContainer.innerHTML = detailsHtml;
+      }
     }
 
-    // Event Summary Breakdown (Data Quality breakdown per event)
-    if (report.eventSummaries && report.eventSummaries.length > 0) {
-      let sumHtml = '';
-      report.eventSummaries.forEach((sum) => {
-        const sev = sum.severity || 'valid';
-        sumHtml += `
-          <div class="event-summary-card">
-            <div class="event-summary-left">
-              <strong class="event-summary-title">${escapeHtml(sum.displayName || sum.name)}</strong>
-              <span class="event-summary-meta">(${sum.detected} observed)</span>
-            </div>
-            <div class="event-summary-right">
-              ${renderStatusBadge(sev, sum.audit)}
-            </div>
+    // 12. Issues & 13. Recommended Actions Section
+    if (auditActionsContainer) {
+      let actionsHtml = '';
+      if (report.recommendations && report.recommendations.length > 0) {
+        actionsHtml = `
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            ${report.recommendations.map((rec, i) => `
+              <div class="action-step-item">
+                <span class="action-step-num">${i + 1}</span>
+                <span>${escapeHtml(rec)}</span>
+              </div>
+            `).join('')}
           </div>
         `;
-      });
-      eventSummaryTableContainer.innerHTML = '<div class="event-summary-list">' + sumHtml + '</div>';
-    } else {
-      eventSummaryTableContainer.innerHTML = '<div class="empty-state-sm">No events to summarize.</div>';
+      } else {
+        actionsHtml = '<div class="empty-state-sm">No outstanding actions required.</div>';
+      }
+      auditActionsContainer.innerHTML = actionsHtml;
     }
   }
 
@@ -1162,49 +1292,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   btnCopyMarkdown.addEventListener('click', () => {
     if (!currentTabState) return;
-    const report = generateAuditReport(currentTabState);
-    const md = [
-      '# OpenAI Ads Pixel Tracking & Journey Audit Report',
-      '**Session ID:** ' + (report.sessionId || 'SESSION'),
-      '**Website:** ' + (report.hostname || report.website),
-      '**Generated:** ' + report.generatedAt,
-      '**Status:** ' + report.overallStatus.toUpperCase(),
-      '',
-      '## 1. Pixel & Attribution Health',
-      '- **Pixel ID(s):** ' + ((report.scores.pixelIds || []).join(', ') || 'None'),
-      '- **Initialized:** ' + (report.scores.initialized ? 'Yes' : 'No'),
-      '- **oppref Detected:** ' + (report.scores.opprefPresent ? 'Yes' : 'No'),
-      '- **GTM Containers:** ' + ((report.gtmContainers || []).join(', ') || 'None'),
-      '',
-      '## 2. E-Commerce Funnel Completion',
-      '- **Funnel Completion:** ' + report.funnel.completionPercentage + '% (' + report.funnel.completedCount + '/5 steps)',
-      '- **PII Privacy Violations:** ' + report.scores.piiViolationsCount,
-      '',
-      '## 3. Event Journey Summary',
-      '- **Total Events:** ' + report.scores.totalEvents,
-      '- **Standard Events:** ' + report.scores.standardEvents,
-      '- **Custom Events:** ' + report.scores.customEvents,
-      '- **Duplicate / Double Fires:** ' + report.scores.duplicateEvents,
-      '- **Pages Visited:** ' + report.scores.pagesVisitedCount,
-      '',
-      '## 4. Issues & Recommendations',
-      report.issues.length === 0 ? '*No issues found. Tracking implementation is clean!*' : report.issues.map((i) => '- **[' + i.severity.toUpperCase() + '] ' + i.code + '**: ' + i.message + '\n  *Recommended fix:* ' + (i.recommendation || 'N/A')).join('\n')
-    ].join('\n');
-
+    const report = generateComprehensiveAudit(currentTabState);
+    const md = formatAuditMarkdown(report);
     copyToClipboard(md, btnCopyMarkdown);
   });
 
   btnExportCsv.addEventListener('click', () => {
     if (!currentTabState || !currentTabState.events) return;
     const headers = [
-      'Step',
-      'Timestamp',
       'Event Name',
+      'Event Type',
+      'Trigger Status',
+      'Parameters Status',
+      'Duplicate Status',
+      'Overall Status',
+      'Timestamp',
       'Page Path',
       'Event ID',
       'Pixel ID',
-      'Duplicate Status',
-      'Audit Status',
       'Amount',
       'Currency',
       'Parameters JSON',
@@ -1212,20 +1317,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     const rows = [headers];
-    currentTabState.events.forEach((evt, idx) => {
+    const report = generateComprehensiveAudit(currentTabState);
+
+    currentTabState.events.forEach((evt) => {
+      const p = evt.parameters || {};
       rows.push([
-        idx + 1,
-        new Date(evt.timestamp).toISOString(),
         '"' + (evt.displayName || evt.name) + '"',
+        '"' + classifyEventType(evt.displayName || evt.name) + '"',
+        '"Detected"',
+        evt.validation && evt.validation.issues && evt.validation.issues.length > 0 ? '"Suboptimal"' : '"Valid"',
+        '"' + (evt.isDuplicate ? 'Duplicate' : 'No duplicates') + '"',
+        evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
+        new Date(evt.timestamp).toISOString(),
         '"' + (evt.pathname || '') + '"',
         '"' + (evt.eventId || 'Not Sent') + '"',
         '"' + (evt.pixelId || '') + '"',
-        '"' + (evt.isDuplicate ? 'Duplicate' : 'No duplicates') + '"',
-        evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
-        evt.parameters.amount !== undefined ? evt.parameters.amount : '',
-        evt.parameters.currency || '',
-        '"' + JSON.stringify(evt.parameters).replace(/"/g, '""') + '"',
-        '"' + (evt.attribution.oppref || '') + '"'
+        p.amount !== undefined ? p.amount : '',
+        p.currency || '',
+        '"' + JSON.stringify(p).replace(/"/g, '""') + '"',
+        '"' + (evt.attribution?.oppref || '') + '"'
       ]);
     });
 
@@ -1238,9 +1348,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   btnExportJson.addEventListener('click', () => {
     if (!currentTabState) return;
-    const report = generateAuditReport(currentTabState);
+    const comprehensiveReport = generateComprehensiveAudit(currentTabState);
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({
-      report: report,
+      auditReport: comprehensiveReport,
       sessionState: currentTabState
     }, null, 2));
     const dlAnchor = document.createElement('a');
