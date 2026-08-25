@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let searchQuery = '';
   let activeModalJson = '';
   const expandedEventIds = new Set();
+  const expandedPayloadEventIds = new Set();
   const expandedDlIndices = new Set();
 
   // ==========================================
@@ -394,18 +395,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (events.length > 0) {
       const latest = events[events.length - 1];
       latestEventTime.textContent = formatTimestamp(latest.timestamp);
+      const paramCount = Object.keys(latest.parameters || {}).length;
       latestEventContent.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="event-type-badge ${latest.validation.isCustom ? 'event-type-custom' : 'event-type-std'}">
-              ${latest.validation.isCustom ? 'Custom' : 'Standard'}
+            <span class="event-type-badge ${latest.validation?.isCustom ? 'event-type-custom' : 'event-type-std'}">
+              ${latest.validation?.isCustom ? 'Custom' : 'Standard'}
             </span>
-            <strong style="font-size: 13.5px; color: var(--text-main);">${escapeHtml(latest.displayName || latest.name)}</strong>
+            <strong style="font-size: 13.5px; color: var(--text-main); font-weight: 600;">${escapeHtml(latest.displayName || latest.name)}</strong>
           </div>
           ${latest.isDuplicate ? renderStatusBadge('duplicate', 'Double Fired') : renderStatusBadge('triggered', 'Triggered')}
         </div>
-        <div style="font-size: 11.5px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 4px;">
-          ${Object.keys(latest.parameters).length} param(s) • Path: ${escapeHtml(latest.pathname || '/')} • ID: ${latest.eventId ? escapeHtml(latest.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}
+        <div class="event-meta-line" style="margin-top: 5px; font-size: 11.5px; color: var(--text-secondary);">
+          <span>${paramCount} parameter(s) &bull; <code class="mono" style="font-size: 11px;">${escapeHtml(latest.pathname || '/')}</code></span>
+          <span style="font-size: 11px; color: var(--text-muted);">ID: ${latest.eventId ? `<code>${escapeHtml(latest.eventId)}</code>` : '<em>Not Sent</em>'}</span>
         </div>
       `;
     } else {
@@ -524,14 +527,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let displayVal = '';
         if (typeof val === 'object' && val !== null) {
-          displayVal = `<code>${escapeHtml(JSON.stringify(val))}</code>`;
+          const formattedJson = JSON.stringify(val, null, 2);
+          const itemCount = Array.isArray(val) ? `${val.length} item(s)` : `${Object.keys(val).length} field(s)`;
+          displayVal = `
+            <div class="param-code-container">
+              <span class="param-code-tag">${itemCount}</span>
+              <pre class="param-code-block">${escapeHtml(formattedJson)}</pre>
+            </div>
+          `;
         } else {
-          displayVal = escapeHtml(String(val));
+          displayVal = `<span class="param-scalar-val">${escapeHtml(String(val))}</span>`;
         }
 
         paramRows += `
           <tr>
-            <td class="param-name-cell">${escapeHtml(key)}${piiBadge}</td>
+            <td class="param-name-cell"><strong>${escapeHtml(key)}</strong>${piiBadge}</td>
             <td class="param-val-cell">${displayVal}</td>
             <td class="param-status-cell">${renderStatusBadge(statusSev, statusText, valRes.message)}</td>
           </tr>
@@ -543,6 +553,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const eventIdDisplay = evt.eventId ? `<code>${escapeHtml(evt.eventId)}</code>` : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
+
+      const isPayloadOpen = expandedPayloadEventIds.has(itemKey);
 
       item.className = `event-card ${isExpanded ? 'open' : ''}`;
       item.innerHTML = `
@@ -561,7 +573,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <div class="event-meta-line">
             <span class="event-path-text truncate">${escapeHtml(evt.pathname || evt.url || '/')}</span>
-            <span style="font-size: 11px; color: var(--text-muted);">${Object.keys(params).length} parameter(s)</span>
+            <span style="font-size: 11.5px; color: var(--text-secondary);">${Object.keys(params).length} parameter(s)</span>
           </div>
         </div>
 
@@ -592,14 +604,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             </tbody>
           </table>
 
-          <details class="payload-details">
-            <summary>View JSON Payload ▾</summary>
+          <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
+            <summary>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span>View JSON Payload</span>
+            </summary>
             <pre class="payload-code">${escapeHtml(JSON.stringify(evt.parameters, null, 2))}</pre>
           </details>
         </div>
       `;
 
-      // Accordion click handler
+      // Accordion click handler on header
       const header = item.querySelector('.event-card-header');
       header.addEventListener('click', () => {
         if (expandedEventIds.has(itemKey)) {
@@ -610,6 +625,26 @@ document.addEventListener('DOMContentLoaded', async () => {
           item.classList.add('open');
         }
       });
+
+      // Stop propagation inside details drawer so interacting with table / JSON never closes the card
+      const drawer = item.querySelector('.event-details-drawer');
+      if (drawer) {
+        drawer.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
+
+      // Track payload details open state persistently
+      const payloadDetails = item.querySelector('.payload-details');
+      if (payloadDetails) {
+        payloadDetails.addEventListener('toggle', () => {
+          if (payloadDetails.open) {
+            expandedPayloadEventIds.add(itemKey);
+          } else {
+            expandedPayloadEventIds.delete(itemKey);
+          }
+        });
+      }
 
       eventsListContainer.appendChild(item);
     });
