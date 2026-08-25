@@ -26,7 +26,9 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
           </button>
           <button id="btn-theme" class="icon-button" title="Toggle Light/Dark Theme">
-            <span id="theme-icon">☀️</span>
+            <span id="theme-icon" style="display:flex;align-items:center;justify-content:center;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </span>
           </button>
           <button id="btn-clear" class="icon-button" title="Reset Session & Clear Journey">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -39,7 +41,9 @@
 
       <!-- Tab Target Banner -->
       <div class="tab-target-bar">
-        <span class="target-icon">🌐</span>
+        <span class="target-icon">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </span>
         <span id="target-host" class="target-host truncate">Loading active tab...</span>
         <span id="badge-tab-id" class="badge badge-subtle">Tab #--</span>
       </div>
@@ -125,7 +129,9 @@
         <!-- Search & Filter Controls -->
         <div class="events-toolbar">
           <div class="search-box">
-            <span class="search-icon">🔍</span>
+            <span class="search-icon" style="display:flex;align-items:center;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
             <input type="text" id="event-search-input" placeholder="Search event names, URLs, parameters...">
           </div>
           <div class="filter-chips">
@@ -241,13 +247,16 @@
           <!-- Export Actions -->
           <div class="export-actions" style="margin-top: 16px;">
             <button class="btn btn-primary" id="btn-copy-markdown">
-              <span>📋 Copy Markdown</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy Markdown</span>
             </button>
             <button class="btn btn-secondary" id="btn-export-csv">
-              <span>📊 Export CSV (Sheets/Excel)</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+              <span>Export CSV (Sheets/Excel)</span>
             </button>
             <button class="btn btn-secondary" id="btn-export-json">
-              <span>📥 Export JSON</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Export JSON</span>
             </button>
           </div>
         </section>

@@ -87,6 +87,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   const expandedEventIds = new Set();
 
   // ==========================================
+  // SVG Icon System (Professional & Zero Emojis)
+  // ==========================================
+  const ICONS = {
+    check: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>',
+    cross: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>',
+    warn: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>',
+    info: '<svg class="badge-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>',
+    sun: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
+    moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    emptyEvents: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+    emptyNet: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    emptyCheck: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+  };
+
+  function renderStatusBadge(severity, label, titleText) {
+    const safeTitle = titleText ? ` title="${escapeHtml(titleText)}"` : '';
+    if (severity === 'valid' || severity === 'pass' || severity === 'success') {
+      return `<span class="badge badge-success"${safeTitle}>${ICONS.check} ${label || 'Valid'}</span>`;
+    } else if (severity === 'error' || severity === 'critical' || severity === 'fail') {
+      return `<span class="badge badge-error"${safeTitle}>${ICONS.cross} ${label || 'Error'}</span>`;
+    } else if (severity === 'warning') {
+      return `<span class="badge badge-warning"${safeTitle}>${ICONS.warn} ${label || 'Warning'}</span>`;
+    } else {
+      return `<span class="badge badge-neutral"${safeTitle}>${ICONS.info} ${label || 'Info'}</span>`;
+    }
+  }
+
+  // ==========================================
   // 1. Theme Management (Dark / Light)
   // ==========================================
   let currentTheme = localStorage.getItem('openai_pixel_inspector_theme') || 'dark';
@@ -96,7 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.documentElement.setAttribute('data-theme', theme);
     document.body.setAttribute('data-theme', theme);
     if (themeIcon) {
-      themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+      themeIcon.innerHTML = theme === 'dark' ? ICONS.sun : ICONS.moon;
     }
     localStorage.setItem('openai_pixel_inspector_theme', theme);
   }
@@ -242,18 +270,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const network = currentTabState.network || [];
 
     if (pixel.detected) {
-      valPixelDetected.textContent = `✅ Detected (${pixel.confidence || 'high'})`;
+      valPixelDetected.innerHTML = `<span style="color:var(--color-emerald); font-weight:600;">Detected (${escapeHtml(pixel.confidence || 'high')})</span>`;
       pixelStatusBadge.textContent = 'Active';
       pixelStatusBadge.className = 'badge badge-success';
     } else {
-      valPixelDetected.textContent = '❌ Not Detected';
+      valPixelDetected.innerHTML = '<span style="color:var(--color-rose); font-weight:600;">Not Detected</span>';
       pixelStatusBadge.textContent = 'Missing';
       pixelStatusBadge.className = 'badge badge-error';
     }
 
     valPixelId.textContent = (pixel.pixelIds && pixel.pixelIds.length > 0) ? pixel.pixelIds.join(', ') : 'None';
     valSessionId.textContent = currentTabState.sessionId || 'SESSION_' + activeTab?.id;
-    valOppref.textContent = attribution.oppref ? `✅ ${truncateString(attribution.oppref, 18)}` : '⚠️ Not detected';
+    valOppref.innerHTML = attribution.oppref ? `<span style="color:var(--color-emerald); font-weight:600;">${truncateString(attribution.oppref, 18)}</span>` : '<span style="color:var(--text-muted);">Not detected</span>';
 
     metricTotalEvents.textContent = stats.totalEvents || 0;
     metricStandardEvents.textContent = stats.standardEvents || 0;
@@ -279,7 +307,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ${latest.isDuplicate ? 'DOUBLE FIRED' : latest.validation.status.toUpperCase()}
           </span>
         </div>
-        <div style="font-size: 11px; font-family: monospace; color: var(--text-secondary); margin-top: 6px;">
+        <div style="font-size: 12px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 6px;">
           ${Object.keys(latest.parameters).length} parameter(s) • Page: ${escapeHtml(latest.pathname || '/')} • ID: ${latest.eventId ? escapeHtml(latest.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}
         </div>
       `;
@@ -315,7 +343,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (filtered.length === 0) {
       eventsListContainer.innerHTML = `
         <div class="empty-state">
-          <span class="empty-icon">📡</span>
+          <span class="empty-icon">${ICONS.emptyEvents}</span>
           <p class="empty-text">No matching OpenAI Pixel events observed.</p>
           <span class="empty-subtext">Trigger tracking actions on the page or across the user journey.</span>
         </div>
@@ -334,35 +362,37 @@ document.addEventListener('DOMContentLoaded', async () => {
       let statusBadgeHtml = '';
 
       if (evt.isDuplicate) {
-        statusBadgeHtml = `<span class="badge badge-error">❌ Double Fired</span>`;
+        statusBadgeHtml = renderStatusBadge('error', 'Double Fired');
       } else if (evt.requestCount > 1) {
-        statusBadgeHtml = `<span class="badge badge-error">❌ Fired ${evt.requestCount}x</span>`;
+        statusBadgeHtml = renderStatusBadge('error', `Fired ${evt.requestCount}x`);
       } else {
-        const statusClass = evt.validation.status === 'valid' ? 'badge-success' : (evt.validation.status === 'warning' ? 'badge-warning' : 'badge-error');
-        statusBadgeHtml = `<span class="badge ${statusClass}">${evt.validation.status}</span>`;
+        const statusLabel = evt.validation.status === 'valid' ? 'Valid' : (evt.validation.status === 'warning' ? 'Warning' : 'Error');
+        statusBadgeHtml = renderStatusBadge(evt.validation.status, statusLabel);
       }
 
       // Compute Separate 5-Stage Lifecycle
       const lifecycle = computeEventLifecycle(evt);
 
-      // Build Parameter Table Rows with 4-Level Severity Badges
+      // Build Parameter Table Rows with Clean Severity Badges
       let paramRows = '';
       const params = evt.parameters || {};
       for (const [key, val] of Object.entries(params)) {
         const valRes = (evt.validation.parameterResults && evt.validation.parameterResults[key]) || {};
         
-        let paramStatusBadge = '';
-        if (valRes.severity === 'valid' || valRes.valid) {
-          paramStatusBadge = '<span class="badge badge-success">✅ Valid</span>';
+        let paramSeverity = 'valid';
+        let paramLabel = 'Valid';
+        if (valRes.severity === 'error' || valRes.valid === false) {
+          paramSeverity = 'error';
+          paramLabel = 'Error';
         } else if (valRes.severity === 'warning') {
-          paramStatusBadge = `<span class="badge badge-warning" title="${escapeHtml(valRes.message || 'Warning')}">⚠️ Warning</span>`;
-        } else if (valRes.severity === 'error') {
-          paramStatusBadge = `<span class="badge badge-error" title="${escapeHtml(valRes.message || 'Error')}">❌ Error</span>`;
+          paramSeverity = 'warning';
+          paramLabel = 'Warning';
         } else if (valRes.severity === 'info') {
-          paramStatusBadge = `<span class="badge badge-neutral" title="${escapeHtml(valRes.message || 'Info')}">ℹ️ Info</span>`;
-        } else {
-          paramStatusBadge = '<span class="badge badge-success">✅ Valid</span>';
+          paramSeverity = 'info';
+          paramLabel = 'Info';
         }
+
+        const paramStatusBadge = renderStatusBadge(paramSeverity, paramLabel, valRes.message);
 
         let displayVal = '';
         if (typeof val === 'object' && val !== null) {
@@ -421,10 +451,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
           </div>
 
-          <div style="margin-bottom:6px; color:var(--text-secondary); font-size:10px; line-height: 1.6;">
+          <div style="margin-bottom:8px; color:var(--text-secondary); font-size:12px; line-height: 1.6;">
             <div><strong>Page Path:</strong> <code>${escapeHtml(evt.pathname || evt.url || '/')}</code></div>
             <div><strong>Event ID:</strong> ${eventIdDisplay} ${evt.pixelId ? ` | <strong>Pixel:</strong> <code>${escapeHtml(evt.pixelId)}</code>` : ''}</div>
-            ${evt.duplicateReason ? `<div style="color:var(--color-rose); margin-top:2px;">⚠️ <strong>Duplicate Reason:</strong> ${escapeHtml(evt.duplicateReason)}</div>` : ''}
+            ${evt.duplicateReason ? `<div style="color:var(--color-rose); margin-top:3px;"><strong>Duplicate:</strong> ${escapeHtml(evt.duplicateReason)}</div>` : ''}
           </div>
 
           <table class="param-table">
@@ -480,7 +510,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (networkRequests.length === 0) {
       networkListContainer.innerHTML = `
         <div class="empty-state">
-          <span class="empty-icon">🌐</span>
+          <span class="empty-icon">${ICONS.emptyNet}</span>
           <p class="empty-text">No OpenAI Pixel network transmissions captured.</p>
           <span class="empty-subtext">Requests to bzr.openai.com or bzrcdn.openai.com will appear here in real time.</span>
         </div>
@@ -494,13 +524,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       card.className = 'network-card';
 
       const method = req.method || 'POST';
-      let statusBadge = '<span class="badge badge-warning">⏳ Pending</span>';
+      let statusBadge = '<span class="badge badge-warning">Pending</span>';
       if (req.status === 200) {
         statusBadge = '<span class="badge badge-success">HTTP 200</span>';
       } else if (req.status && req.status > 0) {
         statusBadge = `<span class="badge badge-error">HTTP ${req.status}</span>`;
       } else if (req.status === 0 || req.error) {
-        statusBadge = `<span class="badge badge-error">Blocked / Net Err</span>`;
+        statusBadge = `<span class="badge badge-error">Blocked</span>`;
       }
 
       // Extract Event Name if present in payload
@@ -511,11 +541,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="network-header">
           <div class="network-method-group">
             <span class="badge-post">${escapeHtml(method)}</span>
-            <span style="font-weight: 600; font-size: 11px;">${escapeHtml(evtName)}</span>
+            <span style="font-weight: 600; font-size: 13px;">${escapeHtml(evtName)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
             ${statusBadge}
-            <span class="text-muted font-mono" style="font-size: 10px;">${formatTimestamp(req.timestamp)}</span>
+            <span class="text-muted font-mono" style="font-size: 11.5px;">${formatTimestamp(req.timestamp)}</span>
           </div>
         </div>
         <div class="network-url">${escapeHtml(cleanUrl)}</div>
@@ -573,8 +603,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (issues.length === 0) {
       issuesListContainer.innerHTML = `
         <div class="empty-state">
-          <span class="empty-icon">✅</span>
-          <p class="empty-text">No implementation issues, double fires, or warnings found!</p>
+          <span class="empty-icon">${ICONS.emptyCheck}</span>
+          <p class="empty-text">No implementation issues, double fires, or warnings found.</p>
           <span class="empty-subtext">All parameters, journey actions, and tracking calls match OpenAI specifications.</span>
         </div>
       `;
@@ -593,7 +623,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </span>
         </div>
         <p class="issue-msg">${escapeHtml(iss.message)}</p>
-        ${iss.recommendation ? `<div class="issue-rec">💡 <strong>Recommendation:</strong> ${escapeHtml(iss.recommendation)}</div>` : ''}
+        ${iss.recommendation ? `<div class="issue-rec"><strong>Recommendation:</strong> ${escapeHtml(iss.recommendation)}</div>` : ''}
       `;
       issuesListContainer.appendChild(card);
     });
@@ -620,7 +650,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div><strong>Target Host:</strong> ${escapeHtml(report.hostname || 'Unknown')}</div>
       <div><strong>Visited Pages:</strong> ${report.scores.pagesVisitedCount} page(s) in session</div>
       <div><strong>Total Events Recorded:</strong> ${report.scores.totalEvents} (${report.scores.standardEvents} Standard, ${report.scores.customEvents} Custom)</div>
-      <div><strong>Duplicate / Double Fires:</strong> ${report.scores.duplicateEvents > 0 ? `<span style="color:var(--color-rose); font-weight:bold;">${report.scores.duplicateEvents} detected</span>` : '<span style="color:var(--color-emerald)">0 (Clean)</span>'}</div>
+      <div><strong>Duplicate / Double Fires:</strong> ${report.scores.duplicateEvents > 0 ? `<span style="color:var(--color-rose); font-weight:600;">${report.scores.duplicateEvents} detected</span>` : '<span style="color:var(--color-emerald); font-weight:600;">0 (Clean)</span>'}</div>
       <div><strong>Issues Count:</strong> ${report.issues.length} (${report.scores.errorEvents} errors, ${report.scores.warningEvents} warnings)</div>
     `;
 
@@ -756,8 +786,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     ].join('\n');
 
     navigator.clipboard.writeText(md);
-    btnCopyMarkdown.textContent = '✅ Copied!';
-    setTimeout(() => { btnCopyMarkdown.innerHTML = '<span>📋 Copy Markdown</span>'; }, 2000);
+    btnCopyMarkdown.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> <span>Copied!</span>`;
+    setTimeout(() => {
+      btnCopyMarkdown.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>Copy Markdown</span>`;
+    }, 2000);
   });
 
   btnExportCsv.addEventListener('click', () => {
@@ -790,7 +822,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         `"${evt.pathname || ''}"`,
         `"${evt.eventId || 'Not Sent'}"`,
         `"${evt.pixelId || ''}"`,
-        `"${evt.duplicateStatus || '✅ Correct'}"`,
+        `"${evt.duplicateStatus || 'Correct'}"`,
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
