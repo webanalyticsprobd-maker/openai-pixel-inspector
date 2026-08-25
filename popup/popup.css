@@ -306,41 +306,74 @@ html, body {
   background: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.nav-primary {
+  padding: 3px 4px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.nav-secondary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-top: 3px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.nav-tab {
-  flex: 1;
-  height: 33px;
-  padding: 0 8px;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 16px;
-  border: 1px solid transparent;
-  background: transparent;
+.nav-scroll-btn {
+  width: 26px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.nav-scroll-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.nav-scroll-btn-accent {
+  background: var(--accent-brand);
+  color: #ffffff;
+  border-color: var(--accent-brand);
+}
+
+.nav-scroll-btn-accent:hover {
+  background: var(--accent-brand-hover);
+  color: #ffffff;
+}
+
+.nav-scroll-track {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  flex: 1;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 1px 0;
+}
+
+.nav-scroll-track::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
+  height: 30px;
+  padding: 0 10px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 15px;
+  border: 1px solid transparent;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
   gap: 5px;
   transition: all 0.15s ease;
   user-select: none;

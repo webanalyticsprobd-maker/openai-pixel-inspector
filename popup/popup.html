@@ -54,10 +54,13 @@
         </div>
       </div>
 
-      <!-- Primary + Secondary Pill Toolbar Navigation -->
+      <!-- Single-Row Carousel Pill Toolbar Navigation -->
       <nav class="nav-system">
         <div class="nav-toolbar-container">
-          <div class="nav-primary">
+          <button class="nav-scroll-btn" id="nav-scroll-prev" title="Scroll Left">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="nav-scroll-track" id="nav-scroll-track">
             <button class="nav-tab active" data-tab="overview">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
               <span>Overview</span>
@@ -77,8 +80,6 @@
               <span>Data Layer</span>
               <span class="tab-count-tag" id="tab-count-datalayer">0</span>
             </button>
-          </div>
-          <div class="nav-secondary">
             <button class="nav-tab" data-tab="attribution">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
               <span>oppref</span>
@@ -93,6 +94,9 @@
               <span>Audit</span>
             </button>
           </div>
+          <button class="nav-scroll-btn nav-scroll-btn-accent" id="nav-scroll-next" title="Scroll Right">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </nav>
     </header>
@@ -381,7 +385,7 @@
         <span id="footer-status-text">Ready</span>
       </div>
       <div class="footer-right">
-        <span class="version-tag">v1.4.1</span>
+        <span class="version-tag">v1.4.2</span>
       </div>
     </footer>
   </div>

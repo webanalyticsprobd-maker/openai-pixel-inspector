@@ -210,14 +210,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 3. Navigation System (Option B: Primary + Secondary)
+  // 3. Single-Row Carousel Navigation System
   // ==========================================
+  const navScrollTrack = document.getElementById('nav-scroll-track');
+  const navScrollPrev = document.getElementById('nav-scroll-prev');
+  const navScrollNext = document.getElementById('nav-scroll-next');
+
+  if (navScrollPrev && navScrollTrack) {
+    navScrollPrev.addEventListener('click', () => {
+      navScrollTrack.scrollBy({ left: -120, behavior: 'smooth' });
+    });
+  }
+
+  if (navScrollNext && navScrollTrack) {
+    navScrollNext.addEventListener('click', () => {
+      navScrollTrack.scrollBy({ left: 120, behavior: 'smooth' });
+    });
+  }
+
   allNavTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       const targetId = tab.dataset.tab;
       
       allNavTabs.forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
+
+      tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 
       tabPanes.forEach((pane) => {
         if (pane.id === ('pane-' + targetId)) {
