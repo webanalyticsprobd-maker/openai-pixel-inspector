@@ -164,8 +164,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 3. Navigation Tabs
+  // 3. Navigation Tabs & Scroll Controls
   // ==========================================
+  const navScrollLeft = document.getElementById('nav-scroll-left');
+  const navScrollRight = document.getElementById('nav-scroll-right');
+  const navTabsScroll = document.getElementById('nav-tabs-scroll');
+
+  if (navScrollLeft && navTabsScroll) {
+    navScrollLeft.addEventListener('click', () => {
+      navTabsScroll.scrollBy({ left: -140, behavior: 'smooth' });
+    });
+  }
+  if (navScrollRight && navTabsScroll) {
+    navScrollRight.addEventListener('click', () => {
+      navTabsScroll.scrollBy({ left: 140, behavior: 'smooth' });
+    });
+  }
+
   navTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       navTabs.forEach((t) => t.classList.remove('active'));
@@ -173,6 +188,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       tab.classList.add('active');
       const targetPane = document.getElementById(`pane-${tab.dataset.tab}`);
       if (targetPane) targetPane.classList.add('active');
+      try {
+        tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      } catch {}
     });
   });
 
