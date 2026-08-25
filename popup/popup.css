@@ -148,6 +148,14 @@ body {
   line-height: 1.2;
 }
 
+.brand-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 1px;
+  font-weight: 500;
+}
+
 .brand-badge-pill {
   background: #10a37f;
   color: #ffffff;
