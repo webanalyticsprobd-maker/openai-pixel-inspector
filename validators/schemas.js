@@ -99,13 +99,13 @@ export const EVENT_SCHEMAS = {
   'page_viewed': {
     dataShape: 'contents',
     category: 'traffic',
-    required: ['type'],
-    optional: ['contents', 'amount', 'currency'],
+    required: [],
+    optional: ['type', 'contents', 'amount', 'currency'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      type: { type: 'string', expected: 'contents', required: false, description: 'Optional data shape (defaults to "contents")' },
       contents: { type: 'array', itemSchema: 'Content', description: 'Optional page content items' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional monetary value' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
@@ -119,13 +119,13 @@ export const EVENT_SCHEMAS = {
   'contents_viewed': {
     dataShape: 'contents',
     category: 'engagement',
-    required: ['type'],
-    optional: ['contents', 'amount', 'currency'],
+    required: [],
+    optional: ['type', 'contents', 'amount', 'currency'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      type: { type: 'string', expected: 'contents', required: false, description: 'Optional data shape (defaults to "contents")' },
       contents: { type: 'array', itemSchema: 'Content', description: 'Array of viewed content/product items' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Monetary value in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
@@ -139,13 +139,13 @@ export const EVENT_SCHEMAS = {
   'items_added': {
     dataShape: 'contents',
     category: 'conversion',
-    required: ['type'],
-    optional: ['amount', 'currency', 'contents'],
+    required: [],
+    optional: ['type', 'amount', 'currency', 'contents'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      type: { type: 'string', expected: 'contents', required: false, description: 'Optional data shape (defaults to "contents")' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Cart addition total in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
       contents: { type: 'array', itemSchema: 'Content', description: 'Added product items' }
@@ -159,13 +159,13 @@ export const EVENT_SCHEMAS = {
   'checkout_started': {
     dataShape: 'contents',
     category: 'conversion',
-    required: ['type'],
-    optional: ['amount', 'currency', 'contents'],
+    required: [],
+    optional: ['type', 'amount', 'currency', 'contents'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      type: { type: 'string', expected: 'contents', required: false, description: 'Optional data shape (defaults to "contents")' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Checkout total in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
       contents: { type: 'array', itemSchema: 'Content', description: 'Cart checkout items' }
@@ -179,13 +179,13 @@ export const EVENT_SCHEMAS = {
   'order_created': {
     dataShape: 'contents',
     category: 'conversion',
-    required: ['type'],
-    optional: ['amount', 'currency', 'contents'],
+    required: [],
+    optional: ['type', 'amount', 'currency', 'contents'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'contents', required: true, description: 'Must be "contents"' },
+      type: { type: 'string', expected: 'contents', required: false, description: 'Optional data shape (defaults to "contents")' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Order total in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
       contents: { type: 'array', itemSchema: 'Content', description: 'Purchased items' }
@@ -199,13 +199,13 @@ export const EVENT_SCHEMAS = {
   'lead_created': {
     dataShape: 'customer_action',
     category: 'conversion',
-    required: ['type'],
-    optional: ['amount', 'currency'],
+    required: [],
+    optional: ['type', 'amount', 'currency'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'customer_action', required: true, description: 'Must be "customer_action"' },
+      type: { type: 'string', expected: 'customer_action', required: false, description: 'Optional data shape' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Estimated lead value in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
     },
@@ -218,13 +218,13 @@ export const EVENT_SCHEMAS = {
   'registration_completed': {
     dataShape: 'customer_action',
     category: 'conversion',
-    required: ['type'],
-    optional: ['amount', 'currency'],
+    required: [],
+    optional: ['type', 'amount', 'currency'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'customer_action', required: true, description: 'Must be "customer_action"' },
+      type: { type: 'string', expected: 'customer_action', required: false, description: 'Optional data shape' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional value' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
     },
@@ -237,13 +237,13 @@ export const EVENT_SCHEMAS = {
   'appointment_scheduled': {
     dataShape: 'customer_action',
     category: 'conversion',
-    required: ['type'],
-    optional: ['amount', 'currency'],
+    required: [],
+    optional: ['type', 'amount', 'currency'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'customer_action', required: true, description: 'Must be "customer_action"' },
+      type: { type: 'string', expected: 'customer_action', required: false, description: 'Optional data shape' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Booking value in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' }
     },
@@ -256,13 +256,13 @@ export const EVENT_SCHEMAS = {
   'subscription_created': {
     dataShape: 'plan_enrollment',
     category: 'conversion',
-    required: ['type'],
-    optional: ['plan_id', 'amount', 'currency', 'contents'],
+    required: [],
+    optional: ['type', 'plan_id', 'amount', 'currency', 'contents'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'plan_enrollment', required: true, description: 'Must be "plan_enrollment"' },
+      type: { type: 'string', expected: 'plan_enrollment', required: false, description: 'Optional data shape' },
       plan_id: { type: 'string', description: 'Internal subscription plan identifier' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Recurring amount in minor units' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' },
@@ -277,10 +277,10 @@ export const EVENT_SCHEMAS = {
   'trial_started': {
     dataShape: 'plan_enrollment',
     category: 'conversion',
-    required: ['type'],
-    optional: ['plan_id'],
+    required: [],
+    optional: ['type', 'plan_id'],
     parameters: {
-      type: { type: 'string', expected: 'plan_enrollment', required: true, description: 'Must be "plan_enrollment"' },
+      type: { type: 'string', expected: 'plan_enrollment', required: false, description: 'Optional data shape' },
       plan_id: { type: 'string', description: 'Trial plan identifier' }
     },
     options: {
@@ -292,14 +292,14 @@ export const EVENT_SCHEMAS = {
   'custom': {
     dataShape: 'custom',
     category: 'custom',
-    required: ['type'],
-    optional: ['plan_id', 'amount', 'currency', 'contents'],
+    required: [],
+    optional: ['type', 'plan_id', 'amount', 'currency', 'contents'],
     optionsRequired: ['custom_event_name'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
-      type: { type: 'string', expected: 'custom', required: true, description: 'Must be "custom"' },
+      type: { type: 'string', expected: 'custom', required: false, description: 'Optional data shape' },
       plan_id: { type: 'string', description: 'Optional plan ID' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional custom event value' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' },

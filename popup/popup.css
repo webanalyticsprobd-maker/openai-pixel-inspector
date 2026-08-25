@@ -687,36 +687,6 @@ body {
 }
 
 /* ==========================================================================
-   Lifecycle Box (3-Row Verification Card)
-   ========================================================================== */
-.lifecycle-box {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  margin-bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.lifecycle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-}
-
-.lifecycle-label {
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.lifecycle-val {
-  font-weight: 600;
-}
-
-/* ==========================================================================
    1. PARAMETER TABLE (3 Columns: Parameter, Value, Status)
    ========================================================================== */
 .param-table {

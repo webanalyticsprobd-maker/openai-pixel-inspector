@@ -13,7 +13,6 @@
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
 import { generateAuditReport } from '../core/scanner.js';
-import { computeEventLifecycle } from '../core/normalizer.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
@@ -420,14 +419,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusBadgeHtml = renderStatusBadge(evt.validation.status, statusLabel);
       }
 
-      // Compute Separate 5-Stage Lifecycle
-      const lifecycle = computeEventLifecycle(evt);
-
       // Build Parameter Table Rows with Clean Severity Badges & PII Warnings
       let paramRows = '';
       const params = evt.parameters || {};
       for (const [key, val] of Object.entries(params)) {
-        const valRes = (evt.validation.parameterResults && evt.validation.parameterResults[key]) || {};
+        const valRes = (evt.validation && evt.validation.parameterResults && evt.validation.parameterResults[key]) || {};
         
         let paramSeverity = 'valid';
         let paramLabel = 'Valid';
@@ -486,26 +482,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
         <div class="event-details-drawer">
-          <!-- Lifecycle Verification Box -->
-          <div class="lifecycle-box">
-            <div class="lifecycle-row">
-              <span class="lifecycle-label">Pixel Call:</span>
-              <span class="lifecycle-val" style="color:var(--color-emerald);">${lifecycle.pixelCall.label}</span>
-            </div>
-            <div class="lifecycle-row">
-              <span class="lifecycle-label">Parameters:</span>
-              <span class="lifecycle-val" style="color:${lifecycle.parametersStatus.status === 'valid' ? 'var(--color-emerald)' : (lifecycle.parametersStatus.status === 'warning' ? 'var(--color-amber)' : 'var(--color-rose)')};">
-                ${lifecycle.parametersStatus.label}
-              </span>
-            </div>
-            <div class="lifecycle-row">
-              <span class="lifecycle-label">Validation:</span>
-              <span class="lifecycle-val" style="color:${lifecycle.validationStatus.status === 'passed' ? 'var(--color-emerald)' : (lifecycle.validationStatus.status === 'warning' ? 'var(--color-amber)' : 'var(--color-rose)')};">
-                ${lifecycle.validationStatus.label}
-              </span>
-            </div>
-          </div>
-
           <div style="margin-bottom:8px; color:var(--text-secondary); font-size:12px; line-height: 1.6;">
             <div><strong>Page Path:</strong> <code>${escapeHtml(evt.pathname || evt.url || '/')}</code></div>
             <div><strong>Event ID:</strong> ${eventIdDisplay} ${evt.pixelId ? ` | <strong>Pixel:</strong> <code>${escapeHtml(evt.pixelId)}</code>` : ''}</div>

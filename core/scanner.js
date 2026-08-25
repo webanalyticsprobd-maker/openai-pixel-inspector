@@ -3,11 +3,11 @@ import { analyzeServerSideTracking } from '../validators/server-side-detector.js
 export { analyzeServerSideTracking };
 
 const STANDARD_FUNNEL_STEPS = [
-  { key: 'page_view', names: ['page_viewed', 'page_view', 'pageview'], label: 'Page View', requiredParams: ['url'] },
-  { key: 'view_content', names: ['view_content', 'product_viewed', 'viewitem', 'view_item'], label: 'View Content', requiredParams: ['contents'] },
-  { key: 'add_to_cart', names: ['add_to_cart', 'cart_updated', 'addtocart'], label: 'Add To Cart', requiredParams: ['contents'] },
-  { key: 'initiate_checkout', names: ['initiate_checkout', 'checkout_started', 'begin_checkout'], label: 'Initiate Checkout', requiredParams: ['amount', 'currency'] },
-  { key: 'purchase', names: ['order_created', 'purchase', 'order_placed'], label: 'Purchase', requiredParams: ['amount', 'currency', 'contents'] }
+  { key: 'page_view', names: ['page_viewed', 'page_view', 'pageview', 'pageviewed'], label: 'Page View', requiredParams: ['url'] },
+  { key: 'view_content', names: ['contents_viewed', 'view_content', 'viewcontent', 'product_viewed', 'viewitem', 'view_item'], label: 'View Content', requiredParams: ['contents'] },
+  { key: 'add_to_cart', names: ['items_added', 'add_to_cart', 'addtocart', 'cart_updated', 'itemsadded', 'addcart'], label: 'Add To Cart', requiredParams: ['contents'] },
+  { key: 'initiate_checkout', names: ['checkout_started', 'initiate_checkout', 'begin_checkout', 'begincheckout', 'checkoutstarted'], label: 'Initiate Checkout', requiredParams: ['amount', 'currency'] },
+  { key: 'purchase', names: ['order_created', 'purchase', 'order_placed', 'ordercreated', 'orderplaced', 'order_completed'], label: 'Purchase', requiredParams: ['amount', 'currency', 'contents'] }
 ];
 
 export function computeFunnelAnalysis(events = []) {
@@ -21,11 +21,15 @@ export function computeFunnelAnalysis(events = []) {
   };
 
   STANDARD_FUNNEL_STEPS.forEach((fStep, stepIdx) => {
-    // Find matching events for this funnel stage
+    // Find matching events for this funnel stage: trigger whenever event fires
     const matchingEvts = events.filter((evt) => {
-      const name = (evt.name || '').toLowerCase();
-      const disp = (evt.displayName || '').toLowerCase();
-      return fStep.names.includes(name) || fStep.names.includes(disp);
+      const name = (evt.name || '').toLowerCase().replace(/[\s\-_]/g, '');
+      const disp = (evt.displayName || '').toLowerCase().replace(/[\s\-_]/g, '');
+      const canonical = (evt.validation?.canonicalName || '').toLowerCase().replace(/[\s\-_]/g, '');
+      return fStep.names.some((n) => {
+        const cleanN = n.toLowerCase().replace(/[\s\-_]/g, '');
+        return name === cleanN || disp === cleanN || canonical === cleanN || name.includes(cleanN) || disp.includes(cleanN);
+      });
     });
 
     const isDetected = matchingEvts.length > 0;
