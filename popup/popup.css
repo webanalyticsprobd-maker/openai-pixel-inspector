@@ -307,6 +307,9 @@ html, body {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .nav-primary {
@@ -315,16 +318,24 @@ html, body {
   gap: 4px;
 }
 
+.nav-secondary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 3px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .nav-tab {
   flex: 1;
-  height: 36px;
+  height: 33px;
   padding: 0 8px;
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid transparent;
   background: transparent;
   display: flex;
@@ -381,62 +392,6 @@ html, body {
 .nav-tab.active .tab-count-tag {
   background: rgba(255, 255, 255, 0.28);
   color: #ffffff;
-}
-
-/* Secondary Underline Tabs */
-.nav-secondary {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 2px 8px 4px 8px;
-  border-top: none;
-}
-
-.nav-tab-secondary {
-  background: transparent;
-  border: none;
-  padding: 4px 0;
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  position: relative;
-  transition: color 0.15s ease;
-}
-
-.nav-tab-secondary svg {
-  flex-shrink: 0;
-}
-
-.nav-tab-secondary:hover {
-  color: var(--text-main);
-  background: transparent;
-}
-
-.nav-tab-secondary.active {
-  color: var(--accent-brand);
-  background: transparent;
-  font-weight: 600;
-}
-
-.nav-tab-secondary.active svg {
-  stroke: var(--accent-brand);
-}
-
-.nav-tab-secondary.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent-brand);
-  border-radius: 2px;
 }
 
 .tab-count-tag-issues {
