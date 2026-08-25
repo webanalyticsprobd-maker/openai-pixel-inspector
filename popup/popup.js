@@ -51,7 +51,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tabCountEvents = document.getElementById('tab-count-events');
   const tabCountFunnel = document.getElementById('tab-count-funnel');
   const tabCountDatalayer = document.getElementById('tab-count-datalayer');
-  const tabCountNetwork = document.getElementById('tab-count-network');
   const tabCountIssues = document.getElementById('tab-count-issues');
 
   // Events Tab elements
@@ -69,10 +68,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const gtmContainerBadge = document.getElementById('gtm-container-badge');
   const gtmContainerPills = document.getElementById('gtm-container-pills');
   const datalayerListContainer = document.getElementById('datalayer-list-container');
-
-  // Network Tab elements
-  const networkListContainer = document.getElementById('network-list-container');
-  const networkCountBadge = document.getElementById('network-count-badge');
 
   // Attribution Tab elements
   const opprefStatusBadge = document.getElementById('oppref-status-badge');
@@ -279,7 +274,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderEvents();
     renderFunnel();
     renderDataLayer();
-    renderNetwork();
     renderAttribution();
     renderIssues();
     renderAudit();
@@ -290,7 +284,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const attribution = currentTabState.attribution || {};
     const stats = currentTabState.stats || {};
     const events = currentTabState.events || [];
-    const network = currentTabState.network || [];
     const dataLayer = currentTabState.dataLayer || [];
     const report = generateAuditReport(currentTabState);
 
@@ -316,7 +309,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabCountEvents.textContent = stats.totalEvents || 0;
     tabCountFunnel.textContent = `${report.funnel.completedCount}/5`;
     tabCountDatalayer.textContent = dataLayer.length || 0;
-    tabCountNetwork.textContent = network.length || 0;
     tabCountIssues.textContent = (stats.errorEvents || 0) + (stats.duplicateEvents || 0) + (report.scores.piiViolationsCount || 0);
 
     // Render Server-Side Tracking Diagnostics
@@ -386,7 +378,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
       if (currentFilter === 'errors' && evt.validation.status !== 'error') return false;
       if (currentFilter === 'warnings' && evt.validation.status !== 'warning') return false;
-      if (currentFilter === 'network' && !evt.network.detected) return false;
 
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
@@ -685,83 +676,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       datalayerListContainer.appendChild(card);
-    });
-  }
-
-  // ==========================================
-  // 10. Network Monitor Renderer
-  // ==========================================
-  function renderNetwork() {
-    if (!currentTabState) return;
-    const networkRequests = currentTabState.network || [];
-    networkCountBadge.textContent = `${networkRequests.length} request(s)`;
-
-    if (networkRequests.length === 0) {
-      networkListContainer.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-icon">${ICONS.emptyNet}</span>
-          <p class="empty-text">No OpenAI Pixel network transmissions captured.</p>
-          <span class="empty-subtext">Requests to bzr.openai.com or bzrcdn.openai.com will appear here in real time.</span>
-        </div>
-      `;
-      return;
-    }
-
-    networkListContainer.innerHTML = '';
-    networkRequests.slice().reverse().forEach((req, idx) => {
-      const card = document.createElement('div');
-      card.className = 'network-card';
-
-      const method = req.method || 'POST';
-      let statusBadge = '<span class="badge badge-warning">Pending</span>';
-      if (req.status === 200) {
-        statusBadge = '<span class="badge badge-success">HTTP 200</span>';
-      } else if (req.status && req.status > 0) {
-        statusBadge = `<span class="badge badge-error">HTTP ${req.status}</span>`;
-      } else if (req.status === 0 || req.error) {
-        statusBadge = `<span class="badge badge-error">Blocked</span>`;
-      }
-
-      const evtName = req.payload?.name || req.payload?.event_name || req.payload?.event || 'Measurement Signal';
-      const cleanUrl = req.url ? truncateString(req.url.replace(/^https?:\/\//, ''), 45) : 'bzr.openai.com/v1/sdk/events';
-
-      card.innerHTML = `
-        <div class="network-header">
-          <div class="network-method-group">
-            <span class="badge-post">${escapeHtml(method)}</span>
-            <span style="font-weight: 600; font-size: 13px;">${escapeHtml(evtName)}</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            ${statusBadge}
-            <span class="text-muted font-mono" style="font-size: 11.5px;">${formatTimestamp(req.timestamp)}</span>
-          </div>
-        </div>
-        <div class="network-url">${escapeHtml(cleanUrl)}</div>
-        <div class="network-meta">
-          <span>Source: <code>${escapeHtml(req.source || 'webRequest')}</code></span>
-          <span>Payload: ${req.payload ? Object.keys(req.payload).length + ' fields' : 'None'}</span>
-        </div>
-        <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
-          <button class="btn btn-secondary btn-xs btn-inspect-net-raw">Inspect Payload</button>
-        </div>
-      `;
-
-      const netRawBtn = card.querySelector('.btn-inspect-net-raw');
-      netRawBtn.addEventListener('click', () => {
-        openRawModal(`Network Request: ${evtName}`, {
-          method: method,
-          url: req.url,
-          status: req.status,
-          timestamp: new Date(req.timestamp).toISOString(),
-          headers: {
-            'Content-Type': 'application/json',
-            'Safe-Origin': targetHostEl.textContent
-          },
-          payload: req.payload || 'No payload body'
-        });
-      });
-
-      networkListContainer.appendChild(card);
     });
   }
 

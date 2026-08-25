@@ -54,7 +54,6 @@
         <button class="nav-tab" data-tab="events">Events <span class="tab-count" id="tab-count-events">0</span></button>
         <button class="nav-tab" data-tab="funnel">Funnel <span class="tab-count" id="tab-count-funnel">0/5</span></button>
         <button class="nav-tab" data-tab="datalayer">Data Layer <span class="tab-count" id="tab-count-datalayer">0</span></button>
-        <button class="nav-tab" data-tab="network">Network <span class="tab-count" id="tab-count-network">0</span></button>
         <button class="nav-tab" data-tab="attribution">oppref</button>
         <button class="nav-tab" data-tab="issues">Issues <span class="tab-count tab-count-error" id="tab-count-issues">0</span></button>
         <button class="nav-tab" data-tab="audit">Journey Audit</button>
@@ -169,7 +168,6 @@
             <button class="filter-chip" data-filter="duplicates">Duplicates</button>
             <button class="filter-chip" data-filter="errors">Errors</button>
             <button class="filter-chip" data-filter="warnings">Warnings</button>
-            <button class="filter-chip" data-filter="network">Network</button>
           </div>
         </div>
 
@@ -226,23 +224,7 @@
         </div>
       </div>
 
-      <!-- TAB 5: NETWORK MONITOR -->
-      <div class="tab-pane" id="pane-network">
-        <section class="card">
-          <div class="card-header">
-            <span class="card-title">OpenAI Pixel Network Requests</span>
-            <span id="network-count-badge" class="badge badge-neutral">0 requests</span>
-          </div>
-          <p class="section-desc">
-            Live observation of HTTP POST/beacon transmissions dispatched to OpenAI Ads ingestion endpoints (<code>bzr.openai.com</code>).
-          </p>
-        </section>
-        <div class="events-list" id="network-list-container" style="margin-top: 8px;">
-          <!-- Dynamically populated -->
-        </div>
-      </div>
-
-      <!-- TAB 6: ATTRIBUTION (oppref) -->
+      <!-- TAB 5: ATTRIBUTION (oppref) -->
       <div class="tab-pane" id="pane-attribution">
         <section class="card">
           <div class="card-header">
