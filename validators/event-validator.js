@@ -113,9 +113,11 @@ export function validateEvent(event) {
         code: res.code || 'PARAM_VALIDATION_ERROR',
         severity: 'error',
         event: eventName,
-        parameter: paramKey,
+        parameter: res.parameter || paramKey,
+        received: res.received !== undefined ? res.received : paramVal,
+        expected: res.expected !== undefined ? res.expected : null,
         message: res.message,
-        recommendation: `Fix "${paramKey}" to match OpenAI Ads Pixel specification.`
+        recommendation: res.recommendation || `Fix "${paramKey}" to match OpenAI Ads Pixel specification.`
       });
     } else if (res.severity === 'warning') {
       validation.warningsCount++;
@@ -123,9 +125,11 @@ export function validateEvent(event) {
         code: res.code || 'PARAM_VALIDATION_WARNING',
         severity: 'warning',
         event: eventName,
-        parameter: paramKey,
+        parameter: res.parameter || paramKey,
+        received: res.received !== undefined ? res.received : paramVal,
+        expected: res.expected !== undefined ? res.expected : null,
         message: res.message,
-        recommendation: `Review "${paramKey}" formatting.`
+        recommendation: res.recommendation || `Review "${paramKey}" formatting.`
       });
     } else if (res.severity === 'info') {
       validation.infoCount++;

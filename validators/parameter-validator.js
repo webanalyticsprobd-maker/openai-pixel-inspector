@@ -229,7 +229,17 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         
         if (mult > 1 && itemsTotalAmount * mult === allParams.amount) {
           const expectedMinor = allParams.amount;
-          itemIssues.push(`contents[0].amount: Received ${itemsTotalAmount} → Expected ${expectedMinor} (${curr} minor units)`);
+          return {
+            valid: false,
+            severity: 'error',
+            code: 'PARAM_CONTENTS_ITEM_ERROR',
+            parameter: 'contents[0].amount',
+            received: itemsTotalAmount,
+            expected: expectedMinor,
+            currency: curr,
+            message: `contents[0].amount was sent in major units ($${itemsTotalAmount}.00). OpenAI expects minor units: ${expectedMinor} (${itemsTotalAmount} × ${mult}).`,
+            recommendation: `Change contents[0].amount from ${itemsTotalAmount} to ${expectedMinor} for ${curr} (OpenAI expects amounts in minor currency units).`
+          };
         }
       }
 
@@ -238,6 +248,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           valid: false,
           severity: 'error',
           code: 'PARAM_CONTENTS_ITEM_ERROR',
+          parameter: 'contents',
           message: itemIssues.join(' | ')
         };
       }

@@ -950,27 +950,62 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Human-readable titles
       let headline = iss.title || iss.code;
-      if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') headline = 'Invalid Item Amount Minor Units';
+      if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') headline = 'Invalid Item Amount';
       else if (iss.code === 'PII_LEAK_DETECTED') headline = 'PII Data Privacy Violation';
       else if (iss.code === 'DOUBLE_FIRING_DETECTED') headline = 'Duplicate Event Double Fired';
       else if (iss.code === 'OPPREF_NOT_DETECTED') headline = 'No Attribution Identifier (Direct Visit)';
       else if (iss.code === 'PIXEL_NOT_INITIALIZED') headline = 'Pixel SDK Not Initialized';
 
-      // Clean Actionable Fix Recommendation (No repeating Fix: Fix ...)
-      let recText = iss.recommendation || '';
-      if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') {
-        recText = 'Change contents[0].amount from 350 to 35000 for USD (OpenAI expects amounts in minor currency units).';
+      const eventName = iss.event || '';
+      const paramName = iss.parameter || '';
+
+      // Parse Received vs Expected if available
+      let receivedVal = iss.received;
+      let expectedVal = iss.expected;
+
+      if (receivedVal === undefined && iss.message && iss.message.includes('Received')) {
+        const match = iss.message.match(/Received\s+([^\s→]+)\s*→\s*Expected\s+([^\s(]+)/);
+        if (match) {
+          receivedVal = match[1];
+          expectedVal = match[2];
+        }
       }
 
-      card.innerHTML = `
+      // Build structured context elements
+      let contextHtml = '';
+      if (eventName || paramName) {
+        contextHtml = \`
+          <div class="issue-context-grid">
+            \${eventName ? ('<div class="issue-context-item"><span class="issue-context-label">Event</span><code class="issue-context-val">' + escapeHtml(eventName) + '</code></div>') : ''}
+            \${paramName ? ('<div class="issue-context-item"><span class="issue-context-label">Parameter</span><code class="issue-context-val">' + escapeHtml(paramName) + '</code></div>') : ''}
+          </div>
+        \`;
+      }
+
+      let diffHtml = '';
+      if (receivedVal !== undefined && expectedVal !== undefined && receivedVal !== null && expectedVal !== null) {
+        diffHtml = \`
+          <div class="issue-diff-row">
+            <div class="issue-diff-item"><span class="diff-label">Received:</span> <code class="diff-val-received">\${escapeHtml(String(receivedVal))}</code></div>
+            <span class="diff-arrow">&rarr;</span>
+            <div class="issue-diff-item"><span class="diff-label">Expected:</span> <code class="diff-val-expected">\${escapeHtml(String(expectedVal))}</code></div>
+          </div>
+        \`;
+      }
+
+      const recText = iss.recommendation || '';
+
+      card.innerHTML = \`
         <div class="issue-item-top">
-          <span class="issue-headline">${escapeHtml(headline)}</span>
-          ${renderStatusBadge(sev, sev.toUpperCase())}
+          <span class="issue-headline">\${escapeHtml(headline)}</span>
+          \${renderStatusBadge(sev, sev.toUpperCase())}
         </div>
-        <span class="issue-code-meta">${escapeHtml(iss.code)}</span>
-        <p class="issue-desc">${escapeHtml(iss.message)}</p>
-        ${recText ? ('<div class="issue-action-box"><strong>Recommended fix:</strong> ' + escapeHtml(recText) + '</div>') : ''}
-      `;
+        <span class="issue-code-meta">\${escapeHtml(iss.code)}</span>
+        \${contextHtml}
+        \${diffHtml}
+        <p class="issue-desc">\${escapeHtml(iss.message)}</p>
+        \${recText ? ('<div class="issue-action-box"><strong>Recommended fix:</strong> ' + escapeHtml(recText) + '</div>') : ''}
+      \`;
       issuesListContainer.appendChild(card);
     });
   }
