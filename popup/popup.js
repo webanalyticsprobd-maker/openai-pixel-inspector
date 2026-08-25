@@ -974,38 +974,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Build structured context elements
       let contextHtml = '';
       if (eventName || paramName) {
-        contextHtml = \`
+        contextHtml = `
           <div class="issue-context-grid">
-            \${eventName ? ('<div class="issue-context-item"><span class="issue-context-label">Event</span><code class="issue-context-val">' + escapeHtml(eventName) + '</code></div>') : ''}
-            \${paramName ? ('<div class="issue-context-item"><span class="issue-context-label">Parameter</span><code class="issue-context-val">' + escapeHtml(paramName) + '</code></div>') : ''}
+            ${eventName ? ('<div class="issue-context-item"><span class="issue-context-label">Event</span><code class="issue-context-val">' + escapeHtml(eventName) + '</code></div>') : ''}
+            ${paramName ? ('<div class="issue-context-item"><span class="issue-context-label">Parameter</span><code class="issue-context-val">' + escapeHtml(paramName) + '</code></div>') : ''}
           </div>
-        \`;
+        `;
       }
 
       let diffHtml = '';
       if (receivedVal !== undefined && expectedVal !== undefined && receivedVal !== null && expectedVal !== null) {
-        diffHtml = \`
+        diffHtml = `
           <div class="issue-diff-row">
-            <div class="issue-diff-item"><span class="diff-label">Received:</span> <code class="diff-val-received">\${escapeHtml(String(receivedVal))}</code></div>
+            <div class="issue-diff-item"><span class="diff-label">Received:</span> <code class="diff-val-received">${escapeHtml(String(receivedVal))}</code></div>
             <span class="diff-arrow">&rarr;</span>
-            <div class="issue-diff-item"><span class="diff-label">Expected:</span> <code class="diff-val-expected">\${escapeHtml(String(expectedVal))}</code></div>
+            <div class="issue-diff-item"><span class="diff-label">Expected:</span> <code class="diff-val-expected">${escapeHtml(String(expectedVal))}</code></div>
           </div>
-        \`;
+        `;
       }
 
       const recText = iss.recommendation || '';
 
-      card.innerHTML = \`
+      card.innerHTML = `
         <div class="issue-item-top">
-          <span class="issue-headline">\${escapeHtml(headline)}</span>
-          \${renderStatusBadge(sev, sev.toUpperCase())}
+          <span class="issue-headline">${escapeHtml(headline)}</span>
+          ${renderStatusBadge(sev, sev.toUpperCase())}
         </div>
-        <span class="issue-code-meta">\${escapeHtml(iss.code)}</span>
-        \${contextHtml}
-        \${diffHtml}
-        <p class="issue-desc">\${escapeHtml(iss.message)}</p>
-        \${recText ? ('<div class="issue-action-box"><strong>Recommended fix:</strong> ' + escapeHtml(recText) + '</div>') : ''}
-      \`;
+        <span class="issue-code-meta">${escapeHtml(iss.code)}</span>
+        ${contextHtml}
+        ${diffHtml}
+        <p class="issue-desc">${escapeHtml(iss.message)}</p>
+        ${recText ? ('<div class="issue-action-box"><strong>Recommended fix:</strong> ' + escapeHtml(recText) + '</div>') : ''}
+      `;
       issuesListContainer.appendChild(card);
     });
   }
