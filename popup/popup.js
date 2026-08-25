@@ -252,30 +252,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Search Filter Handler
-  eventSearchInput.addEventListener('input', (e) => {
-    searchQuery = e.target.value;
-    renderEvents();
-  });
-
-  // Filter Chips Handler (Events)
-  filterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      filterChips.forEach((c) => c.classList.remove('active'));
-      chip.classList.add('active');
-      currentFilter = chip.dataset.filter;
+  if (eventSearchInput) {
+    eventSearchInput.addEventListener('input', (e) => {
+      searchQuery = e.target.value;
       renderEvents();
     });
-  });
+  }
+
+  // Filter Chips Handler (Events)
+  if (filterChips) {
+    filterChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filterChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentFilter = chip.dataset.filter;
+        renderEvents();
+      });
+    });
+  }
 
   // Filter Chips Handler (Issues / Diagnostics)
-  issueFilterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      issueFilterChips.forEach((c) => c.classList.remove('active'));
-      chip.classList.add('active');
-      currentIssueFilter = chip.dataset.filter;
-      renderIssues();
+  if (issueFilterChips) {
+    issueFilterChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        issueFilterChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentIssueFilter = chip.dataset.filter;
+        renderIssues();
+      });
     });
-  });
+  }
 
   // Copy Hostname Button
   if (btnCopyHost) {
@@ -295,25 +301,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 4. Modal Handlers
   // ==========================================
   function openRawModal(title, jsonData) {
-    modalEventTitle.textContent = title;
+    if (modalEventTitle) modalEventTitle.textContent = title;
     activeModalJson = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData, null, 2);
-    modalJsonContent.textContent = activeModalJson;
-    rawModal.classList.remove('hidden');
+    if (modalJsonContent) modalJsonContent.textContent = activeModalJson;
+    if (rawModal) rawModal.classList.remove('hidden');
   }
 
-  modalCloseBtn.addEventListener('click', () => {
-    rawModal.classList.add('hidden');
-  });
+  if (modalCloseBtn && rawModal) {
+    modalCloseBtn.addEventListener('click', () => {
+      rawModal.classList.add('hidden');
+    });
+  }
 
-  rawModal.addEventListener('click', (e) => {
-    if (e.target === rawModal) rawModal.classList.add('hidden');
-  });
+  if (rawModal) {
+    rawModal.addEventListener('click', (e) => {
+      if (e.target === rawModal) rawModal.classList.add('hidden');
+    });
+  }
 
-  modalCopyBtn.addEventListener('click', () => {
-    copyToClipboard(activeModalJson, modalCopyBtn);
-    modalCopyBtn.textContent = 'Copied!';
-    setTimeout(() => { modalCopyBtn.textContent = 'Copy JSON'; }, 1500);
-  });
+  if (modalCopyBtn) {
+    modalCopyBtn.addEventListener('click', () => {
+      copyToClipboard(activeModalJson, modalCopyBtn);
+      modalCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { modalCopyBtn.textContent = 'Copy JSON'; }, 1500);
+    });
+  }
 
   // ==========================================
   // 5. Active Tab & Session Sync
@@ -1271,34 +1283,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================
   // 13. Action Handlers
   // ==========================================
-  btnRefresh.addEventListener('click', async () => {
-    btnRefresh.style.transform = 'rotate(180deg)';
-    setTimeout(() => { btnRefresh.style.transform = 'none'; }, 300);
-    if (activeTab) {
-      chrome.tabs.sendMessage(activeTab.id, { action: 'REQUEST_SCAN' }).catch(() => {});
-    }
-    await updateState();
-  });
-
-  btnClear.addEventListener('click', async () => {
-    if (activeTab) {
-      expandedEventIds.clear();
-      expandedPayloadEventIds.clear();
-      expandedDlIndices.clear();
-      await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', async () => {
+      btnRefresh.style.transform = 'rotate(180deg)';
+      setTimeout(() => { btnRefresh.style.transform = 'none'; }, 300);
+      if (activeTab) {
+        chrome.tabs.sendMessage(activeTab.id, { action: 'REQUEST_SCAN' }).catch(() => {});
+      }
       await updateState();
-    }
-  });
+    });
+  }
 
-  btnCopyMarkdown.addEventListener('click', () => {
-    if (!currentTabState) return;
-    const report = generateComprehensiveAudit(currentTabState);
-    const md = formatAuditMarkdown(report);
-    copyToClipboard(md, btnCopyMarkdown);
-  });
+  if (btnClear) {
+    btnClear.addEventListener('click', async () => {
+      if (activeTab) {
+        expandedEventIds.clear();
+        expandedPayloadEventIds.clear();
+        expandedDlIndices.clear();
+        await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
+        await updateState();
+      }
+    });
+  }
 
-  btnExportCsv.addEventListener('click', () => {
-    if (!currentTabState || !currentTabState.events) return;
+  if (btnCopyMarkdown) {
+    btnCopyMarkdown.addEventListener('click', () => {
+      if (!currentTabState) return;
+      const report = generateComprehensiveAudit(currentTabState);
+      const md = formatAuditMarkdown(report);
+      copyToClipboard(md, btnCopyMarkdown);
+    });
+  }
+
+  if (btnExportCsv) {
+    btnExportCsv.addEventListener('click', () => {
+      if (!currentTabState || !currentTabState.events) return;
     const headers = [
       'Event Name',
       'Event Type',
