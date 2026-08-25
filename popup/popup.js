@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const auditEventDetailsContainer = document.getElementById('audit-event-details-container');
   const auditActionsContainer = document.getElementById('audit-actions-container');
   const btnCopyMarkdown = document.getElementById('btn-copy-markdown');
-  const btnExportJson = document.getElementById('btn-export-json');
+  const btnExportPdf = document.getElementById('btn-export-pdf');
   const btnExportCsv = document.getElementById('btn-export-csv');
 
   // Modal elements
@@ -1081,12 +1081,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           <table class="audit-table">
             <thead>
               <tr>
-                <th>Event</th>
-                <th>Type</th>
-                <th style="text-align:center;">Trigger</th>
-                <th style="text-align:center;">Parameters</th>
-                <th style="text-align:center;">Duplicate</th>
-                <th>Status</th>
+                <th style="width:28%;">Event</th>
+                <th style="width:18%;">Type</th>
+                <th style="width:12%; text-align:center;">Fired</th>
+                <th style="width:12%; text-align:center;">Params</th>
+                <th style="width:12%; text-align:center;">Dup</th>
+                <th style="width:18%; text-align:right;">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -1094,12 +1094,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         report.overviewTable.forEach((row) => {
           tableHtml += `
             <tr>
-              <td><strong>${escapeHtml(row.name)}</strong></td>
+              <td><strong class="truncate" style="display:block; max-width:85px;" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</strong></td>
               <td><span class="audit-event-type-badge badge-type-${row.type.toLowerCase()}">${row.type}</span></td>
               <td style="text-align:center;">${row.trigger}</td>
               <td style="text-align:center;">${row.parameters}</td>
               <td style="text-align:center;">${row.duplicate}</td>
-              <td><span class="badge ${row.severity === 'valid' ? 'badge-success' : (row.severity === 'warning' ? 'badge-warning' : 'badge-error')}">${escapeHtml(row.status)}</span></td>
+              <td style="text-align:right;"><span class="badge ${row.severity === 'valid' ? 'badge-success' : (row.severity === 'warning' ? 'badge-warning' : 'badge-error')}" style="font-size:9.5px; padding:1px 4px; white-space:nowrap;">${escapeHtml(row.status)}</span></td>
             </tr>
           `;
         });
@@ -1317,47 +1317,65 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     const rows = [headers];
-    const report = generateComprehensiveAudit(currentTabState);
 
     currentTabState.events.forEach((evt) => {
       const p = evt.parameters || {};
+      const evtName = evt.displayName || evt.name || 'unnamed';
       rows.push([
-        '"' + (evt.displayName || evt.name) + '"',
-        '"' + classifyEventType(evt.displayName || evt.name) + '"',
+        '"' + evtName.replace(/"/g, '""') + '"',
+        '"' + classifyEventType(evtName) + '"',
         '"Detected"',
-        evt.validation && evt.validation.issues && evt.validation.issues.length > 0 ? '"Suboptimal"' : '"Valid"',
+        (evt.validation && evt.validation.issues && evt.validation.issues.length > 0) ? '"Suboptimal"' : '"Valid"',
         '"' + (evt.isDuplicate ? 'Duplicate' : 'No duplicates') + '"',
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         new Date(evt.timestamp).toISOString(),
-        '"' + (evt.pathname || '') + '"',
-        '"' + (evt.eventId || 'Not Sent') + '"',
-        '"' + (evt.pixelId || '') + '"',
+        '"' + (evt.pathname || '').replace(/"/g, '""') + '"',
+        '"' + (evt.eventId || 'Not Sent').replace(/"/g, '""') + '"',
+        '"' + (evt.pixelId || '').replace(/"/g, '""') + '"',
         p.amount !== undefined ? p.amount : '',
         p.currency || '',
         '"' + JSON.stringify(p).replace(/"/g, '""') + '"',
-        '"' + (evt.attribution?.oppref || '') + '"'
+        '"' + (evt.attribution?.oppref || '').replace(/"/g, '""') + '"'
       ]);
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map((e) => e.join(',')).join('\n'));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute('href', csvContent);
-    dlAnchor.setAttribute('download', 'openai_pixel_audit_' + Date.now() + '.csv');
-    dlAnchor.click();
+    const csvContent = '\uFEFF' + rows.map((e) => e.join(',')).join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const filename = 'openai_pixel_audit_' + Date.now() + '.csv';
+    const blobUrl = URL.createObjectURL(blob);
+
+    if (typeof chrome !== 'undefined' && chrome.downloads && chrome.downloads.download) {
+      chrome.downloads.download({
+        url: blobUrl,
+        filename: filename,
+        saveAs: true
+      }, () => {
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      });
+    } else {
+      const dlAnchor = document.createElement('a');
+      dlAnchor.href = blobUrl;
+      dlAnchor.download = filename;
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      document.body.removeChild(dlAnchor);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    }
   });
 
-  btnExportJson.addEventListener('click', () => {
-    if (!currentTabState) return;
-    const comprehensiveReport = generateComprehensiveAudit(currentTabState);
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({
-      auditReport: comprehensiveReport,
-      sessionState: currentTabState
-    }, null, 2));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute('href', dataStr);
-    dlAnchor.setAttribute('download', 'openai_pixel_audit_' + Date.now() + '.json');
-    dlAnchor.click();
-  });
+  if (btnExportPdf) {
+    btnExportPdf.addEventListener('click', () => {
+      if (!currentTabState) return;
+      const report = generateComprehensiveAudit(currentTabState);
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ active_audit_report: report }, () => {
+          chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
+        });
+      } else {
+        window.open(chrome.runtime.getURL('popup/report.html'), '_blank');
+      }
+    });
+  }
 
   // Initial Load and Polling interval
   await updateState();
