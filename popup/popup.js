@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const stateResp = await chrome.runtime.sendMessage({
         action: 'GET_ACTIVE_TAB_STATE',
         tabId: activeTab.id
-      });
+      }).catch(() => null);
 
       if (stateResp && stateResp.state) {
         currentTabState = stateResp.state;
@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnClear.addEventListener('click', async () => {
     if (activeTab) {
       expandedEventIds.clear();
-      await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id });
+      await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
       await updateState();
     }
   });

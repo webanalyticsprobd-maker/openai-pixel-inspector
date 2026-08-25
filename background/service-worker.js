@@ -80,25 +80,42 @@ function getOrCreateTabState(tabId, url = '', title = '') {
 }
 
 function updateBadge(tabId, state) {
-  if (!state || typeof chrome.action === 'undefined') return;
-  const errCount = state.stats.errorEvents;
-  const dupCount = state.stats.duplicateEvents;
-  const evtCount = state.stats.totalEvents;
+  if (!state || !tabId || tabId < 0 || typeof chrome.action === 'undefined') return;
+  const errCount = state.stats ? state.stats.errorEvents : 0;
+  const dupCount = state.stats ? state.stats.duplicateEvents : 0;
+  const evtCount = state.stats ? state.stats.totalEvents : 0;
 
-  if (errCount > 0) {
-    chrome.action.setBadgeText({ tabId: tabId, text: `${errCount}` });
-    chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#ef4444' });
-  } else if (dupCount > 0) {
-    chrome.action.setBadgeText({ tabId: tabId, text: `${dupCount}d` });
-    chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#f59e0b' });
-  } else if (evtCount > 0) {
-    chrome.action.setBadgeText({ tabId: tabId, text: `${evtCount}` });
-    chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#10a37f' });
-  } else if (state.pixel.detected) {
-    chrome.action.setBadgeText({ tabId: tabId, text: '✓' });
-    chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#3b82f6' });
-  } else {
-    chrome.action.setBadgeText({ tabId: tabId, text: '' });
+  try {
+    let text = '';
+    let color = '#10a37f';
+
+    if (errCount > 0) {
+      text = `${errCount}`;
+      color = '#ef4444';
+    } else if (dupCount > 0) {
+      text = `${dupCount}d`;
+      color = '#f59e0b';
+    } else if (evtCount > 0) {
+      text = `${evtCount}`;
+      color = '#10a37f';
+    } else if (state.pixel && state.pixel.detected) {
+      text = '✓';
+      color = '#3b82f6';
+    }
+
+    const badgePromise = chrome.action.setBadgeText({ tabId: tabId, text: text });
+    if (badgePromise && typeof badgePromise.catch === 'function') {
+      badgePromise.catch(() => {});
+    }
+
+    if (text) {
+      const colorPromise = chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: color });
+      if (colorPromise && typeof colorPromise.catch === 'function') {
+        colorPromise.catch(() => {});
+      }
+    }
+  } catch (err) {
+    // Gracefully ignore closed tab errors
   }
 }
 
@@ -106,9 +123,9 @@ function updateBadge(tabId, state) {
  * Scan browser cookie jar for __oppref
  */
 async function scanBrowserCookiesForTab(tabId, url) {
-  if (!url || !url.startsWith('http') || typeof chrome.cookies === 'undefined') return;
+  if (!url || !url.startsWith('http') || typeof chrome.cookies === 'undefined' || !tabId || tabId < 0) return;
   try {
-    const cookie = await chrome.cookies.get({ url: url, name: '__oppref' });
+    const cookie = await chrome.cookies.get({ url: url, name: '__oppref' }).catch(() => null);
     const state = getOrCreateTabState(tabId);
     if (cookie && cookie.value) {
       state.attribution.cookieDetected = true;
@@ -122,7 +139,7 @@ async function scanBrowserCookiesForTab(tabId, url) {
       updateBadge(tabId, state);
     }
   } catch (err) {
-    console.debug('[OpenAI Pixel Inspector] chrome.cookies scan error:', err);
+    // Gracefully ignore cookie scan errors on closed tabs
   }
 }
 
@@ -130,6 +147,11 @@ async function scanBrowserCookiesForTab(tabId, url) {
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStates.delete(tabId);
   tabStores.delete(tabId);
+  for (const [reqId, reqInfo] of pendingRequests.entries()) {
+    if (reqInfo.tabId === tabId) {
+      pendingRequests.delete(reqId);
+    }
+  }
 });
 
 // Navigation listener - Maintains session journey across page navigations
