@@ -749,6 +749,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       let userInfoHtml = '';
       const ui = evt.userInfo || (evt.network && evt.network.userInfo);
+      const isConversionEvent = ['order_created', 'checkout_started', 'lead_created', 'registration_completed', 'subscription_created'].includes(evt.name);
+
       if (ui && ui.fields && ui.fields.length > 0) {
         const fieldRows = ui.fields.map(f => `
           <div class="user-info-field-row">
@@ -779,6 +781,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
             <div class="user-info-card-body">
               ${fieldRows}
+            </div>
+          </div>
+        `;
+      } else if (isConversionEvent) {
+        userInfoHtml = `
+          <div class="user-info-card user-info-empty">
+            <div class="user-info-card-header">
+              <div style="display:flex; align-items:center; gap:6px;">
+                ${ICONS.user}
+                <strong style="font-size:11px; color:var(--text-main);">Customer / User Info</strong>
+              </div>
+              <span class="badge badge-neutral" style="font-size:9.5px;">Not Detected</span>
+            </div>
+            <div class="user-info-card-body" style="font-size:11px; color:var(--text-muted); line-height:1.45; padding:6px 10px;">
+              No customer identification parameters (e.g. hashed email, phone, external ID) were detected in the pixel payload or network requests for this event. Passing customer info increases attribution match rate.
             </div>
           </div>
         `;

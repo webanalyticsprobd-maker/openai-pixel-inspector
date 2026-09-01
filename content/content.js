@@ -122,6 +122,68 @@
     return attribution;
   }
 
+  function maskEmail(email) {
+    if (!email || typeof email !== 'string') return '';
+    const parts = email.split('@');
+    if (parts.length !== 2) return email;
+    const name = parts[0];
+    const domain = parts[1];
+    const maskedName = name.length <= 2 ? name[0] + '***' : name[0] + '***' + name[name.length - 1];
+    return maskedName + '@' + domain;
+  }
+
+  function maskPhone(phone) {
+    if (!phone || typeof phone !== 'string') return '';
+    const clean = phone.trim();
+    if (clean.length <= 4) return '***' + clean;
+    return clean.slice(0, Math.min(3, clean.length - 4)) + '***' + clean.slice(-4);
+  }
+
+  function scanPageForUserData() {
+    const fields = [];
+    const visited = new Set();
+
+    // 1. Scan URL search params
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      for (const [k, v] of sp.entries()) {
+        const key = k.toLowerCase();
+        if (v && v.trim()) {
+          if (key.includes('email') || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+            fields.push({ type: 'email', label: 'Email', key: `url.${k}`, value: v.trim(), masked: maskEmail(v.trim()), isHashed: false });
+          } else if (key.includes('phone') || key.includes('tel')) {
+            fields.push({ type: 'phone', label: 'Phone Number', key: `url.${k}`, value: v.trim(), masked: maskPhone(v.trim()), isHashed: false });
+          } else if (key === 'user_id' || key === 'customer_id' || key === 'external_id') {
+            fields.push({ type: 'user_id', label: 'Customer / User ID', key: `url.${k}`, value: v.trim(), masked: v.trim(), isHashed: false });
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Scan Order Receipt / Thank-you DOM elements
+    try {
+      const emailNodes = document.querySelectorAll(
+        '.woocommerce-order-overview__email strong, .order-email, [class*="customer-email"], [class*="billing-email"], [id*="customer-email"]'
+      );
+      for (const node of emailNodes) {
+        const txt = (node.textContent || '').trim();
+        if (txt && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(txt) && !visited.has(txt)) {
+          visited.add(txt);
+          fields.push({ type: 'email', label: 'Email (Order Receipt)', key: 'dom.email', value: txt, masked: maskEmail(txt), isHashed: false });
+        }
+      }
+    } catch {}
+
+    if (fields.length === 0) return null;
+    return {
+      detected: true,
+      count: fields.length,
+      fields: fields,
+      hasRawPii: true,
+      hasHashedData: false
+    };
+  }
+
   /**
    * Injects page-context bridge into MAIN world
    */
@@ -173,10 +235,12 @@
   function performFullScan() {
     const domScan = scanDOMForPixel();
     const attribution = scanAttribution();
+    const userData = scanPageForUserData();
 
     sendToBackground('FULL_PAGE_SCAN_RESULT', {
       domScan: domScan,
       attribution: attribution,
+      userData: userData,
       url: window.location.href,
       title: document.title
     });
