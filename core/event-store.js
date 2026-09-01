@@ -5,6 +5,8 @@
  * Implements intelligent action-based duplicate detection (distinguishing intentional repeated actions from double-fires).
  */
 
+import { extractUserInfoFromPayload } from '../network/request-parser.js';
+
 export class EventStore {
   constructor() {
     this.events = [];
@@ -213,6 +215,8 @@ export class EventStore {
   }
 
   correlateNetworkRequest(netReq) {
+    const userInfo = netReq.payload ? extractUserInfoFromPayload(netReq.payload) : null;
+
     for (let i = this.events.length - 1; i >= 0; i--) {
       const evt = this.events[i];
       if (
@@ -224,7 +228,26 @@ export class EventStore {
         evt.network.status = netReq.status || 200;
         evt.network.method = netReq.method || 'POST';
         evt.network.url = netReq.url;
+        evt.network.payload = netReq.payload;
         evt.network.responseTimestamp = netReq.responseTimestamp || Date.now();
+
+        if (userInfo) {
+          evt.network.userInfo = userInfo;
+          if (!evt.userInfo) {
+            evt.userInfo = userInfo;
+          } else {
+            const existingKeys = new Set(evt.userInfo.fields.map((f) => f.key));
+            for (const f of userInfo.fields) {
+              if (!existingKeys.has(f.key)) {
+                evt.userInfo.fields.push(f);
+                existingKeys.add(f.key);
+              }
+            }
+            evt.userInfo.count = evt.userInfo.fields.length;
+            evt.userInfo.hasRawPii = evt.userInfo.hasRawPii || userInfo.hasRawPii;
+            evt.userInfo.hasHashedData = evt.userInfo.hasHashedData || userInfo.hasHashedData;
+          }
+        }
         return evt;
       }
     }

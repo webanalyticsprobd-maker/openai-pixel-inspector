@@ -14,6 +14,7 @@
 
 import { generateUUID } from '../utils/formatting.js';
 import { validateEvent } from '../validators/event-validator.js';
+import { extractUserInfoFromPayload } from '../network/request-parser.js';
 
 export function normalizeEvent(rawEvent, tabContext = {}) {
   const timestamp = rawEvent.timestamp || Date.now();
@@ -67,6 +68,10 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
 
   const displayName = (eventName === 'custom' && options.custom_event_name) ? options.custom_event_name : eventName;
 
+  // Extract customer / user information from properties or raw payload
+  const combinedPayload = Object.assign({}, properties, options, rawEvent.rawPayload || {});
+  const detectedUserInfo = extractUserInfoFromPayload(combinedPayload);
+
   const normalized = {
     _id: generateUUID(), // Internal React/DOM render key only
     eventId: explicitEventId, // Real Event ID or null (NEVER generated!)
@@ -85,6 +90,7 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     pixelId: rawEvent.pixelId || tabContext.pixelId || null,
     parameters: properties,
     options: options,
+    userInfo: detectedUserInfo, // Detected customer / user information
     attribution: {
       oppref: tabContext.oppref || null
     },
@@ -95,7 +101,8 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
       url: null,
       headers: {},
       payload: null,
-      responseTimestamp: null
+      responseTimestamp: null,
+      userInfo: null
     },
     // Journey & Duplicate Audit Fields
     isDuplicate: false,

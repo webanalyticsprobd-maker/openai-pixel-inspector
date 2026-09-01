@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     code: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
     maximize: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+    user: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
     chevronDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
     emptyCheck: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
@@ -746,6 +747,43 @@ document.addEventListener('DOMContentLoaded', async () => {
       const eventIdDisplay = evt.eventId ? makeCopyable(evt.eventId, '<code>' + escapeHtml(evt.eventId) + '</code>') : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
       const pixelIdDisplay = evt.pixelId ? makeCopyable(evt.pixelId, '<code>' + escapeHtml(evt.pixelId) + '</code>') : '<span style="color:var(--text-muted)">Default</span>';
 
+      let userInfoHtml = '';
+      const ui = evt.userInfo || (evt.network && evt.network.userInfo);
+      if (ui && ui.fields && ui.fields.length > 0) {
+        const fieldRows = ui.fields.map(f => `
+          <div class="user-info-field-row">
+            <div class="user-info-field-label">
+              <span class="user-info-icon">${ICONS.user}</span>
+              <span>${escapeHtml(f.label)}:</span>
+            </div>
+            <div class="user-info-field-val">
+              <code>${escapeHtml(f.masked)}</code>
+              ${f.isHashed ? '<span class="badge badge-success" style="font-size:9.5px; padding:1px 4px;">SHA-256</span>' : '<span class="badge badge-warning" style="font-size:9.5px; padding:1px 4px;">Raw PII</span>'}
+            </div>
+          </div>
+        `).join('');
+
+        const networkBadge = (evt.network && evt.network.detected) ? '<span class="badge badge-info" style="font-size:9.5px;">Network Intercepted</span>' : '<span class="badge badge-neutral" style="font-size:9.5px;">Payload</span>';
+
+        userInfoHtml = `
+          <div class="user-info-card">
+            <div class="user-info-card-header">
+              <div style="display:flex; align-items:center; gap:6px;">
+                ${ICONS.user}
+                <strong style="font-size:11px; color:var(--text-main);">Customer / User Info</strong>
+              </div>
+              <div style="display:flex; gap:6px;">
+                ${networkBadge}
+                <span class="badge badge-neutral" style="font-size:9.5px;">${ui.fields.length} field(s)</span>
+              </div>
+            </div>
+            <div class="user-info-card-body">
+              ${fieldRows}
+            </div>
+          </div>
+        `;
+      }
+
       item.className = 'event-card ' + (isExpanded ? 'open' : '');
       item.innerHTML = `
         <div class="event-card-header">
@@ -793,6 +831,8 @@ document.addEventListener('DOMContentLoaded', async () => {
               ${paramRows}
             </tbody>
           </table>
+
+          ${userInfoHtml}
 
           <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
             <summary>
