@@ -165,8 +165,11 @@ export function parseOpenAINetworkBatch(netReq) {
       const referrerUrl = subEvt.referrer_url || null;
       const optOut = subEvt.opt_out !== undefined ? subEvt.opt_out : null;
 
+      const eventUser = extractUserMatchingEnvelope(payload.user) || extractUserInfoFromPayload(eventData);
+
       measurementEvents.push({
         parentRequestId: parentRequest.requestId,
+        userInfo: eventUser,
         batchIndex: idx,
         category: 'MEASUREMENT_EVENT',
         name: eventName,

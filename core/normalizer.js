@@ -68,9 +68,9 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
 
   const displayName = (eventName === 'custom' && options.custom_event_name) ? options.custom_event_name : eventName;
 
-  // Extract customer / user information from properties or raw payload
+  // Extract customer / user information from rawEvent.userInfo, properties, or raw payload
   const combinedPayload = Object.assign({}, properties, options, rawEvent.rawPayload || {});
-  const detectedUserInfo = extractUserInfoFromPayload(combinedPayload);
+  const detectedUserInfo = rawEvent.userInfo || extractUserInfoFromPayload(combinedPayload);
 
   const isNetworkSource = rawEvent.source?.type === 'network' || rawEvent.source?.location === 'browser_network_request';
 

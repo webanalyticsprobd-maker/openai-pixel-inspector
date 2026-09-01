@@ -104,6 +104,7 @@ export class EventStore {
             referrerUrl: mEvt.referrerUrl,
             optOut: mEvt.optOut,
             parentRequestId: mEvt.parentRequestId,
+            userInfo: mEvt.userInfo || batch.userMatching,
             timestamp: mEvt.timestamp,
             source: {
               type: 'network',
@@ -149,8 +150,9 @@ export class EventStore {
           evt.network.payload = netEvt.parameters;
           evt.duplicateStatus = '✅ Sent (Network Request)';
 
-          // Update parameters to actual network payload and re-run validation on network data
+          // Update parameters and user info to actual network payload and re-run validation on network data
           evt.parameters = netEvt.parameters;
+          evt.userInfo = netEvt.userInfo || evt.userInfo;
           evt.validation = validateEvent(evt);
 
           return evt;
