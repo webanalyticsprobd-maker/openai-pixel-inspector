@@ -748,7 +748,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pixelIdDisplay = evt.pixelId ? makeCopyable(evt.pixelId, '<code>' + escapeHtml(evt.pixelId) + '</code>') : '<span style="color:var(--text-muted)">Default</span>';
 
       let userInfoHtml = '';
-      const ui = evt.userInfo || (evt.network && evt.network.userInfo);
+      const ui = evt.userInfo;
 
       if (ui && ui.fields && ui.fields.length > 0) {
         const fieldRows = ui.fields.map(f => `
@@ -764,19 +764,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         `).join('');
 
-        const networkBadge = (evt.network && evt.network.detected) ? '<span class="badge badge-info" style="font-size:9.5px;">Network Intercepted</span>' : '<span class="badge badge-neutral" style="font-size:9.5px;">Payload</span>';
-
         userInfoHtml = `
           <div class="user-info-card">
             <div class="user-info-card-header">
               <div style="display:flex; align-items:center; gap:6px;">
                 ${ICONS.user}
-                <strong style="font-size:11px; color:var(--text-main);">Customer / User Info</strong>
+                <strong style="font-size:11px; color:var(--text-main);">Customer / User Info (Sent with Event)</strong>
               </div>
-              <div style="display:flex; gap:6px;">
-                ${networkBadge}
-                <span class="badge badge-neutral" style="font-size:9.5px;">${ui.fields.length} field(s)</span>
-              </div>
+              <span class="badge badge-neutral" style="font-size:9.5px;">${ui.fields.length} field(s)</span>
             </div>
             <div class="user-info-card-body">
               ${fieldRows}

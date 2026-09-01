@@ -215,9 +215,7 @@ export class EventStore {
   }
 
   correlateNetworkRequest(netReq) {
-    const userInfo = netReq.payload ? extractUserInfoFromPayload(netReq.payload) : null;
     let matchedEvt = null;
-
     const batchEvents = (netReq.payload && Array.isArray(netReq.payload.events)) ? netReq.payload.events : null;
 
     for (let i = this.events.length - 1; i >= 0; i--) {
@@ -258,23 +256,6 @@ export class EventStore {
         evt.network.payload = netReq.payload;
         evt.network.responseTimestamp = netReq.responseTimestamp || Date.now();
 
-        if (userInfo) {
-          evt.network.userInfo = userInfo;
-          if (!evt.userInfo) {
-            evt.userInfo = userInfo;
-          } else {
-            const existingKeys = new Set(evt.userInfo.fields.map((f) => f.key));
-            for (const f of userInfo.fields) {
-              if (!existingKeys.has(f.key)) {
-                evt.userInfo.fields.push(f);
-                existingKeys.add(f.key);
-              }
-            }
-            evt.userInfo.count = evt.userInfo.fields.length;
-            evt.userInfo.hasRawPii = evt.userInfo.hasRawPii || userInfo.hasRawPii;
-            evt.userInfo.hasHashedData = evt.userInfo.hasHashedData || userInfo.hasHashedData;
-          }
-        }
         if (!matchedEvt) matchedEvt = evt;
       }
     }
