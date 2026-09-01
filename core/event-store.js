@@ -163,6 +163,43 @@ export class EventStore {
   }
 
   /**
+   * Updates network completion/error status on tracked requests and events
+   */
+  correlateNetworkRequest(netEntry) {
+    if (!netEntry) return false;
+    const reqUrl = netEntry.url || '';
+    const status = netEntry.status;
+
+    let matched = false;
+    for (const evt of this.events) {
+      if (
+        (netEntry.requestId && evt.parentRequestId === netEntry.requestId) ||
+        (evt.network && evt.network.url === reqUrl)
+      ) {
+        if (!evt.network) evt.network = {};
+        evt.network.detected = true;
+        evt.network.status = status;
+        evt.network.responseTimestamp = netEntry.responseTimestamp || Date.now();
+        if (netEntry.error) {
+          evt.network.error = netEntry.error;
+        }
+        matched = true;
+      }
+    }
+
+    const parentReq = this.parentRequests.find(pr => pr.requestId === netEntry.requestId);
+    if (parentReq) {
+      parentReq.status = status;
+      parentReq.responseTimestamp = netEntry.responseTimestamp || Date.now();
+      if (netEntry.error) {
+        parentReq.error = netEntry.error;
+      }
+    }
+
+    return matched;
+  }
+
+  /**
    * Add normalized event into session journey, update pixel registry, and evaluate duplicates
    */
   addEvent(normalizedEvent) {
