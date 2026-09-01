@@ -238,10 +238,24 @@ export function parseOpenAINetworkBatch(netReq) {
 /**
  * Extracts and safely formats Advanced Matching user data from payload.user
  */
+/**
+ * Extracts and safely formats Advanced Matching user data from payload.user
+ * Supports both user.js (JavaScript matching) and user.fm (Form matching)
+ */
 export function extractUserMatchingEnvelope(userObj) {
   if (!userObj || typeof userObj !== 'object') return null;
 
-  const fm = userObj.fm || userObj;
+  const sources = [];
+  if (userObj.js && typeof userObj.js === 'object') {
+    sources.push({ sourceLabel: 'JS Matching', data: userObj.js });
+  }
+  if (userObj.fm && typeof userObj.fm === 'object') {
+    sources.push({ sourceLabel: 'Form Matching', data: userObj.fm });
+  }
+  if (sources.length === 0) {
+    sources.push({ sourceLabel: 'Direct Payload', data: userObj });
+  }
+
   const fields = [];
 
   function maskSha(hash) {
@@ -253,71 +267,94 @@ export function extractUserMatchingEnvelope(userObj) {
     return typeof str === 'string' && /^[a-f0-9]{64}$/i.test(str.trim());
   }
 
-  // 1. Email
-  if (fm.em) {
-    const emArr = Array.isArray(fm.em) ? fm.em : [fm.em];
-    emArr.forEach((emVal, idx) => {
-      const isHash = isSha256(emVal);
+  sources.forEach(src => {
+    const fm = src.data;
+    const sLabel = src.sourceLabel;
+
+    // 1. Email (em or email)
+    const emField = fm.em || fm.email;
+    if (emField) {
+      const emArr = Array.isArray(emField) ? emField : [emField];
+      emArr.forEach((emVal, idx) => {
+        const isHash = isSha256(emVal);
+        fields.push({
+          type: 'email',
+          label: emArr.length > 1 ? `Email [${idx + 1}]` : 'Email',
+          source: sLabel,
+          value: emVal,
+          masked: isHash ? `SHA-256 (${maskSha(emVal)})` : emVal,
+          isHashed: isHash
+        });
+      });
+    }
+
+    // 2. Phone (ph or phone)
+    const phField = fm.ph || fm.phone;
+    if (phField) {
+      const phArr = Array.isArray(phField) ? phField : [phField];
+      phArr.forEach((phVal, idx) => {
+        const isHash = isSha256(phVal);
+        fields.push({
+          type: 'phone',
+          label: phArr.length > 1 ? `Phone [${idx + 1}]` : 'Phone',
+          source: sLabel,
+          value: phVal,
+          masked: isHash ? `SHA-256 (${maskSha(phVal)})` : phVal,
+          isHashed: isHash
+        });
+      });
+    }
+
+    // 3. First Name & Last Name (fn, ln, first_name, last_name)
+    const fnVal = fm.fn || fm.first_name;
+    if (fnVal) {
+      const isHash = isSha256(fnVal);
       fields.push({
-        type: 'email',
-        label: emArr.length > 1 ? `Email [${idx + 1}]` : 'Email',
-        value: emVal,
-        masked: isHash ? `SHA-256 (${maskSha(emVal)})` : emVal,
+        type: 'first_name',
+        label: 'First Name',
+        source: sLabel,
+        value: fnVal,
+        masked: isHash ? `SHA-256 (${maskSha(fnVal)})` : fnVal,
         isHashed: isHash
       });
-    });
-  }
+    }
 
-  // 2. Phone
-  if (fm.ph) {
-    const phArr = Array.isArray(fm.ph) ? fm.ph : [fm.ph];
-    phArr.forEach((phVal, idx) => {
-      const isHash = isSha256(phVal);
+    const lnVal = fm.ln || fm.last_name;
+    if (lnVal) {
+      const isHash = isSha256(lnVal);
       fields.push({
-        type: 'phone',
-        label: phArr.length > 1 ? `Phone [${idx + 1}]` : 'Phone',
-        value: phVal,
-        masked: isHash ? `SHA-256 (${maskSha(phVal)})` : phVal,
+        type: 'last_name',
+        label: 'Last Name',
+        source: sLabel,
+        value: lnVal,
+        masked: isHash ? `SHA-256 (${maskSha(lnVal)})` : lnVal,
         isHashed: isHash
       });
-    });
-  }
+    }
 
-  // 3. First Name & Last Name
-  if (fm.fn) {
-    const isHash = isSha256(fm.fn);
-    fields.push({
-      type: 'first_name',
-      label: 'First Name',
-      value: fm.fn,
-      masked: isHash ? `SHA-256 (${maskSha(fm.fn)})` : fm.fn,
-      isHashed: isHash
-    });
-  }
-  if (fm.ln) {
-    const isHash = isSha256(fm.ln);
-    fields.push({
-      type: 'last_name',
-      label: 'Last Name',
-      value: fm.ln,
-      masked: isHash ? `SHA-256 (${maskSha(fm.ln)})` : fm.ln,
-      isHashed: isHash
-    });
-  }
+    // 4. Address & Location fields (co, ct, rg, pc, country, city, state, zip)
+    const coVal = fm.co || fm.country;
+    if (coVal) {
+      fields.push({ type: 'country', label: 'Country', source: sLabel, value: coVal, masked: String(coVal).toUpperCase(), isHashed: false });
+    }
+    const ctVal = fm.ct || fm.city;
+    if (ctVal) {
+      fields.push({ type: 'city', label: 'City', source: sLabel, value: ctVal, masked: String(ctVal), isHashed: false });
+    }
+    const rgVal = fm.rg || fm.region || fm.state;
+    if (rgVal) {
+      fields.push({ type: 'region', label: 'Region / State', source: sLabel, value: rgVal, masked: String(rgVal), isHashed: false });
+    }
+    const pcVal = fm.pc || fm.postal_code || fm.zip;
+    if (pcVal) {
+      fields.push({ type: 'postal_code', label: 'Postal Code', source: sLabel, value: pcVal, masked: String(pcVal), isHashed: false });
+    }
 
-  // 4. Address & Location fields
-  if (fm.co) {
-    fields.push({ type: 'country', label: 'Country', value: fm.co, masked: String(fm.co).toUpperCase(), isHashed: false });
-  }
-  if (fm.ct) {
-    fields.push({ type: 'city', label: 'City', value: fm.ct, masked: String(fm.ct), isHashed: false });
-  }
-  if (fm.rg) {
-    fields.push({ type: 'region', label: 'Region / State', value: fm.rg, masked: String(fm.rg), isHashed: false });
-  }
-  if (fm.pc) {
-    fields.push({ type: 'postal_code', label: 'Postal Code', value: fm.pc, masked: String(fm.pc), isHashed: false });
-  }
+    // 5. External ID (external_id or id)
+    if (fm.external_id) {
+      fields.push({ type: 'external_id', label: 'External ID', source: sLabel, value: fm.external_id, masked: String(fm.external_id), isHashed: isSha256(fm.external_id) });
+    }
+  });
 
   if (fields.length === 0) return null;
 
@@ -330,9 +367,6 @@ export function extractUserMatchingEnvelope(userObj) {
   };
 }
 
-/**
- * Extracts and classifies customer / user info from a network or parameter payload (fallback)
- */
 export function extractUserInfoFromPayload(payload) {
   if (!payload || typeof payload !== 'object') return null;
   if (payload.user && typeof payload.user === 'object') {

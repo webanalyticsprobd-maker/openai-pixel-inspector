@@ -220,10 +220,12 @@ export function validateEvent(event) {
       const firstItem = parameters.contents[0];
       if (
         parameters.contents.length === 1 &&
-        (Number(firstItem.quantity) || 1) === 1 &&
         typeof firstItem.amount === 'number'
       ) {
-        if (mult > 1 && firstItem.amount * mult === parameters.amount) {
+        const qty = Number(firstItem.quantity) || 1;
+        const itemLineTotal = firstItem.amount * qty;
+
+        if (mult > 1 && itemLineTotal * mult === parameters.amount) {
           const eventFormatted = formatHumanReadableAmount(parameters.amount, curr);
           const itemFormatted = formatHumanReadableAmount(firstItem.amount, curr);
 
@@ -235,11 +237,11 @@ export function validateEvent(event) {
             path: 'contents[0].amount',
             code: 'COMMERCE_VALUE_MISMATCH',
             title: 'Possible Major/Minor Currency Unit Mismatch',
-            detected: `Event amount: ${parameters.amount} (${eventFormatted}), Item amount: ${firstItem.amount} (${itemFormatted})`,
-            expected: `Consistent minor units across event and item levels (e.g. ${parameters.amount})`,
-            message: `The item-level amount (${firstItem.amount}) is inconsistent with the event-level amount (${parameters.amount}) for this single-item event. The event amount appears to use minor units (${eventFormatted}) while the item amount may have been provided in major units (${itemFormatted}).`,
+            detected: `Event amount: ${parameters.amount} (${eventFormatted}), Item amount: ${firstItem.amount} (${itemFormatted}) × ${qty}`,
+            expected: `Consistent minor units across event and item levels (e.g. ${Math.round(parameters.amount / qty)} per item)`,
+            message: `The item total (${firstItem.amount} × ${qty} = ${itemLineTotal}) is inconsistent with the event amount (${parameters.amount}) by exactly ${mult}x. The event amount appears to use minor units (${eventFormatted}) while the item amount may have been provided in major units (${itemFormatted}).`,
             documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
-            recommendedFix: `Confirm whether contents[0].amount should be ${parameters.amount} (${eventFormatted}).`
+            recommendedFix: `Confirm whether contents[0].amount should be ${Math.round(parameters.amount / qty)} (${formatHumanReadableAmount(Math.round(parameters.amount / qty), curr)}).`
           });
         }
       }
