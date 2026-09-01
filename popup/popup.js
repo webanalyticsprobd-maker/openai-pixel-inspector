@@ -614,6 +614,70 @@ document.addEventListener('DOMContentLoaded', async () => {
       multiPixelCard.style.display = 'none';
     }
 
+    
+    // SDK Diagnostics Card
+    const sdkDiagCard = document.getElementById('sdk-diagnostics-card');
+    const sdkDroppedBadge = document.getElementById('sdk-dropped-badge');
+    const sdkDiagContent = document.getElementById('sdk-diagnostics-content');
+    const diagnostics = currentTabState.diagnostics || currentTabState.networkSummary?.latestDiagnostics;
+
+    if (sdkDiagCard && diagnostics) {
+      sdkDiagCard.style.display = 'block';
+      const dropped = diagnostics.droppedEventCount || 0;
+      if (dropped > 0) {
+        sdkDroppedBadge.textContent = dropped + ' Dropped';
+        sdkDroppedBadge.className = 'badge badge-warning';
+      } else {
+        sdkDroppedBadge.textContent = '0 Dropped';
+        sdkDroppedBadge.className = 'badge badge-success';
+      }
+
+      sdkDiagContent.innerHTML = `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="background:var(--bg-secondary); padding:6px 8px; border-radius:4px;">
+            <div style="color:var(--text-secondary); font-size:10.5px;">Auto Advanced Matching</div>
+            <div style="font-weight:600; color:var(--status-success); font-size:12px; text-transform:capitalize;">
+              ${escapeHtml(diagnostics.automaticAdvancedMatching || 'enabled')}
+            </div>
+          </div>
+          <div style="background:var(--bg-secondary); padding:6px 8px; border-radius:4px;">
+            <div style="color:var(--text-secondary); font-size:10.5px;">Schema Version</div>
+            <div style="font-weight:600; color:var(--text-main); font-size:12px;">
+              v${diagnostics.schemaVersion || 1}
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (sdkDiagCard) {
+      sdkDiagCard.style.display = 'none';
+    }
+
+    // Advanced Matching / User Envelope Card
+    const userMatchCard = document.getElementById('user-matching-card');
+    const userMatchContent = document.getElementById('user-matching-content');
+    const userMatching = currentTabState.userMatching || currentTabState.networkSummary?.latestUserMatching;
+
+    if (userMatchCard && userMatching && userMatching.fields && userMatching.fields.length > 0) {
+      userMatchCard.style.display = 'block';
+      const rows = userMatching.fields.map(f => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid var(--border-color);">
+          <span style="color:var(--text-secondary); font-size:11px;">${escapeHtml(f.label)}:</span>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <code class="mono" style="font-size:10.5px;">${escapeHtml(f.masked)}</code>
+            ${f.isHashed ? '<span class="badge badge-success" style="font-size:9px; padding:0 3px;">SHA-256</span>' : ''}
+          </div>
+        </div>
+      `).join('');
+
+      userMatchContent.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          ${rows}
+        </div>
+      `;
+    } else if (userMatchCard) {
+      userMatchCard.style.display = 'none';
+    }
+
     // Latest Observed Event Snapshot (Clean, compact 3-line layout)
     if (events.length > 0) {
       const latest = events[events.length - 1];
@@ -866,14 +930,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         ${issueBannerHtml}
 
         <div class="event-details-drawer">
-          <div class="event-spec-grid">
+          <div class="event-spec-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:6px;">
             <div class="event-spec-item">
-              <span class="event-spec-label">Event ID</span>
-              <span class="event-spec-val">${eventIdDisplay}</span>
+              <span class="event-spec-label">Evidence</span>
+              <span class="event-spec-val" style="color:var(--status-success); font-weight:600; font-size:11px;">
+                ${evt.evidence === 'Browser Network Request' ? 'Network Request ✓' : 'JS Interception'}
+              </span>
+            </div>
+            <div class="event-spec-item">
+              <span class="event-spec-label">JS Execution</span>
+              <span class="event-spec-val" style="font-size:11px;">
+                ${evt.jsObserved !== false ? '<span style="color:var(--text-main);">Observed ✓</span>' : '<span style="color:var(--text-muted);">Direct Network</span>'}
+              </span>
             </div>
             <div class="event-spec-item">
               <span class="event-spec-label">Pixel ID</span>
               <span class="event-spec-val">${pixelIdDisplay}</span>
+            </div>
+            <div class="event-spec-item">
+              <span class="event-spec-label">SDK Event ID</span>
+              <span class="event-spec-val">${evt.sdkEventId ? makeCopyable(evt.sdkEventId, '<code style="font-size:10px;">' + escapeHtml(truncateString(evt.sdkEventId, 12)) + '</code>') : '<span style="color:var(--text-muted);">None</span>'}</span>
+            </div>
+            <div class="event-spec-item">
+              <span class="event-spec-label">Deduplication ID</span>
+              <span class="event-spec-val">${eventIdDisplay}</span>
             </div>
           </div>
 

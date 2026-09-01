@@ -3,19 +3,27 @@
  * 
  * Single source of truth for:
  * 1. Runtime Multi-Pixel Registry
- * 2. Event Lifecycle & Session Journey
- * 3. Same-Pixel Duplicate Detection vs Multi-Pixel Delivery
- * 4. Cross-Pixel Payload Consistency Comparison
- * 5. Documented Audit Score Calculation
+ * 2. Network-First Event Lifecycle & Session Journey
+ * 3. Batch Request Processing & Event Classification
+ * 4. Same-Pixel Duplicate Detection vs Multi-Pixel Delivery
+ * 5. Cross-Pixel Payload Consistency Comparison
+ * 6. SDK Diagnostics & User Matching Storage
+ * 7. Documented Audit Score Calculation
  */
 
 import { OFFICIAL_DOCS } from '../validators/schemas.js';
+import { normalizeEvent } from './normalizer.js';
+import { validateEvent } from '../validators/event-validator.js';
 
 export class EventStore {
   constructor() {
     this.events = [];
     this.duplicates = [];
-    this.pixelRegistry = {}; // { [pixelId]: { pixelId, events: [], eventCounts: {}, firstSeen, lastSeen } }
+    this.parentRequests = [];
+    this.sdkEvents = [];
+    this.latestDiagnostics = null;
+    this.latestUserMatching = null;
+    this.pixelRegistry = {}; // { [pixelId]: { pixelId, events: [], eventCounts: {}, requestsCount: 0, firstSeen, lastSeen } }
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
   }
@@ -23,6 +31,10 @@ export class EventStore {
   clear() {
     this.events = [];
     this.duplicates = [];
+    this.parentRequests = [];
+    this.sdkEvents = [];
+    this.latestDiagnostics = null;
+    this.latestUserMatching = null;
     this.pixelRegistry = {};
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
@@ -39,12 +51,113 @@ export class EventStore {
         pixelId: cleanId,
         events: [],
         eventCounts: {},
+        requestsCount: 0,
         firstSeen: timestamp,
         lastSeen: timestamp
       };
     } else {
       this.pixelRegistry[cleanId].lastSeen = timestamp;
     }
+  }
+
+  /**
+   * Processes an incoming parsed OpenAI Network Batch
+   * 
+   * @param {object} batch - { parentRequest, measurementEvents, internalEvents, diagnostics, userMatching }
+   * @param {object} tabContext
+   */
+  addNetworkBatch(batch, tabContext = {}) {
+    if (!batch) return;
+
+    if (batch.parentRequest) {
+      this.parentRequests.push(batch.parentRequest);
+      const pid = batch.parentRequest.pixelId || 'DEFAULT_PIXEL';
+      this.registerPixelId(pid, batch.parentRequest.timestamp);
+      if (this.pixelRegistry[pid]) {
+        this.pixelRegistry[pid].requestsCount = (this.pixelRegistry[pid].requestsCount || 0) + 1;
+      }
+    }
+
+    if (batch.diagnostics) {
+      this.latestDiagnostics = batch.diagnostics;
+    }
+
+    if (batch.userMatching) {
+      this.latestUserMatching = batch.userMatching;
+    }
+
+    if (Array.isArray(batch.internalEvents)) {
+      batch.internalEvents.forEach(ie => this.sdkEvents.push(ie));
+    }
+
+    if (Array.isArray(batch.measurementEvents)) {
+      batch.measurementEvents.forEach(mEvt => {
+        // Correlate with existing event or add as a new network event
+        const matched = this.correlateNetworkEvent(mEvt);
+        if (!matched) {
+          const normalized = normalizeEvent({
+            name: mEvt.name,
+            parameters: mEvt.parameters,
+            pixelId: mEvt.pixelId || batch.parentRequest?.pixelId || null,
+            sdkEventId: mEvt.sdkEventId,
+            sourceUrl: mEvt.sourceUrl,
+            referrerUrl: mEvt.referrerUrl,
+            optOut: mEvt.optOut,
+            parentRequestId: mEvt.parentRequestId,
+            timestamp: mEvt.timestamp,
+            source: {
+              type: 'network',
+              location: 'browser_network_request',
+              caller: 'Browser Network Request (bzr.openai.com)'
+            },
+            network: {
+              detected: true,
+              status: 200,
+              method: 'POST',
+              url: batch.parentRequest?.requestUrl || 'bzr.openai.com/v1/sdk/events',
+              payload: mEvt.data
+            }
+          }, tabContext);
+
+          this.addEvent(normalized);
+        }
+      });
+    }
+  }
+
+  /**
+   * Correlates an incoming network measurement event with an existing JS-intercepted event
+   */
+  correlateNetworkEvent(netEvt) {
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      const evt = this.events[i];
+      const timeDiff = Math.abs(evt.timestamp - netEvt.timestamp);
+
+      if (timeDiff < 3500 && evt.name === netEvt.name) {
+        // If not yet correlated with a network request, correlate it
+        if (!evt.network || !evt.network.detected || evt.evidence !== 'Browser Network Request') {
+          evt.evidence = 'Browser Network Request';
+          evt.jsObserved = true;
+          evt.sdkEventId = netEvt.sdkEventId;
+          evt.sourceUrl = netEvt.sourceUrl || evt.url;
+          evt.referrerUrl = netEvt.referrerUrl;
+          evt.optOut = netEvt.optOut;
+          evt.parentRequestId = netEvt.parentRequestId;
+          evt.network.detected = true;
+          evt.network.status = 200;
+          evt.network.method = 'POST';
+          evt.network.payload = netEvt.parameters;
+          evt.duplicateStatus = '✅ Sent (Network Request)';
+
+          // Update parameters to actual network payload and re-run validation on network data
+          evt.parameters = netEvt.parameters;
+          evt.validation = validateEvent(evt);
+
+          return evt;
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -132,7 +245,9 @@ export class EventStore {
     } else {
       normalizedEvent.isDuplicate = false;
       normalizedEvent.requestCount = 1;
-      normalizedEvent.duplicateStatus = '✅ Correct';
+      if (!normalizedEvent.duplicateStatus || normalizedEvent.duplicateStatus.includes('Awaiting')) {
+        normalizedEvent.duplicateStatus = normalizedEvent.evidence === 'Browser Network Request' ? '✅ Sent (Network Request)' : '⏳ Awaiting Network Transmission';
+      }
     }
 
     this.events.push(normalizedEvent);
@@ -235,57 +350,6 @@ export class EventStore {
   }
 
   /**
-   * Correlates network telemetry with store events
-   */
-  correlateNetworkRequest(netReq) {
-    let matchedEvt = null;
-    const batchEvents = (netReq.payload && Array.isArray(netReq.payload.events)) ? netReq.payload.events : null;
-
-    for (let i = this.events.length - 1; i >= 0; i--) {
-      const evt = this.events[i];
-      let isMatch = false;
-
-      if (batchEvents) {
-        for (const subEvt of batchEvents) {
-          const subType = subEvt.type || subEvt.name;
-          const subId = subEvt.id || subEvt.event_id;
-          if (
-            (subId && evt.eventId && subId === evt.eventId) ||
-            (subType && (subType === evt.name || subType === evt.displayName)) ||
-            (subEvt.timestamp_ms && Math.abs(evt.timestamp - subEvt.timestamp_ms) < 3000)
-          ) {
-            isMatch = true;
-            if (subId && !evt.eventId) {
-              evt.eventId = subId;
-            }
-            break;
-          }
-        }
-      } else {
-        if (
-          (netReq.payload && netReq.payload.event_id && evt.eventId && netReq.payload.event_id === evt.eventId) ||
-          (netReq.payload && (netReq.payload.name || netReq.payload.event) === evt.name) ||
-          Math.abs(evt.timestamp - netReq.timestamp) < 2500
-        ) {
-          isMatch = true;
-        }
-      }
-
-      if (isMatch) {
-        evt.network.detected = true;
-        evt.network.status = netReq.status || 200;
-        evt.network.method = netReq.method || 'POST';
-        evt.network.url = netReq.url;
-        evt.network.payload = netReq.payload;
-        evt.network.responseTimestamp = netReq.responseTimestamp || Date.now();
-
-        if (!matchedEvt) matchedEvt = evt;
-      }
-    }
-    return matchedEvt;
-  }
-
-  /**
    * Returns Multi-Pixel Summary Analysis
    */
   getMultiPixelSummary() {
@@ -302,7 +366,6 @@ export class EventStore {
       };
     }
 
-    // Group events by name across pixels
     const eventsByPixel = {};
     pixelIds.forEach((pid) => {
       eventsByPixel[pid] = new Set(this.pixelRegistry[pid].events.map((e) => e.name));
@@ -317,7 +380,6 @@ export class EventStore {
       uniqueEventsByPixel[pid] = Array.from(eventsByPixel[pid] || []).filter((name) => !otherPixels.some((op) => eventsByPixel[op]?.has(name)));
     });
 
-    // Multi-pixel routing analysis (measure vs measureSingle)
     const routingAnalysis = this.events.map((e) => ({
       eventName: e.name,
       timestamp: e.timestamp,
@@ -339,8 +401,6 @@ export class EventStore {
 
   /**
    * Calculates professional Audit Health Score (0–100) based strictly on findings
-   * Errors: -15 pts, Warnings: -5 pts, Info/Passed: 0 pts
-   * Never penalizes unobserved funnel events.
    */
   calculateAuditScore() {
     let errorCount = 0;
@@ -353,7 +413,6 @@ export class EventStore {
       }
     }
 
-    // Baseline 100
     const penalty = (errorCount * 15) + (warningCount * 5);
     const score = Math.max(0, Math.min(100, 100 - penalty));
 
@@ -372,7 +431,31 @@ export class EventStore {
       statusText: statusText,
       errorsCount: errorCount,
       warningsCount: warningCount,
-      totalEvents: this.events.length
+      totalEvents: this.events.length,
+      networkRequestsCount: this.parentRequests.length
+    };
+  }
+
+  getNetworkActivitySummary() {
+    const pixelIds = Object.keys(this.pixelRegistry);
+    const perPixelSummary = {};
+    pixelIds.forEach(pid => {
+      perPixelSummary[pid] = {
+        requestsCount: this.pixelRegistry[pid].requestsCount || 0,
+        eventCounts: this.pixelRegistry[pid].eventCounts || {}
+      };
+    });
+
+    return {
+      totalNetworkRequests: this.parentRequests.length,
+      totalEventsSent: this.events.filter(e => e.evidence === 'Browser Network Request').length,
+      totalSdkEvents: this.sdkEvents.length,
+      uniqueEventsCount: new Set(this.events.map(e => e.name)).size,
+      pixelsCount: pixelIds.length,
+      pixels: pixelIds,
+      perPixelSummary: perPixelSummary,
+      latestDiagnostics: this.latestDiagnostics,
+      latestUserMatching: this.latestUserMatching
     };
   }
 
@@ -381,6 +464,7 @@ export class EventStore {
       totalEvents: this.events.length,
       uniqueEventTypes: new Set(this.events.map((e) => e.name)).size,
       pixelsDetected: Object.keys(this.pixelRegistry),
+      networkSummary: this.getNetworkActivitySummary(),
       multiPixelSummary: this.getMultiPixelSummary(),
       auditScore: this.calculateAuditScore(),
       duplicateCount: this.duplicates.length,
@@ -416,7 +500,7 @@ export class EventStore {
         const q = query.toLowerCase().trim();
         const nameMatch = (evt.displayName || evt.name).toLowerCase().includes(q);
         const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
-        const idMatch = (evt.eventId || '').toLowerCase().includes(q);
+        const idMatch = (evt.eventId || evt.sdkEventId || '').toLowerCase().includes(q);
         const pixelMatch = (evt.pixelId || '').toLowerCase().includes(q);
         const paramsMatch = JSON.stringify(evt.parameters || {}).toLowerCase().includes(q);
         const findingsMatch = evt.validation?.findings?.some((f) => f.code.toLowerCase().includes(q) || f.message.toLowerCase().includes(q));
@@ -433,18 +517,17 @@ export class EventStore {
       'Step',
       'Timestamp',
       'Event Name',
+      'Evidence',
+      'Pixel ID',
+      'SDK Event ID',
+      'Advertiser Event ID',
       'Data Type',
       'Page URL',
-      'Page Path',
-      'Event ID',
-      'Pixel ID',
-      'Method',
       'Duplicate Status',
       'Audit Status',
       'Amount',
       'Currency',
-      'Parameters JSON',
-      'oppref'
+      'Parameters JSON'
     ];
 
     const rows = [headers];
@@ -453,18 +536,17 @@ export class EventStore {
         idx + 1,
         new Date(evt.timestamp).toISOString(),
         `"${evt.displayName || evt.name}"`,
+        `"${evt.evidence || 'Browser Network Request'}"`,
+        `"${evt.pixelId || ''}"`,
+        `"${evt.sdkEventId || ''}"`,
+        `"${evt.eventId || 'Not Sent'}"`,
         evt.validation ? evt.validation.dataShape : 'contents',
         `"${evt.url || ''}"`,
-        `"${evt.pathname || ''}"`,
-        `"${evt.eventId || 'Not Sent'}"`,
-        `"${evt.pixelId || ''}"`,
-        `"${evt.source?.method || 'measure'}"`,
         `"${evt.duplicateStatus || '✅ Correct'}"`,
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
-        `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`,
-        `"${evt.attribution?.oppref || ''}"`
+        `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`
       ]);
     });
 
@@ -477,11 +559,14 @@ export class EventStore {
       startedAt: new Date(this.startedAt).toISOString(),
       exportedAt: new Date().toISOString(),
       totalEvents: this.events.length,
+      networkActivity: this.getNetworkActivitySummary(),
       pixelsDetected: Object.keys(this.pixelRegistry),
       multiPixelSummary: this.getMultiPixelSummary(),
       auditScore: this.calculateAuditScore(),
       summary: this.getJourneySummary(),
-      rawEvents: this.events
+      rawEvents: this.events,
+      sdkEvents: this.sdkEvents,
+      parentRequests: this.parentRequests
     }, null, 2);
   }
 }

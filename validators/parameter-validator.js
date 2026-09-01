@@ -377,28 +377,6 @@ export function validateContentsArray(contentsVal, allParams = {}, eventName = '
     }
   });
 
-  // Level 3: Check if item amounts were sent in major units while event amount was in minor units
-  if (hasItemAmounts && typeof allParams.amount === 'number') {
-    const curr = (allParams.currency || 'USD').toString().toUpperCase();
-    const mult = (curr === 'JPY' || curr === 'KRW' || curr === 'VND') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
-
-    if (mult > 1 && itemsTotalAmount * mult === allParams.amount) {
-      findings.push({
-        severity: 'error',
-        category: 'contents',
-        eventName: eventName,
-        path: 'contents[0].amount',
-        code: 'PARAM_AMOUNT_MAJOR_UNITS',
-        title: 'Content Amount in Major Units',
-        detected: itemsTotalAmount,
-        expected: allParams.amount,
-        message: `contents[0].amount was sent in major units ($${itemsTotalAmount}.00). OpenAI expects minor units: ${allParams.amount} (${itemsTotalAmount} × ${mult}) for ${curr}.`,
-        documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
-        recommendedFix: `Update contents[0].amount to ${allParams.amount} (minor currency units).`
-      });
-    }
-  }
-
   return findings;
 }
 

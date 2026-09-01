@@ -176,6 +176,34 @@
           </div>
         </section>
 
+        <!-- SDK Diagnostics & Telemetry (Visible when diagnostic events detected) -->
+        <section class="card" id="sdk-diagnostics-card" style="display:none;">
+          <div class="card-header">
+            <div>
+              <span class="card-title">OpenAI SDK Diagnostics</span>
+              <span class="card-subtitle">Runtime Telemetry</span>
+            </div>
+            <span class="badge badge-neutral" id="sdk-dropped-badge">0 Dropped</span>
+          </div>
+          <div id="sdk-diagnostics-content" style="padding: 10px 14px; font-size: 11.5px;">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
+        <!-- Advanced Matching / User Envelope (Visible when user matching transmitted) -->
+        <section class="card" id="user-matching-card" style="display:none;">
+          <div class="card-header">
+            <div>
+              <span class="card-title">User Matching (Advanced Matching)</span>
+              <span class="card-subtitle">Browser Network Envelope</span>
+            </div>
+            <span class="badge badge-success" id="user-matching-badge">Transmitted</span>
+          </div>
+          <div id="user-matching-content" style="padding: 10px 14px; font-size: 11.5px;">
+            <!-- Dynamically populated -->
+          </div>
+        </section>
+
         <!-- Latest Event Snapshot -->
         <section class="card latest-event-card">
           <div class="card-header">

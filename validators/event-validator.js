@@ -3,6 +3,11 @@
  * 
  * Validates events against the central OpenAI Pixel schema.
  * Emits standardized finding objects with machine-readable codes and precise payload paths.
+ * 
+ * Three Validation Layers:
+ * - Layer A: Official Documentation Schema Errors (Wrong type, missing required, string amounts)
+ * - Layer B: Semantic Commerce Consistency Warnings (100x major/minor unit mismatches)
+ * - Layer C: Internal SDK Information & Telemetry
  */
 
 import {
@@ -11,15 +16,32 @@ import {
   STANDARD_EVENT_ALIASES,
   OPENAI_PIXEL_SCHEMA,
   CUSTOM_EVENT_RULES,
-  OFFICIAL_DOCS
+  OFFICIAL_DOCS,
+  getCurrencyDecimalPlaces
 } from './schemas.js';
 import { validateParameter, validateContentsArray } from './parameter-validator.js';
 import { scanForPii } from './pii-scanner.js';
 
+export function formatHumanReadableAmount(amount, currencyCode = 'USD') {
+  if (typeof amount !== 'number' || isNaN(amount)) return null;
+  const decimals = getCurrencyDecimalPlaces(currencyCode);
+  const major = amount / Math.pow(10, decimals);
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode.toUpperCase(),
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(major);
+  } catch {
+    return `${currencyCode.toUpperCase()} ${major.toFixed(decimals)}`;
+  }
+}
+
 export function validateEvent(event) {
   const eventName = event.name || event.eventName || '';
   const options = event.options || {};
-  const parameters = event.parameters || {};
+  const parameters = event.parameters || event.data || {};
   const pixelId = event.pixelId || null;
 
   // Resolve alias if applicable
@@ -51,7 +73,6 @@ export function validateEvent(event) {
       recommendedFix: `Send "${eventName}" server-side via Conversions API or use a standard browser event.`
     });
   } else if (!isStandardJsEvent && canonicalName !== 'custom') {
-    // Non-standard event name passed directly to measure (e.g. oaiq("measure", "purchase"))
     findings.push({
       severity: 'error',
       category: 'event',
@@ -148,7 +169,6 @@ export function validateEvent(event) {
     const allowedSet = new Set(schema.allowedParameters || Object.keys(schema.parameters || {}));
     for (const [paramKey, paramVal] of Object.entries(parameters)) {
       if (paramKey === 'contents') {
-        // Handled separately below in contents validator
         continue;
       }
 
@@ -187,9 +207,46 @@ export function validateEvent(event) {
         findings.push(f);
       });
     }
+
+    // 7. Layer B: Semantic Commerce Consistency Check (e.g. 100x Major/Minor Unit Mismatch)
+    if (
+      typeof parameters.amount === 'number' &&
+      Array.isArray(parameters.contents) &&
+      parameters.contents.length > 0
+    ) {
+      const curr = (parameters.currency || 'USD').toString().toUpperCase();
+      const mult = (curr === 'JPY' || curr === 'KRW' || curr === 'VND') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
+
+      const firstItem = parameters.contents[0];
+      if (
+        parameters.contents.length === 1 &&
+        (Number(firstItem.quantity) || 1) === 1 &&
+        typeof firstItem.amount === 'number'
+      ) {
+        if (mult > 1 && firstItem.amount * mult === parameters.amount) {
+          const eventFormatted = formatHumanReadableAmount(parameters.amount, curr);
+          const itemFormatted = formatHumanReadableAmount(firstItem.amount, curr);
+
+          findings.push({
+            severity: 'warning',
+            category: 'commerce_consistency',
+            eventName: eventName,
+            pixelId: pixelId,
+            path: 'contents[0].amount',
+            code: 'COMMERCE_VALUE_MISMATCH',
+            title: 'Possible Major/Minor Currency Unit Mismatch',
+            detected: `Event amount: ${parameters.amount} (${eventFormatted}), Item amount: ${firstItem.amount} (${itemFormatted})`,
+            expected: `Consistent minor units across event and item levels (e.g. ${parameters.amount})`,
+            message: `The item-level amount (${firstItem.amount}) is inconsistent with the event-level amount (${parameters.amount}) for this single-item event. The event amount appears to use minor units (${eventFormatted}) while the item amount may have been provided in major units (${itemFormatted}).`,
+            documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
+            recommendedFix: `Confirm whether contents[0].amount should be ${parameters.amount} (${eventFormatted}).`
+          });
+        }
+      }
+    }
   }
 
-  // 7. Custom Event Validation
+  // 8. Custom Event Validation
   if (isCustomEvent || canonicalName === 'custom') {
     const customName = options.custom_event_name || (canonicalName !== 'custom' ? canonicalName : null);
     if (!customName) {
@@ -259,7 +316,7 @@ export function validateEvent(event) {
     }
   }
 
-  // 8. Deduplication Info Validation
+  // 9. Deduplication Info Validation
   if (options.event_id) {
     findings.push({
       severity: 'info',
@@ -277,7 +334,7 @@ export function validateEvent(event) {
     });
   }
 
-  // 9. Scan for Unhashed PII Privacy Violations
+  // 10. Scan for Unhashed PII Privacy Violations
   const detectedPii = scanForPii(parameters);
   if (detectedPii.length > 0) {
     detectedPii.forEach((pii) => {
@@ -298,7 +355,7 @@ export function validateEvent(event) {
     });
   }
 
-  // 10. Compile Status and Summary Counts
+  // 11. Compile Status and Summary Counts
   let errorsCount = 0;
   let warningsCount = 0;
   let infoCount = 0;
@@ -346,6 +403,10 @@ export function validateEvent(event) {
     parameterResults: parameterResults,
     errorsCount: errorsCount,
     warningsCount: warningsCount,
-    infoCount: infoCount
+    infoCount: infoCount,
+    humanReadableAmounts: {
+      eventAmount: typeof parameters.amount === 'number' ? formatHumanReadableAmount(parameters.amount, parameters.currency || 'USD') : null,
+      items: Array.isArray(parameters.contents) ? parameters.contents.map(i => typeof i.amount === 'number' ? formatHumanReadableAmount(i.amount, i.currency || parameters.currency || 'USD') : null) : []
+    }
   };
 }

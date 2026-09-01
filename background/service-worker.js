@@ -10,7 +10,7 @@
 import { normalizeEvent } from '../core/normalizer.js';
 import { EventStore } from '../core/event-store.js';
 import { generateAuditReport } from '../core/scanner.js';
-import { parseNetworkPayload, isOpenAINetworkRequest } from '../network/request-parser.js';
+import { parseNetworkPayload, isOpenAINetworkRequest, parseOpenAINetworkBatch } from '../network/request-parser.js';
 
 const tabStates = new Map();
 const tabStores = new Map();
@@ -198,7 +198,7 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         return;
       }
 
-      // Check Ingestion Endpoint (bzr.openai.com)
+      // Check Ingestion Endpoint (bzr.openai.com, /v1/sdk/events, /events?pid=...)
       if (isOpenAINetworkRequest(url)) {
         let parsedPayload = null;
         if (requestBody) {
@@ -231,43 +231,45 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
 
         state.network.push(netEntry);
 
-        // If the request contains an event name, correlate or record
-        if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event)) {
-          const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event;
-          
-          // Correlate with existing event or add if not captured via JS bridge
-          const correlated = store.correlateNetworkRequest(netEntry);
-          if (!correlated) {
-            const normalized = normalizeEvent({
-              name: evtName,
-              parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
-              event_id: parsedPayload.event_id || null, // Real event_id only
-              pixelId: parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
-              url: state.url,
-              timestamp: Date.now(),
-              caller: 'network (webRequest)'
-            }, {
-              url: state.url,
-              pixelId: state.pixel.pixelIds[0] || null,
-              oppref: state.attribution.oppref || null
-            });
+        // Parse multi-event batch
+        const batch = parseOpenAINetworkBatch(netEntry);
 
-            normalized.network.detected = true;
-            normalized.network.url = url;
-            normalized.network.method = method;
-            store.addEvent(normalized);
+        // Register Pixel ID
+        if (batch.parentRequest.pixelId) {
+          state.pixel.detected = true;
+          state.pixel.confidence = 'verified_network';
+          if (!state.pixel.pixelIds.includes(batch.parentRequest.pixelId)) {
+            state.pixel.pixelIds.push(batch.parentRequest.pixelId);
           }
-          state.events = store.events;
-        } else {
-          store.correlateNetworkRequest(netEntry);
-          state.events = store.events;
         }
 
+        if (batch.parentRequest.obref && !state.attribution.oppref) {
+          state.attribution.oppref = batch.parentRequest.obref;
+          state.attribution.source = 'network_obref';
+        }
+
+        if (batch.userMatching) {
+          state.userMatching = batch.userMatching;
+        }
+
+        if (batch.diagnostics) {
+          state.diagnostics = batch.diagnostics;
+        }
+
+        // Process batch in event store
+        store.addNetworkBatch(batch, {
+          url: state.url,
+          pixelId: batch.parentRequest.pixelId || state.pixel.pixelIds[0] || null,
+          oppref: state.attribution.oppref || null
+        });
+
+        state.events = store.events;
+        state.networkSummary = store.getNetworkActivitySummary();
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
       }
     },
-    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] },
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] },
     ['requestBody']
   );
 
