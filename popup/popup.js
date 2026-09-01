@@ -878,28 +878,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (ui && ui.fields && ui.fields.length > 0) {
         const fieldRows = ui.fields.map(f => `
-          <div class="user-info-field-row">
-            <div class="user-info-field-label">
-              <span class="user-info-icon">${ICONS.user}</span>
+          <div class="user-info-field-row" style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div class="user-info-field-label" style="display:flex; align-items:center; gap:6px; color:var(--text-secondary); font-size:11px;">
+              <span class="user-info-icon" style="opacity:0.7;">${ICONS.user}</span>
               <span>${escapeHtml(f.label)}:</span>
             </div>
-            <div class="user-info-field-val">
-              <code>${escapeHtml(f.masked)}</code>
-              ${f.isHashed ? '<span class="badge badge-success" style="font-size:9.5px; padding:1px 4px;">SHA-256</span>' : '<span class="badge badge-warning" style="font-size:9.5px; padding:1px 4px;">Raw PII</span>'}
+            <div class="user-info-field-val" style="display:flex; align-items:center; gap:6px;">
+              <code style="font-size:10.5px; background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:3px;">${escapeHtml(f.masked)}</code>
+              ${f.isHashed ? '<span class="badge badge-success" style="font-size:9px; padding:1px 5px;">SHA-256</span>' : '<span class="badge badge-warning" style="font-size:9px; padding:1px 5px;">Raw PII</span>'}
             </div>
           </div>
         `).join('');
 
         userInfoHtml = `
-          <div class="user-info-card">
-            <div class="user-info-card-header">
+          <div class="user-info-card" style="margin-top:10px; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
+            <div class="user-info-card-header" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(255,255,255,0.03); border-bottom:1px solid var(--border-color);">
               <div style="display:flex; align-items:center; gap:6px;">
                 ${ICONS.user}
-                <strong style="font-size:11px; color:var(--text-main);">Customer / User Info (Sent with Event)</strong>
+                <strong style="font-size:11.5px; color:var(--text-main);">User Data (Sent in Network Request Payload)</strong>
               </div>
-              <span class="badge badge-neutral" style="font-size:9.5px;">${ui.fields.length} field(s)</span>
+              <span class="badge badge-success" style="font-size:9.5px;">${ui.fields.length} field(s) in payload</span>
             </div>
-            <div class="user-info-card-body">
+            <div class="user-info-card-body" style="padding:8px 12px;">
               ${fieldRows}
             </div>
           </div>
