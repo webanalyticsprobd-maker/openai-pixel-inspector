@@ -422,27 +422,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (serverSideSignals) {
           state.serverSideSignals = Object.assign({}, state.serverSideSignals, serverSideSignals);
         }
-        if (message.data.userData && store) {
-          state.userInfo = message.data.userData;
-          for (let i = store.events.length - 1; i >= 0; i--) {
-            const evt = store.events[i];
-            if (['order_created', 'checkout_started', 'lead_created', 'registration_completed'].includes(evt.name)) {
-              if (!evt.userInfo) {
-                evt.userInfo = message.data.userData;
-              } else {
-                const existingKeys = new Set(evt.userInfo.fields.map((f) => f.key));
-                for (const f of message.data.userData.fields) {
-                  if (!existingKeys.has(f.key)) {
-                    evt.userInfo.fields.push(f);
-                    existingKeys.add(f.key);
-                  }
-                }
-                evt.userInfo.count = evt.userInfo.fields.length;
-              }
-            }
-          }
-          state.events = store.events;
-        }
         state.lastUpdated = Date.now();
         if (state.url) scanBrowserCookiesForTab(tabId, state.url);
         updateBadge(tabId, state);

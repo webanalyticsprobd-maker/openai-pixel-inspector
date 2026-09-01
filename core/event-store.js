@@ -216,14 +216,41 @@ export class EventStore {
 
   correlateNetworkRequest(netReq) {
     const userInfo = netReq.payload ? extractUserInfoFromPayload(netReq.payload) : null;
+    let matchedEvt = null;
+
+    const batchEvents = (netReq.payload && Array.isArray(netReq.payload.events)) ? netReq.payload.events : null;
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const evt = this.events[i];
-      if (
-        (netReq.payload && netReq.payload.event_id && evt.eventId && netReq.payload.event_id === evt.eventId) ||
-        (netReq.payload && (netReq.payload.name || netReq.payload.event) === evt.name) ||
-        Math.abs(evt.timestamp - netReq.timestamp) < 2500
-      ) {
+      let isMatch = false;
+
+      if (batchEvents) {
+        for (const subEvt of batchEvents) {
+          const subType = subEvt.type || subEvt.name;
+          const subId = subEvt.id || subEvt.event_id;
+          if (
+            (subId && evt.eventId && subId === evt.eventId) ||
+            (subType && (subType === evt.name || subType === evt.displayName)) ||
+            (subEvt.timestamp_ms && Math.abs(evt.timestamp - subEvt.timestamp_ms) < 3000)
+          ) {
+            isMatch = true;
+            if (subId && !evt.eventId) {
+              evt.eventId = subId;
+            }
+            break;
+          }
+        }
+      } else {
+        if (
+          (netReq.payload && netReq.payload.event_id && evt.eventId && netReq.payload.event_id === evt.eventId) ||
+          (netReq.payload && (netReq.payload.name || netReq.payload.event) === evt.name) ||
+          Math.abs(evt.timestamp - netReq.timestamp) < 2500
+        ) {
+          isMatch = true;
+        }
+      }
+
+      if (isMatch) {
         evt.network.detected = true;
         evt.network.status = netReq.status || 200;
         evt.network.method = netReq.method || 'POST';
@@ -248,10 +275,10 @@ export class EventStore {
             evt.userInfo.hasHashedData = evt.userInfo.hasHashedData || userInfo.hasHashedData;
           }
         }
-        return evt;
+        if (!matchedEvt) matchedEvt = evt;
       }
     }
-    return null;
+    return matchedEvt;
   }
 
   exportCSV() {
