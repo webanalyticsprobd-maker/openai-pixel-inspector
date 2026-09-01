@@ -990,6 +990,9 @@ html, body {
   white-space: nowrap;
 }
 
+/* ==========================================================================
+   JSON Payload Box & Syntax Highlighting
+   ========================================================================== */
 .payload-details {
   margin-top: 10px;
   border-top: 1px solid var(--border-subtle);
@@ -997,47 +1000,156 @@ html, body {
 }
 
 .payload-details summary {
-  font-size: 12px;
+  list-style: none;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--accent-brand);
   cursor: pointer;
   user-select: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 6px;
-  border-radius: 4px;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
   transition: all 0.15s ease;
+}
+
+.payload-details summary::-webkit-details-marker {
+  display: none;
 }
 
 .payload-details summary:hover {
   background: var(--accent-brand-subtle);
+  border-color: rgba(16, 163, 127, 0.3);
 }
 
-.payload-details summary svg {
-  transition: transform 0.15s ease;
+.payload-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.payload-details[open] summary svg {
+.payload-summary-chevron {
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+.payload-details[open] .payload-summary-chevron {
   transform: rotate(180deg);
 }
 
-.payload-code {
+.payload-keys-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.payload-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-payload-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
   background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-payload-action:hover {
+  color: var(--accent-brand);
+  background: var(--accent-brand-subtle);
+  border-color: var(--accent-brand);
+}
+
+.btn-payload-action.copied {
+  color: #fff !important;
+  background: var(--status-success) !important;
+  border-color: var(--status-success) !important;
+}
+
+.payload-box-body {
+  margin-top: 6px;
+}
+
+.payload-code {
+  background: #0f172a;
+  color: #e2e8f0;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 10px 12px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--text-main);
+  font-size: 11px;
+  line-height: 1.55;
   max-height: 220px;
+  overflow-x: auto;
   overflow-y: auto;
   white-space: pre;
   tab-size: 2;
   word-break: normal;
-  margin-top: 6px;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  margin: 0;
+  user-select: text;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Light theme for code */
+body[data-theme="light"] .payload-code {
+  background: #f8fafc;
+  color: #1e293b;
+  border: 1px solid var(--border-color);
+}
+
+/* Syntax Highlighting Colors */
+.json-key {
+  color: #38bdf8;
+  font-weight: 600;
+}
+body[data-theme="light"] .json-key {
+  color: #0284c7;
+}
+
+.json-string {
+  color: #34d399;
+}
+body[data-theme="light"] .json-string {
+  color: #059669;
+}
+
+.json-number {
+  color: #fbbf24;
+}
+body[data-theme="light"] .json-number {
+  color: #d97706;
+}
+
+.json-boolean {
+  color: #c084fc;
+  font-weight: 600;
+}
+body[data-theme="light"] .json-boolean {
+  color: #7c3aed;
+}
+
+.json-null {
+  color: #94a3b8;
+  font-style: italic;
+}
+body[data-theme="light"] .json-null {
+  color: #64748b;
 }
 
 /* ==========================================================================

@@ -113,6 +113,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     sun: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
     moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
     copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    code: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    maximize: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
     chevronDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
     emptyCheck: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
@@ -133,19 +135,94 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Fallback Copy function using temporary textarea
+  function fallbackCopyText(str) {
+    const el = document.createElement('textarea');
+    el.value = str;
+    el.setAttribute('readonly', '');
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
+    el.select();
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.warn('Clipboard fallback failed', err);
+    }
+    document.body.removeChild(el);
+  }
+
   // Copy with Visual Feedback
   function copyToClipboard(text, triggerBtn) {
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
+    if (!text) return Promise.resolve(false);
+    const str = typeof text === 'object' ? JSON.stringify(text, null, 2) : String(text);
+
+    const showFeedback = () => {
       if (triggerBtn) {
         const originalHtml = triggerBtn.innerHTML;
-        triggerBtn.innerHTML = ICONS.check;
+        const span = triggerBtn.querySelector('span');
+        if (span) {
+          span.textContent = 'Copied!';
+        } else if (triggerBtn.classList.contains('btn') || triggerBtn.classList.contains('btn-payload-action')) {
+          triggerBtn.textContent = 'Copied!';
+        } else {
+          triggerBtn.innerHTML = ICONS.check;
+        }
+        triggerBtn.classList.add('copied');
         triggerBtn.style.color = 'var(--status-success)';
         setTimeout(() => {
           triggerBtn.innerHTML = originalHtml;
+          triggerBtn.classList.remove('copied');
           triggerBtn.style.color = '';
         }, 1500);
       }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(str).then(() => {
+        showFeedback();
+        return true;
+      }).catch(() => {
+        fallbackCopyText(str);
+        showFeedback();
+        return true;
+      });
+    } else {
+      fallbackCopyText(str);
+      showFeedback();
+      return Promise.resolve(true);
+    }
+  }
+
+  // Syntax Highlighter for Developer JSON Display
+  function formatAndHighlightJson(jsonObj) {
+    if (jsonObj === undefined || jsonObj === null) return '<span class="json-null">null</span>';
+    let jsonString;
+    try {
+      jsonString = typeof jsonObj === 'string' ? JSON.stringify(JSON.parse(jsonObj), null, 2) : JSON.stringify(jsonObj, null, 2);
+    } catch {
+      jsonString = String(jsonObj);
+    }
+
+    const escaped = jsonString
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+      let cls = 'json-number';
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          cls = 'json-key';
+        } else {
+          cls = 'json-string';
+        }
+      } else if (/true|false/.test(match)) {
+        cls = 'json-boolean';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      }
+      return '<span class="' + cls + '">' + match + '</span>';
     });
   }
 
@@ -300,15 +377,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ==========================================
   // 4. Modal Handlers
   // ==========================================
+  const modalPayloadMeta = document.getElementById('modal-payload-meta');
+  const modalCloseBtnFooter = document.getElementById('modal-close-btn-footer');
+
   function openRawModal(title, jsonData) {
     if (modalEventTitle) modalEventTitle.textContent = title;
     activeModalJson = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData, null, 2);
-    if (modalJsonContent) modalJsonContent.textContent = activeModalJson;
+    if (modalJsonContent) modalJsonContent.innerHTML = formatAndHighlightJson(jsonData);
+    if (modalPayloadMeta) {
+      const bytes = new Blob([activeModalJson]).size;
+      const keyCount = (typeof jsonData === 'object' && jsonData !== null) ? Object.keys(jsonData).length : 0;
+      modalPayloadMeta.textContent = `${keyCount} keys • ${bytes} bytes`;
+    }
     if (rawModal) rawModal.classList.remove('hidden');
   }
 
   if (modalCloseBtn && rawModal) {
     modalCloseBtn.addEventListener('click', () => {
+      rawModal.classList.add('hidden');
+    });
+  }
+
+  if (modalCloseBtnFooter && rawModal) {
+    modalCloseBtnFooter.addEventListener('click', () => {
       rawModal.classList.add('hidden');
     });
   }
@@ -322,8 +413,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (modalCopyBtn) {
     modalCopyBtn.addEventListener('click', () => {
       copyToClipboard(activeModalJson, modalCopyBtn);
-      modalCopyBtn.textContent = 'Copied!';
-      setTimeout(() => { modalCopyBtn.textContent = 'Copy JSON'; }, 1500);
     });
   }
 
@@ -707,10 +796,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
             <summary>
-              ${ICONS.chevronDown}
-              <span>View JSON Payload</span>
+              <div class="payload-summary-left">
+                <span class="payload-summary-chevron">${ICONS.chevronDown}</span>
+                <span>JSON Payload</span>
+                <span class="payload-keys-count">(${Object.keys(evt.parameters || {}).length} keys)</span>
+              </div>
+              <div class="payload-summary-actions">
+                <button class="btn-payload-action btn-copy-payload" title="Copy full JSON payload">
+                  ${ICONS.copy}
+                  <span>Copy</span>
+                </button>
+                <button class="btn-payload-action btn-expand-payload" title="View in full modal">
+                  ${ICONS.maximize}
+                  <span>Expand</span>
+                </button>
+              </div>
             </summary>
-            <pre class="payload-code">${escapeHtml(JSON.stringify(evt.parameters, null, 2))}</pre>
+            <div class="payload-box-body">
+              <pre class="payload-code">${formatAndHighlightJson(evt.parameters)}</pre>
+            </div>
           </details>
         </div>
       `;
@@ -744,6 +848,25 @@ document.addEventListener('DOMContentLoaded', async () => {
           } else {
             expandedPayloadEventIds.delete(itemKey);
           }
+        });
+      }
+
+      // Payload Copy & Expand Button Handlers
+      const btnCopyPayload = item.querySelector('.btn-copy-payload');
+      if (btnCopyPayload) {
+        btnCopyPayload.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          copyToClipboard(JSON.stringify(evt.parameters || {}, null, 2), btnCopyPayload);
+        });
+      }
+
+      const btnExpandPayload = item.querySelector('.btn-expand-payload');
+      if (btnExpandPayload) {
+        btnExpandPayload.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          openRawModal((evt.displayName || evt.name || 'Event') + ' Payload', evt.parameters || {});
         });
       }
 
@@ -875,11 +998,25 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${Object.keys(dl.data || {}).length} keys</span>
         </div>
         <div class="dl-drawer">
-          <pre class="payload-code">${escapeHtml(JSON.stringify(dl.data || dl, null, 2))}</pre>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:11px; font-weight:600; color:var(--text-secondary);">Data Layer Object</span>
+            <div style="display:flex; gap:6px;">
+              <button class="btn-payload-action btn-copy-dl" title="Copy Data Layer JSON">
+                ${ICONS.copy}
+                <span>Copy</span>
+              </button>
+              <button class="btn-payload-action btn-expand-dl" title="View in full modal">
+                ${ICONS.maximize}
+                <span>Expand</span>
+              </button>
+            </div>
+          </div>
+          <pre class="payload-code">${formatAndHighlightJson(dl.data || dl)}</pre>
         </div>
       `;
 
-      row.addEventListener('click', () => {
+      const header = row.querySelector('.dl-row-header');
+      header.addEventListener('click', () => {
         if (expandedDlIndices.has(idx)) {
           expandedDlIndices.delete(idx);
           row.classList.remove('open');
@@ -888,6 +1025,31 @@ document.addEventListener('DOMContentLoaded', async () => {
           row.classList.add('open');
         }
       });
+
+      const drawer = row.querySelector('.dl-drawer');
+      if (drawer) {
+        drawer.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
+
+      const btnCopyDl = row.querySelector('.btn-copy-dl');
+      if (btnCopyDl) {
+        btnCopyDl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          copyToClipboard(JSON.stringify(dl.data || dl, null, 2), btnCopyDl);
+        });
+      }
+
+      const btnExpandDl = row.querySelector('.btn-expand-dl');
+      if (btnExpandDl) {
+        btnExpandDl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          openRawModal('Data Layer: ' + evtName, dl.data || dl);
+        });
+      }
 
       datalayerListContainer.appendChild(row);
     });
