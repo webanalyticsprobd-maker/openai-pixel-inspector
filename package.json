@@ -1,0 +1,9 @@
+{
+  "name": "openai-pixel-inspector",
+  "version": "1.7.5",
+  "description": "OpenAI Pixel QA Validation & Auditing Extension",
+  "type": "module",
+  "scripts": {
+    "test": "node test/test-suite.mjs"
+  }
+}

@@ -97,6 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentFilter = 'all';
   let currentIssueFilter = 'all';
   let searchQuery = '';
+  let selectedPixel = 'all';
   let activeModalJson = '';
   const expandedEventIds = new Set();
   const expandedPayloadEventIds = new Set();
@@ -328,6 +329,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     });
   });
+
+  // Pixel Select Filter Handler
+  const eventPixelSelect = document.getElementById('event-pixel-select');
+  if (eventPixelSelect) {
+    eventPixelSelect.addEventListener('change', (e) => {
+      selectedPixel = e.target.value;
+      renderEvents();
+    });
+  }
 
   // Search Filter Handler
   if (eventSearchInput) {
@@ -570,6 +580,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabCountDatalayer.textContent = dataLayer.length || 0;
     tabCountIssues.textContent = totalDiagnostics;
 
+    
+    // Multi-Pixel Architecture Summary
+    const multiPixelCard = document.getElementById('multi-pixel-card');
+    const multiPixelCountLabel = document.getElementById('multi-pixel-count-label');
+    const multiPixelContent = document.getElementById('multi-pixel-content');
+
+    if (multiPixelCard && pixel.pixelIds && pixel.pixelIds.length > 1) {
+      multiPixelCard.style.display = 'block';
+      multiPixelCountLabel.textContent = pixel.pixelIds.length + ' Pixel IDs Active';
+
+      const pidBadges = pixel.pixelIds.map(pid => '<span class="badge badge-neutral mono" style="font-size:11px;">' + escapeHtml(pid) + '</span>').join(' ');
+      const measureCount = events.filter(e => e.source && e.source.method === 'measure').length;
+      const measureSingleCount = events.filter(e => e.source && e.source.method === 'measureSingle').length;
+
+      multiPixelContent.innerHTML = `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:11px; color:var(--text-secondary); margin-bottom:4px;">Detected Pixels:</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">${pidBadges}</div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; font-size:11.5px;">
+          <div style="background:var(--bg-secondary); padding:6px 8px; border-radius:4px;">
+            <div style="color:var(--text-secondary); font-size:10.5px;">Broadcast (measure)</div>
+            <div style="font-weight:600; color:var(--text-main); font-size:13px;">${measureCount} events</div>
+          </div>
+          <div style="background:var(--bg-secondary); padding:6px 8px; border-radius:4px;">
+            <div style="color:var(--text-secondary); font-size:10.5px;">Targeted (measureSingle)</div>
+            <div style="font-weight:600; color:var(--text-main); font-size:13px;">${measureSingleCount} events</div>
+          </div>
+        </div>
+      `;
+    } else if (multiPixelCard) {
+      multiPixelCard.style.display = 'none';
+    }
+
     // Latest Observed Event Snapshot (Clean, compact 3-line layout)
     if (events.length > 0) {
       const latest = events[events.length - 1];
@@ -615,12 +659,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentTabState) return;
     const events = currentTabState.events || [];
 
+    // Update Pixel Select Dropdown Options
+    if (eventPixelSelect && currentTabState && currentTabState.pixel && currentTabState.pixel.pixelIds) {
+      const currentOpts = Array.from(eventPixelSelect.options).map(o => o.value);
+      const allPids = currentTabState.pixel.pixelIds;
+      allPids.forEach(pid => {
+        if (!currentOpts.includes(pid)) {
+          const opt = document.createElement('option');
+          opt.value = pid;
+          opt.textContent = 'Pixel: ' + pid;
+          eventPixelSelect.appendChild(opt);
+        }
+      });
+    }
+
     const filtered = events.filter((evt) => {
+      if (selectedPixel && selectedPixel !== 'all') {
+        if (evt.pixelId !== selectedPixel) return false;
+      }
       if (currentFilter === 'standard' && evt.validation && evt.validation.isCustom) return false;
       if (currentFilter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
       if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
       if (currentFilter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
       if (currentFilter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
+      if (currentFilter === 'passed' && evt.validation && evt.validation.status !== 'valid') return false;
 
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase().trim();
@@ -829,6 +891,47 @@ document.addEventListener('DOMContentLoaded', async () => {
           </table>
 
           ${userInfoHtml}
+
+          ${(evt.validation && evt.validation.findings && evt.validation.findings.length > 0) ? `
+            <div class="event-findings-section" style="margin-top:10px; border-top:1px solid var(--border-color); padding-top:8px;">
+              <div style="font-size:11px; font-weight:600; color:var(--text-main); margin-bottom:6px; display:flex; align-items:center; gap:4px;">
+                <span>Auditing Findings (${evt.validation.findings.length})</span>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                ${evt.validation.findings.map(f => `
+                  <div style="background:var(--bg-secondary); border-left:3px solid ${f.severity === 'error' ? 'var(--status-error)' : (f.severity === 'warning' ? 'var(--status-warning)' : 'var(--status-info)')}; padding:6px 8px; border-radius:3px; font-size:11px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                      <div style="display:flex; align-items:center; gap:4px;">
+                        <span class="badge badge-${f.severity === 'error' ? 'error' : (f.severity === 'warning' ? 'warning' : 'info')}" style="font-size:9.5px; padding:0 4px;">${f.severity.toUpperCase()}</span>
+                        <code class="mono" style="font-weight:600; color:var(--text-main);">${escapeHtml(f.path || 'event')}</code>
+                      </div>
+                      <span class="mono" style="font-size:10px; color:var(--text-muted);">${escapeHtml(f.code || '')}</span>
+                    </div>
+                    <div style="color:var(--text-secondary); margin:2px 0;">${escapeHtml(f.message || '')}</div>
+                    ${f.detected !== undefined && f.expected !== undefined ? `
+                      <div style="display:flex; gap:12px; margin:3px 0; font-size:10.5px; background:var(--bg-card); padding:3px 6px; border-radius:2px;">
+                        <div><span style="color:var(--text-muted);">Detected:</span> <code class="mono">${escapeHtml(String(f.detected))}</code></div>
+                        <div><span style="color:var(--text-muted);">Expected:</span> <code class="mono">${escapeHtml(String(f.expected))}</code></div>
+                      </div>
+                    ` : ''}
+                    ${f.recommendedFix ? `
+                      <div style="color:var(--status-success); font-size:10.5px; margin-top:2px;">
+                        <strong>Fix:</strong> ${escapeHtml(f.recommendedFix)}
+                      </div>
+                    ` : ''}
+                    ${f.documentationReference ? `
+                      <div style="margin-top:2px; font-size:10px;">
+                        <a href="${escapeHtml(f.documentationReference)}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:underline;">
+                          OpenAI Documentation ↗
+                        </a>
+                      </div>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
 
           <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
             <summary>

@@ -85,9 +85,13 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     source: {
       type: 'pixel',
       location: 'browser',
-      caller: rawEvent.caller || 'oaiq("measure")'
+      caller: rawEvent.caller || 'oaiq("measure")',
+      method: rawEvent.method || (rawEvent.caller && rawEvent.caller.includes('measureSingle') ? 'measureSingle' : 'measure')
     },
     pixelId: rawEvent.pixelId || tabContext.pixelId || null,
+    targetPixelId: rawEvent.targetPixelId || null,
+    recipients: Array.isArray(rawEvent.recipients) ? rawEvent.recipients : (rawEvent.pixelId ? [rawEvent.pixelId] : []),
+    allPixelIds: Array.isArray(rawEvent.allPixelIds) ? rawEvent.allPixelIds : (rawEvent.pixelId ? [rawEvent.pixelId] : []),
     parameters: properties,
     options: options,
     userInfo: detectedUserInfo, // Detected customer / user information

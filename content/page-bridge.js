@@ -75,13 +75,17 @@
       const eventName = args[1] || 'unknown';
       const properties = (args.length >= 3 && typeof args[2] === 'object' && args[2] !== null) ? args[2] : {};
       const options = (args.length >= 4 && typeof args[3] === 'object' && args[3] !== null) ? args[3] : {};
+      const recipients = Array.from(activePixelIds);
 
       sendToContentScript('PIXEL_EVENT_CAPTURED', {
         name: eventName,
         parameters: properties,
         options: options,
         args: Array.from(args).slice(1),
-        pixelId: Array.from(activePixelIds)[0] || null,
+        method: 'measure',
+        pixelId: recipients[0] || null,
+        recipients: recipients,
+        allPixelIds: recipients,
         url: window.location.href,
         pathname: window.location.pathname,
         title: document.title,
@@ -96,13 +100,18 @@
       const options = (args.length >= 5 && typeof args[4] === 'object' && args[4] !== null) ? args[4] : {};
 
       if (targetPixelId) activePixelIds.add(targetPixelId);
+      const allPixels = Array.from(activePixelIds);
 
       sendToContentScript('PIXEL_EVENT_CAPTURED', {
         name: eventName,
         parameters: properties,
         options: options,
         args: Array.from(args).slice(2),
+        method: 'measureSingle',
         pixelId: targetPixelId,
+        targetPixelId: targetPixelId,
+        recipients: targetPixelId ? [targetPixelId] : [],
+        allPixelIds: allPixels,
         url: window.location.href,
         pathname: window.location.pathname,
         title: document.title,

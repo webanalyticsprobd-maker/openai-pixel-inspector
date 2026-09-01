@@ -1,16 +1,21 @@
 /**
- * OpenAI Ads Pixel Inspector - Event Store & Journey Engine
+ * OpenAI Ads Pixel Inspector - Event Store, Pixel Registry & Multi-Pixel Analyzer
  * 
- * Maintains full session journey history across all page navigations and reloads.
- * Implements intelligent action-based duplicate detection (distinguishing intentional repeated actions from double-fires).
+ * Single source of truth for:
+ * 1. Runtime Multi-Pixel Registry
+ * 2. Event Lifecycle & Session Journey
+ * 3. Same-Pixel Duplicate Detection vs Multi-Pixel Delivery
+ * 4. Cross-Pixel Payload Consistency Comparison
+ * 5. Documented Audit Score Calculation
  */
 
-import { extractUserInfoFromPayload } from '../network/request-parser.js';
+import { OFFICIAL_DOCS } from '../validators/schemas.js';
 
 export class EventStore {
   constructor() {
     this.events = [];
     this.duplicates = [];
+    this.pixelRegistry = {}; // { [pixelId]: { pixelId, events: [], eventCounts: {}, firstSeen, lastSeen } }
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
   }
@@ -18,45 +23,110 @@ export class EventStore {
   clear() {
     this.events = [];
     this.duplicates = [];
+    this.pixelRegistry = {};
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
   }
 
   /**
-   * Add normalized event into session journey and evaluate action duplicates
+   * Register a pixel ID into the multi-pixel runtime registry
+   */
+  registerPixelId(pixelId, timestamp = Date.now()) {
+    if (!pixelId || typeof pixelId !== 'string') return;
+    const cleanId = pixelId.trim();
+    if (!this.pixelRegistry[cleanId]) {
+      this.pixelRegistry[cleanId] = {
+        pixelId: cleanId,
+        events: [],
+        eventCounts: {},
+        firstSeen: timestamp,
+        lastSeen: timestamp
+      };
+    } else {
+      this.pixelRegistry[cleanId].lastSeen = timestamp;
+    }
+  }
+
+  /**
+   * Add normalized event into session journey, update pixel registry, and evaluate duplicates
    */
   addEvent(normalizedEvent) {
-    const matched = this.detectActionDuplicate(normalizedEvent);
-    
-    if (matched) {
-      normalizedEvent.isDuplicate = true;
-      normalizedEvent.duplicateOf = matched._id;
-      normalizedEvent.duplicateReason = matched.reason;
-      normalizedEvent.duplicateStatus = '❌ Double Fired / Duplicate';
-      
-      // Increment request count on matched primary event
-      matched.event.requestCount = (matched.event.requestCount || 1) + 1;
-      matched.event.duplicateStatus = `❌ Double Fired (${matched.event.requestCount}x)`;
-      
-      this.duplicates.push({
-        event: normalizedEvent,
-        matchedWithId: matched.event._id,
-        reason: matched.reason,
-        timestamp: Date.now()
-      });
+    const pixelId = normalizedEvent.pixelId || 'DEFAULT_PIXEL';
+    this.registerPixelId(pixelId, normalizedEvent.timestamp);
 
-      // Add audit issue
-      if (normalizedEvent.validation) {
-        normalizedEvent.validation.issues.push({
-          code: 'DUPLICATE_EVENT_DETECTED',
-          severity: 'warning',
-          event: normalizedEvent.name,
-          message: `Event "${normalizedEvent.displayName || normalizedEvent.name}" double-fired on the same user action (${matched.reason}).`,
-          recommendation: 'Check your trigger configurations in Google Tag Manager or website JS to ensure this action only fires once per trigger.'
+    // Update Pixel Registry stats
+    if (this.pixelRegistry[pixelId]) {
+      this.pixelRegistry[pixelId].events.push(normalizedEvent);
+      this.pixelRegistry[pixelId].eventCounts[normalizedEvent.name] = (this.pixelRegistry[pixelId].eventCounts[normalizedEvent.name] || 0) + 1;
+      this.pixelRegistry[pixelId].lastSeen = normalizedEvent.timestamp;
+    }
+
+    // Evaluate duplicates & multi-pixel delivery
+    const duplicateMatch = this.detectActionDuplicate(normalizedEvent);
+
+    if (duplicateMatch) {
+      if (duplicateMatch.type === 'same_pixel_duplicate') {
+        normalizedEvent.isDuplicate = true;
+        normalizedEvent.duplicateOf = duplicateMatch.event._id;
+        normalizedEvent.duplicateReason = duplicateMatch.reason;
+        normalizedEvent.duplicateStatus = '⚠️ Possible Duplicate';
+
+        duplicateMatch.event.requestCount = (duplicateMatch.event.requestCount || 1) + 1;
+        duplicateMatch.event.duplicateStatus = `⚠️ Possible Duplicate (${duplicateMatch.event.requestCount}x)`;
+
+        this.duplicates.push({
+          event: normalizedEvent,
+          matchedWithId: duplicateMatch.event._id,
+          reason: duplicateMatch.reason,
+          timestamp: Date.now()
         });
-        normalizedEvent.validation.warningsCount++;
-        if (normalizedEvent.validation.status === 'valid') {
-          normalizedEvent.validation.status = 'warning';
+
+        if (normalizedEvent.validation) {
+          normalizedEvent.validation.findings.push({
+            severity: 'warning',
+            category: 'duplicate',
+            eventName: normalizedEvent.name,
+            pixelId: pixelId,
+            path: 'event',
+            code: 'POSSIBLE_DUPLICATE_EVENT',
+            title: 'Possible Duplicate Event',
+            detected: `Fired ${duplicateMatch.timeDiff}ms after previous call`,
+            expected: 'Single event execution per user trigger',
+            message: `Event "${normalizedEvent.displayName || normalizedEvent.name}" fired multiple times in close succession on pixel "${pixelId}" (${duplicateMatch.reason}).`,
+            documentationReference: OFFICIAL_DOCS.MEASUREMENT_PIXEL,
+            recommendedFix: 'Check trigger rules in Tag Manager or JS event listeners to prevent accidental multiple executions.'
+          });
+          normalizedEvent.validation.warningsCount++;
+          if (normalizedEvent.validation.status === 'valid') {
+            normalizedEvent.validation.status = 'warning';
+          }
+        }
+      } else if (duplicateMatch.type === 'multi_pixel_delivery') {
+        normalizedEvent.isMultiPixelDelivery = true;
+        normalizedEvent.multiPixelPartner = duplicateMatch.event._id;
+        normalizedEvent.duplicateStatus = 'ℹ️ Multi-Pixel Broadcast';
+
+        // Check if payloads between the two pixels match
+        const payloadDiff = this.comparePayloads(duplicateMatch.event, normalizedEvent);
+        if (payloadDiff.hasMismatch && normalizedEvent.validation) {
+          normalizedEvent.validation.findings.push({
+            severity: 'warning',
+            category: 'multi_pixel',
+            eventName: normalizedEvent.name,
+            pixelId: pixelId,
+            path: payloadDiff.mismatchedKeys.join(', '),
+            code: 'MULTI_PIXEL_PAYLOAD_MISMATCH',
+            title: 'Inconsistent Multi-Pixel Event Payload',
+            detected: JSON.stringify(normalizedEvent.parameters),
+            expected: JSON.stringify(duplicateMatch.event.parameters),
+            message: `The same event "${normalizedEvent.name}" was sent to multiple pixels with inconsistent payloads (${payloadDiff.summary}).`,
+            documentationReference: OFFICIAL_DOCS.MULTIPLE_PIXELS,
+            recommendedFix: 'Align parameters between all initialized Pixel IDs for consistent data quality.'
+          });
+          normalizedEvent.validation.warningsCount++;
+          if (normalizedEvent.validation.status === 'valid') {
+            normalizedEvent.validation.status = 'warning';
+          }
         }
       }
     } else {
@@ -70,45 +140,60 @@ export class EventStore {
   }
 
   /**
-   * Action-Based Duplicate Detection
-   * Compares Event Name, URL/Pathname, Content/Product, Parameters, and Timestamp
+   * Distinguishes Same-Pixel Duplicates from Multi-Pixel Delivery
    */
   detectActionDuplicate(newEvent) {
     if (!newEvent.name) return null;
-    const windowMs = 3000; // 3.0-second action threshold for accidental double-fires
+    const windowMs = 3000;
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const existing = this.events[i];
       const timeDiff = Math.abs(newEvent.timestamp - existing.timestamp);
 
-      // Rule 1: Exact matching explicit event_id (Only when event_id was actually sent)
-      if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId && newEvent.name === existing.name) {
-        return {
-          event: existing,
-          reason: `Matching Event ID "${newEvent.eventId}"`
-        };
-      }
+      if (timeDiff > windowMs) continue;
 
-      // Rule 2: Same event name on the same URL within 3 seconds with identical content/amount/parameters
-      if (existing.name === newEvent.name && timeDiff < windowMs) {
+      if (existing.name === newEvent.name) {
+        const samePixel = (existing.pixelId === newEvent.pixelId);
         const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : true;
-        
-        // Compare contents if present
-        const existingParams = JSON.stringify(existing.parameters || {});
-        const newParams = JSON.stringify(newEvent.parameters || {});
 
-        if (samePath && existingParams === newParams) {
-          return {
-            event: existing,
-            reason: `Fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
-          };
-        }
+        if (samePixel) {
+          // Same Pixel Duplicate Check
+          if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId) {
+            return {
+              type: 'same_pixel_duplicate',
+              event: existing,
+              timeDiff: timeDiff,
+              reason: `Matching Event ID "${newEvent.eventId}"`
+            };
+          }
 
-        // Special check for page_viewed: 2 page_viewed calls on the same page load
-        if (newEvent.name === 'page_viewed' && samePath) {
+          const existingParams = JSON.stringify(existing.parameters || {});
+          const newParams = JSON.stringify(newEvent.parameters || {});
+
+          if (samePath && existingParams === newParams) {
+            return {
+              type: 'same_pixel_duplicate',
+              event: existing,
+              timeDiff: timeDiff,
+              reason: `Fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
+            };
+          }
+
+          if (newEvent.name === 'page_viewed' && samePath) {
+            return {
+              type: 'same_pixel_duplicate',
+              event: existing,
+              timeDiff: timeDiff,
+              reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
+            };
+          }
+        } else {
+          // Multi-Pixel Delivery Check (Same user action broadcast to different Pixel IDs)
           return {
+            type: 'multi_pixel_delivery',
             event: existing,
-            reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
+            timeDiff: timeDiff,
+            reason: `Broadcast to ${existing.pixelId} and ${newEvent.pixelId}`
           };
         }
       }
@@ -118,102 +203,40 @@ export class EventStore {
   }
 
   /**
-   * Retrieve Full Chronological User Journey
+   * Compares payloads between two events sent to different pixels
    */
-  getJourney() {
-    return this.events.map((evt, idx) => ({
-      step: idx + 1,
-      name: evt.displayName || evt.name,
-      canonicalName: evt.name,
-      dataShape: evt.validation ? evt.validation.dataShape : 'contents',
-      url: evt.url || '/',
-      pathname: evt.pathname || '/',
-      timestamp: evt.timestamp,
-      eventId: evt.eventId || 'Not Sent',
-      parameters: evt.parameters || {},
-      requestCount: evt.requestCount || 1,
-      duplicateStatus: evt.duplicateStatus || '✅ Correct',
-      auditStatus: evt.validation ? evt.validation.status : 'valid',
-      issues: evt.validation ? evt.validation.issues : []
-    }));
+  comparePayloads(eventA, eventB) {
+    const paramsA = eventA.parameters || {};
+    const paramsB = eventB.parameters || {};
+    const allKeys = Array.from(new Set([...Object.keys(paramsA), ...Object.keys(paramsB)]));
+
+    const mismatchedKeys = [];
+    const diffs = [];
+
+    for (const key of allKeys) {
+      const valA = paramsA[key];
+      const valB = paramsB[key];
+
+      const strA = JSON.stringify(valA);
+      const strB = JSON.stringify(valB);
+
+      if (strA !== strB) {
+        mismatchedKeys.push(key);
+        diffs.push(`${key}: [Pixel ${eventA.pixelId || 'A'}: ${strA}] vs [Pixel ${eventB.pixelId || 'B'}: ${strB}]`);
+      }
+    }
+
+    return {
+      hasMismatch: mismatchedKeys.length > 0,
+      mismatchedKeys: mismatchedKeys,
+      diffs: diffs,
+      summary: diffs.join(', ')
+    };
   }
 
   /**
-   * Summarize Journey by Event Name
+   * Correlates network telemetry with store events
    */
-  getJourneySummary() {
-    const summaryMap = {};
-    for (const evt of this.events) {
-      const name = evt.name;
-      if (!summaryMap[name]) {
-        summaryMap[name] = {
-          name: name,
-          displayName: evt.displayName || name,
-          isCustom: evt.validation ? evt.validation.isCustom : false,
-          totalDetected: 0,
-          uniquePages: new Set(),
-          duplicateCount: 0,
-          validCount: 0,
-          warningCount: 0,
-          errorCount: 0
-        };
-      }
-      const entry = summaryMap[name];
-      entry.totalDetected++;
-      if (evt.pathname) entry.uniquePages.add(evt.pathname);
-      if (evt.isDuplicate) entry.duplicateCount++;
-      
-      const status = evt.validation ? evt.validation.status : 'valid';
-      if (status === 'valid') entry.validCount++;
-      else if (status === 'warning') entry.warningCount++;
-      else if (status === 'error') entry.errorCount++;
-    }
-
-    return Object.values(summaryMap).map((entry) => {
-      let auditText = '✅ Valid';
-      if (entry.duplicateCount > 0) {
-        auditText = `❌ ${entry.duplicateCount} duplicate(s) detected`;
-      } else if (entry.errorCount > 0) {
-        auditText = `❌ ${entry.errorCount} error(s)`;
-      } else if (entry.name === 'page_viewed') {
-        auditText = `✅ Valid across ${entry.uniquePages.size} page(s)`;
-      }
-      return {
-        name: entry.name,
-        displayName: entry.displayName,
-        isCustom: entry.isCustom,
-        detected: entry.totalDetected,
-        duplicateCount: entry.duplicateCount,
-        audit: auditText,
-        uniquePagesCount: entry.uniquePages.size
-      };
-    });
-  }
-
-  filterEvents({ filter = 'all', query = '' } = {}) {
-    return this.events.filter((evt) => {
-      // Category filter
-      if (filter === 'standard' && evt.validation && evt.validation.isCustom) return false;
-      if (filter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
-      if (filter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
-      if (filter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
-      if (filter === 'duplicates' && !evt.isDuplicate) return false;
-      if (filter === 'network' && !evt.network.detected) return false;
-
-      // Text search query
-      if (query && query.trim() !== '') {
-        const q = query.toLowerCase().trim();
-        const nameMatch = (evt.displayName || evt.name).toLowerCase().includes(q);
-        const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
-        const idMatch = (evt.eventId || '').toLowerCase().includes(q);
-        const paramsMatch = JSON.stringify(evt.parameters).toLowerCase().includes(q);
-        return nameMatch || urlMatch || idMatch || paramsMatch;
-      }
-
-      return true;
-    });
-  }
-
   correlateNetworkRequest(netReq) {
     let matchedEvt = null;
     const batchEvents = (netReq.payload && Array.isArray(netReq.payload.events)) ? netReq.payload.events : null;
@@ -262,6 +285,149 @@ export class EventStore {
     return matchedEvt;
   }
 
+  /**
+   * Returns Multi-Pixel Summary Analysis
+   */
+  getMultiPixelSummary() {
+    const pixelIds = Object.keys(this.pixelRegistry);
+    if (pixelIds.length <= 1) {
+      return {
+        multiplePixelsDetected: false,
+        pixelCount: pixelIds.length,
+        pixels: pixelIds,
+        sharedEvents: [],
+        uniqueEventsByPixel: {},
+        routingAnalysis: [],
+        payloadMismatches: []
+      };
+    }
+
+    // Group events by name across pixels
+    const eventsByPixel = {};
+    pixelIds.forEach((pid) => {
+      eventsByPixel[pid] = new Set(this.pixelRegistry[pid].events.map((e) => e.name));
+    });
+
+    const allEventNames = Array.from(new Set(this.events.map((e) => e.name)));
+    const sharedEvents = allEventNames.filter((name) => pixelIds.every((pid) => eventsByPixel[pid]?.has(name)));
+
+    const uniqueEventsByPixel = {};
+    pixelIds.forEach((pid) => {
+      const otherPixels = pixelIds.filter((p) => p !== pid);
+      uniqueEventsByPixel[pid] = Array.from(eventsByPixel[pid] || []).filter((name) => !otherPixels.some((op) => eventsByPixel[op]?.has(name)));
+    });
+
+    // Multi-pixel routing analysis (measure vs measureSingle)
+    const routingAnalysis = this.events.map((e) => ({
+      eventName: e.name,
+      timestamp: e.timestamp,
+      method: e.source?.method || 'measure',
+      targetPixelId: e.targetPixelId || e.pixelId,
+      recipients: e.recipients || (e.pixelId ? [e.pixelId] : [])
+    }));
+
+    return {
+      multiplePixelsDetected: true,
+      pixelCount: pixelIds.length,
+      pixels: pixelIds,
+      pixelRegistry: this.pixelRegistry,
+      sharedEvents: sharedEvents,
+      uniqueEventsByPixel: uniqueEventsByPixel,
+      routingAnalysis: routingAnalysis
+    };
+  }
+
+  /**
+   * Calculates professional Audit Health Score (0–100) based strictly on findings
+   * Errors: -15 pts, Warnings: -5 pts, Info/Passed: 0 pts
+   * Never penalizes unobserved funnel events.
+   */
+  calculateAuditScore() {
+    let errorCount = 0;
+    let warningCount = 0;
+
+    for (const evt of this.events) {
+      if (evt.validation) {
+        errorCount += evt.validation.errorsCount || 0;
+        warningCount += evt.validation.warningsCount || 0;
+      }
+    }
+
+    // Baseline 100
+    const penalty = (errorCount * 15) + (warningCount * 5);
+    const score = Math.max(0, Math.min(100, 100 - penalty));
+
+    let grade = 'A';
+    let statusText = 'Excellent';
+
+    if (score >= 90) { grade = 'A'; statusText = 'Excellent'; }
+    else if (score >= 75) { grade = 'B'; statusText = 'Good'; }
+    else if (score >= 60) { grade = 'C'; statusText = 'Needs Attention'; }
+    else if (score >= 40) { grade = 'D'; statusText = 'Poor'; }
+    else { grade = 'F'; statusText = 'Critical Action Required'; }
+
+    return {
+      score: score,
+      grade: grade,
+      statusText: statusText,
+      errorsCount: errorCount,
+      warningsCount: warningCount,
+      totalEvents: this.events.length
+    };
+  }
+
+  getJourneySummary() {
+    return {
+      totalEvents: this.events.length,
+      uniqueEventTypes: new Set(this.events.map((e) => e.name)).size,
+      pixelsDetected: Object.keys(this.pixelRegistry),
+      multiPixelSummary: this.getMultiPixelSummary(),
+      auditScore: this.calculateAuditScore(),
+      duplicateCount: this.duplicates.length,
+      startedAt: this.startedAt,
+      durationMs: Date.now() - this.startedAt
+    };
+  }
+
+  getFilteredEvents(filter = 'all', query = '', selectedPixel = 'all') {
+    return this.events.filter((evt) => {
+      // Pixel ID filter
+      if (selectedPixel && selectedPixel !== 'all') {
+        if (evt.pixelId !== selectedPixel) return false;
+      }
+
+      // Status filter
+      if (filter === 'standard') {
+        if (evt.validation?.isCustom) return false;
+      } else if (filter === 'custom') {
+        if (!evt.validation?.isCustom) return false;
+      } else if (filter === 'errors') {
+        if (!evt.validation || evt.validation.status !== 'error') return false;
+      } else if (filter === 'warnings') {
+        if (!evt.validation || evt.validation.status !== 'warning') return false;
+      } else if (filter === 'duplicates') {
+        if (!evt.isDuplicate) return false;
+      } else if (filter === 'passed') {
+        if (!evt.validation || evt.validation.status !== 'valid') return false;
+      }
+
+      // Search query
+      if (query && query.trim() !== '') {
+        const q = query.toLowerCase().trim();
+        const nameMatch = (evt.displayName || evt.name).toLowerCase().includes(q);
+        const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
+        const idMatch = (evt.eventId || '').toLowerCase().includes(q);
+        const pixelMatch = (evt.pixelId || '').toLowerCase().includes(q);
+        const paramsMatch = JSON.stringify(evt.parameters || {}).toLowerCase().includes(q);
+        const findingsMatch = evt.validation?.findings?.some((f) => f.code.toLowerCase().includes(q) || f.message.toLowerCase().includes(q));
+
+        return nameMatch || urlMatch || idMatch || pixelMatch || paramsMatch || findingsMatch;
+      }
+
+      return true;
+    });
+  }
+
   exportCSV() {
     const headers = [
       'Step',
@@ -272,6 +438,7 @@ export class EventStore {
       'Page Path',
       'Event ID',
       'Pixel ID',
+      'Method',
       'Duplicate Status',
       'Audit Status',
       'Amount',
@@ -291,12 +458,13 @@ export class EventStore {
         `"${evt.pathname || ''}"`,
         `"${evt.eventId || 'Not Sent'}"`,
         `"${evt.pixelId || ''}"`,
+        `"${evt.source?.method || 'measure'}"`,
         `"${evt.duplicateStatus || '✅ Correct'}"`,
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
         `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`,
-        `"${evt.attribution.oppref || ''}"`
+        `"${evt.attribution?.oppref || ''}"`
       ]);
     });
 
@@ -309,7 +477,9 @@ export class EventStore {
       startedAt: new Date(this.startedAt).toISOString(),
       exportedAt: new Date().toISOString(),
       totalEvents: this.events.length,
-      journey: this.getJourney(),
+      pixelsDetected: Object.keys(this.pixelRegistry),
+      multiPixelSummary: this.getMultiPixelSummary(),
+      auditScore: this.calculateAuditScore(),
       summary: this.getJourneySummary(),
       rawEvents: this.events
     }, null, 2);

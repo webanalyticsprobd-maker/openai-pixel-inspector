@@ -1,213 +1,351 @@
 /**
- * OpenAI Ads Pixel Inspector - Event Validation Engine
+ * OpenAI Ads Pixel Inspector - Comprehensive Event Validation Engine
  * 
- * Executes schema-driven validation for OpenAI Ads Pixel events.
- * Fully decoupled from UI layer.
+ * Validates events against the central OpenAI Pixel schema.
+ * Emits standardized finding objects with machine-readable codes and precise payload paths.
  */
 
 import {
-  STANDARD_EVENT_NAMES,
+  STANDARD_JS_EVENTS,
+  CAPI_ONLY_EVENTS,
   STANDARD_EVENT_ALIASES,
-  EVENT_SCHEMAS,
-  CUSTOM_EVENT_RULES
+  OPENAI_PIXEL_SCHEMA,
+  CUSTOM_EVENT_RULES,
+  OFFICIAL_DOCS
 } from './schemas.js';
-import { validateParameter } from './parameter-validator.js';
+import { validateParameter, validateContentsArray } from './parameter-validator.js';
 import { scanForPii } from './pii-scanner.js';
 
 export function validateEvent(event) {
-  let eventName = event.name || event.eventName || '';
+  const eventName = event.name || event.eventName || '';
   const options = event.options || {};
   const parameters = event.parameters || {};
+  const pixelId = event.pixelId || null;
 
-  // Resolve alias if applicable (e.g. Purchase -> order_created)
+  // Resolve alias if applicable
   let canonicalName = eventName;
   if (STANDARD_EVENT_ALIASES[eventName]) {
     canonicalName = STANDARD_EVENT_ALIASES[eventName];
   }
 
-  const isBuiltin = STANDARD_EVENT_NAMES.includes(canonicalName);
-  const isCustomEvent = canonicalName === 'custom' || !isBuiltin;
-  const customEventName = options.custom_event_name || (isCustomEvent && canonicalName !== 'custom' ? canonicalName : null);
+  const isStandardJsEvent = STANDARD_JS_EVENTS.includes(canonicalName);
+  const isCapiOnlyEvent = CAPI_ONLY_EVENTS.includes(canonicalName);
+  const isCustomEvent = canonicalName === 'custom' || (!isStandardJsEvent && !isCapiOnlyEvent);
 
-  // Retrieve declarative schema
-  const schema = EVENT_SCHEMAS[canonicalName] || EVENT_SCHEMAS['custom'] || {
-    dataShape: 'custom',
-    required: ['type'],
-    optional: [],
-    parameters: { type: { type: 'string', expected: 'custom', required: true } }
-  };
+  const findings = [];
 
-  const validation = {
-    status: 'valid', // 'valid' | 'warning' | 'error'
-    isCustom: isCustomEvent,
-    canonicalName: canonicalName,
-    dataShape: schema.dataShape || 'contents',
-    parameterResults: {},
-    issues: [],
-    piiIssues: [],
-    errorsCount: 0,
-    warningsCount: 0,
-    infoCount: 0
-  };
-
-  // 1. Check Required Parameters from Schema
-  if (schema.required && Array.isArray(schema.required)) {
-    schema.required.forEach((reqField) => {
-      if (parameters[reqField] === undefined || parameters[reqField] === null) {
-        validation.errorsCount++;
-        validation.issues.push({
-          code: `MISSING_REQUIRED_${reqField.toUpperCase()}`,
-          severity: 'error',
-          event: eventName,
-          parameter: reqField,
-          message: `Missing required parameter "${reqField}" for event "${eventName}".`,
-          recommendation: `Include "${reqField}" with expected value (e.g., { ${reqField}: "${schema.parameters[reqField]?.expected || 'value'}" }).`
-        });
-        validation.parameterResults[reqField] = {
-          valid: false,
-          severity: 'error',
-          code: 'PARAM_MISSING_REQUIRED',
-          message: `Required parameter "${reqField}" is missing.`
-        };
-      }
+  // 1. Event Name Validation
+  if (isCapiOnlyEvent) {
+    findings.push({
+      severity: 'warning',
+      category: 'event',
+      eventName: eventName,
+      pixelId: pixelId,
+      path: 'event',
+      code: 'CAPI_ONLY_EVENT',
+      title: 'Conversions API Only Event',
+      detected: eventName,
+      expected: 'Standard JS Pixel events: ' + STANDARD_JS_EVENTS.slice(0, 5).join(', ') + '...',
+      message: `Event "${eventName}" is documented as Conversions API only and is not supported in the browser JavaScript Pixel.`,
+      documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+      recommendedFix: `Send "${eventName}" server-side via Conversions API or use a standard browser event.`
+    });
+  } else if (!isStandardJsEvent && canonicalName !== 'custom') {
+    // Non-standard event name passed directly to measure (e.g. oaiq("measure", "purchase"))
+    findings.push({
+      severity: 'error',
+      category: 'event',
+      eventName: eventName,
+      pixelId: pixelId,
+      path: 'event',
+      code: 'UNSUPPORTED_EVENT',
+      title: 'Unsupported Event Name',
+      detected: eventName,
+      expected: 'Documented OpenAI Pixel event name (e.g. order_created, page_viewed, custom)',
+      message: `"${eventName}" is not a recognized standard OpenAI Ads Pixel event.`,
+      documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+      recommendedFix: STANDARD_EVENT_ALIASES[eventName]
+        ? `Rename "${eventName}" to official event name "${STANDARD_EVENT_ALIASES[eventName]}".`
+        : `Use a standard event name or trigger via custom event: oaiq("measure", "custom", { type: "custom" }, { custom_event_name: "${eventName}" }).`
     });
   }
 
-  // 2. Check Conditional Requirements (e.g., currency required when amount is present)
-  if (schema.conditionalRequired && Array.isArray(schema.conditionalRequired)) {
-    schema.conditionalRequired.forEach((cond) => {
-      if (parameters[cond.when] !== undefined && parameters[cond.when] !== null) {
-        cond.require.forEach((reqField) => {
-          if (parameters[reqField] === undefined || parameters[reqField] === null || parameters[reqField] === '') {
-            validation.errorsCount++;
-            validation.issues.push({
-              code: `MISSING_CONDITIONAL_${reqField.toUpperCase()}`,
-              severity: 'error',
-              event: eventName,
-              parameter: reqField,
-              message: cond.message || `Parameter "${reqField}" is required when "${cond.when}" is provided.`,
-              recommendation: `Provide "${reqField}" whenever "${cond.when}" is sent.`
-            });
-            validation.parameterResults[reqField] = {
-              valid: false,
-              severity: 'error',
-              code: 'PARAM_MISSING_CONDITIONAL',
-              message: `Required when "${cond.when}" is present.`
-            };
+  // Retrieve schema rules
+  const schema = OPENAI_PIXEL_SCHEMA.events[canonicalName] || (isCustomEvent ? OPENAI_PIXEL_SCHEMA.events['custom'] : null);
+
+  if (schema) {
+    // 2. Validate Required Parameters
+    if (schema.requiredParameters && Array.isArray(schema.requiredParameters)) {
+      for (const reqField of schema.requiredParameters) {
+        if (parameters[reqField] === undefined || parameters[reqField] === null) {
+          findings.push({
+            severity: 'error',
+            category: 'parameter',
+            eventName: eventName,
+            pixelId: pixelId,
+            path: reqField,
+            code: 'MISSING_REQUIRED_PARAMETER',
+            title: `Missing Required Parameter "${reqField}"`,
+            detected: 'undefined',
+            expected: schema.parameters[reqField]?.expected || schema.parameters[reqField]?.type || 'defined value',
+            message: `Missing required parameter "${reqField}" for event "${eventName}".`,
+            documentationReference: schema.docUrl || OFFICIAL_DOCS.SUPPORTED_EVENTS,
+            recommendedFix: `Include "${reqField}" in the event parameters.`
+          });
+        }
+      }
+    }
+
+    // 3. Validate Recommended Parameters
+    if (schema.recommendedParameters && Array.isArray(schema.recommendedParameters)) {
+      for (const recField of schema.recommendedParameters) {
+        if (parameters[recField] === undefined || parameters[recField] === null || parameters[recField] === '') {
+          findings.push({
+            severity: 'warning',
+            category: 'parameter',
+            eventName: eventName,
+            pixelId: pixelId,
+            path: recField,
+            code: 'MISSING_RECOMMENDED_PARAMETER',
+            title: `Recommended Parameter Missing: "${recField}"`,
+            detected: 'undefined',
+            expected: schema.parameters[recField]?.type || 'value',
+            message: `Recommended parameter "${recField}" was not provided for "${eventName}".`,
+            documentationReference: schema.docUrl || OFFICIAL_DOCS.SUPPORTED_EVENTS,
+            recommendedFix: `Providing "${recField}" enables accurate conversion and revenue reporting.`
+          });
+        }
+      }
+    }
+
+    // 4. Validate Conditional Requirements (e.g. currency required when amount is sent)
+    if (schema.conditionalRequired && Array.isArray(schema.conditionalRequired)) {
+      for (const cond of schema.conditionalRequired) {
+        if (parameters[cond.when] !== undefined && parameters[cond.when] !== null) {
+          for (const reqField of cond.require) {
+            if (parameters[reqField] === undefined || parameters[reqField] === null || parameters[reqField] === '') {
+              findings.push({
+                severity: 'error',
+                category: 'parameter',
+                eventName: eventName,
+                pixelId: pixelId,
+                path: reqField,
+                code: 'PARAM_AMOUNT_MISSING_CURRENCY',
+                title: `Missing Required "${reqField}"`,
+                detected: 'undefined',
+                expected: '3-letter ISO 4217 currency code (e.g. "USD")',
+                message: cond.message || `Parameter "${reqField}" is required when "${cond.when}" is provided.`,
+                documentationReference: schema.docUrl || OFFICIAL_DOCS.SUPPORTED_EVENTS,
+                recommendedFix: `Add "${reqField}" to event parameters whenever "${cond.when}" is sent.`
+              });
+            }
           }
+        }
+      }
+    }
+
+    // 5. Validate Event-Level Parameters
+    const allowedSet = new Set(schema.allowedParameters || Object.keys(schema.parameters || {}));
+    for (const [paramKey, paramVal] of Object.entries(parameters)) {
+      if (paramKey === 'contents') {
+        // Handled separately below in contents validator
+        continue;
+      }
+
+      if (!allowedSet.has(paramKey) && !isCustomEvent) {
+        findings.push({
+          severity: 'warning',
+          category: 'parameter',
+          eventName: eventName,
+          pixelId: pixelId,
+          path: paramKey,
+          code: 'UNEXPECTED_PARAMETER',
+          title: 'Unexpected Parameter',
+          detected: paramKey,
+          expected: Array.from(allowedSet).join(' | '),
+          message: `Parameter "${paramKey}" is not in the documented parameter set for "${eventName}".`,
+          documentationReference: schema.docUrl || OFFICIAL_DOCS.SUPPORTED_EVENTS,
+          recommendedFix: `Use only documented parameters: [${Array.from(allowedSet).join(', ')}].`
         });
       }
+
+      const paramRule = schema.parameters ? schema.parameters[paramKey] : null;
+      if (paramRule) {
+        const finding = validateParameter(paramKey, paramVal, paramRule, parameters, eventName, '');
+        if (finding) {
+          finding.pixelId = pixelId;
+          findings.push(finding);
+        }
+      }
+    }
+
+    // 6. Validate Contents Array (if present)
+    if (parameters.contents !== undefined) {
+      const contentsFindings = validateContentsArray(parameters.contents, parameters, eventName);
+      contentsFindings.forEach((f) => {
+        f.pixelId = pixelId;
+        findings.push(f);
+      });
+    }
+  }
+
+  // 7. Custom Event Validation
+  if (isCustomEvent || canonicalName === 'custom') {
+    const customName = options.custom_event_name || (canonicalName !== 'custom' ? canonicalName : null);
+    if (!customName) {
+      findings.push({
+        severity: 'error',
+        category: 'event',
+        eventName: eventName,
+        pixelId: pixelId,
+        path: 'options.custom_event_name',
+        code: 'MISSING_CUSTOM_EVENT_NAME',
+        title: 'Missing Custom Event Name',
+        detected: 'undefined',
+        expected: '1–64 character custom event name in options',
+        message: 'Custom events require custom_event_name in the options parameter.',
+        documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+        recommendedFix: 'Pass options: { custom_event_name: "your_custom_event" }.'
+      });
+    } else {
+      if (customName.length > CUSTOM_EVENT_RULES.maxLength) {
+        findings.push({
+          severity: 'warning',
+          category: 'event',
+          eventName: eventName,
+          pixelId: pixelId,
+          path: 'options.custom_event_name',
+          code: 'CUSTOM_NAME_TOO_LONG',
+          title: 'Custom Event Name Too Long',
+          detected: customName.length + ' chars',
+          expected: '<= 64 characters',
+          message: `Custom event name exceeds ${CUSTOM_EVENT_RULES.maxLength} characters.`,
+          documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+          recommendedFix: 'Shorten custom event name to under 64 characters.'
+        });
+      }
+      if (!CUSTOM_EVENT_RULES.validPattern.test(customName)) {
+        findings.push({
+          severity: 'warning',
+          category: 'event',
+          eventName: eventName,
+          pixelId: pixelId,
+          path: 'options.custom_event_name',
+          code: 'CUSTOM_NAME_INVALID_FORMAT',
+          title: 'Invalid Custom Event Name Format',
+          detected: customName,
+          expected: 'Alphanumeric, underscores, or hyphens',
+          message: 'Custom event name must start and end with an alphanumeric character and contain only alphanumeric, underscores, or hyphens.',
+          documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+          recommendedFix: 'Use clean identifiers such as "quote_requested" or "video_completed".'
+        });
+      }
+      if (STANDARD_JS_EVENTS.includes(customName) && customName !== 'custom') {
+        findings.push({
+          severity: 'warning',
+          category: 'event',
+          eventName: eventName,
+          pixelId: pixelId,
+          path: 'options.custom_event_name',
+          code: 'CUSTOM_NAME_COLLIDES_STANDARD',
+          title: 'Custom Name Collides With Standard Event',
+          detected: customName,
+          expected: 'Unique custom business action name',
+          message: `Custom event name "${customName}" is identical to a standard OpenAI event name.`,
+          documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+          recommendedFix: `Use standard event call oaiq("measure", "${customName}", ...) instead of custom event.`
+        });
+      }
+    }
+  }
+
+  // 8. Deduplication Info Validation
+  if (options.event_id) {
+    findings.push({
+      severity: 'info',
+      category: 'deduplication',
+      eventName: eventName,
+      pixelId: pixelId,
+      path: 'options.event_id',
+      code: 'DEDUPLICATION_ID_DETECTED',
+      title: 'Browser Deduplication ID Detected',
+      detected: String(options.event_id),
+      expected: 'Unique event identifier string',
+      message: `Browser event_id detected: "${options.event_id}". Ready for Conversions API deduplication.`,
+      documentationReference: OFFICIAL_DOCS.MEASUREMENT_PIXEL,
+      recommendedFix: 'Ensure matching server-side event uses the same event_id.'
     });
   }
 
-  // 3. Validate All Provided Parameters Against Schema Rules
-  for (const [paramKey, paramVal] of Object.entries(parameters)) {
-    const paramRule = schema.parameters ? schema.parameters[paramKey] : null;
-    const res = validateParameter(paramKey, paramVal, paramRule, parameters);
-    
-    validation.parameterResults[paramKey] = res;
-
-    if (res.severity === 'error') {
-      validation.errorsCount++;
-      validation.issues.push({
-        code: res.code || 'PARAM_VALIDATION_ERROR',
-        severity: 'error',
-        event: eventName,
-        parameter: res.parameter || paramKey,
-        received: res.received !== undefined ? res.received : paramVal,
-        expected: res.expected !== undefined ? res.expected : null,
-        message: res.message,
-        recommendation: res.recommendation || `Fix "${paramKey}" to match OpenAI Ads Pixel specification.`
-      });
-    } else if (res.severity === 'warning') {
-      validation.warningsCount++;
-      validation.issues.push({
-        code: res.code || 'PARAM_VALIDATION_WARNING',
-        severity: 'warning',
-        event: eventName,
-        parameter: res.parameter || paramKey,
-        received: res.received !== undefined ? res.received : paramVal,
-        expected: res.expected !== undefined ? res.expected : null,
-        message: res.message,
-        recommendation: res.recommendation || `Review "${paramKey}" formatting.`
-      });
-    } else if (res.severity === 'info') {
-      validation.infoCount++;
-    }
-  }
-
-  // 4. Custom Event Validations
-  if (isCustomEvent) {
-    if (canonicalName === 'custom' && !options.custom_event_name) {
-      validation.errorsCount++;
-      validation.issues.push({
-        code: 'MISSING_CUSTOM_EVENT_NAME',
-        severity: 'error',
-        event: eventName,
-        parameter: 'custom_event_name',
-        message: 'When measuring "custom", custom_event_name is required in the options parameter.',
-        recommendation: 'Pass { custom_event_name: "your_event_name" } in options parameter.'
-      });
-    }
-
-    if (customEventName) {
-      if (customEventName.length > CUSTOM_EVENT_RULES.maxLength) {
-        validation.warningsCount++;
-        validation.issues.push({
-          code: 'CUSTOM_NAME_TOO_LONG',
-          severity: 'warning',
-          event: eventName,
-          parameter: 'custom_event_name',
-          message: `Custom event name exceeds ${CUSTOM_EVENT_RULES.maxLength} characters.`,
-          recommendation: 'Keep custom event names under 64 characters.'
-        });
-      }
-      if (!CUSTOM_EVENT_RULES.validPattern.test(customEventName)) {
-        validation.warningsCount++;
-        validation.issues.push({
-          code: 'CUSTOM_NAME_INVALID_FORMAT',
-          severity: 'warning',
-          event: eventName,
-          parameter: 'custom_event_name',
-          message: 'Custom event name must start/end with an alphanumeric character and contain only alphanumeric, underscores, or hyphens.',
-          recommendation: 'Use clean identifiers such as "quote_requested" or "video_completed".'
-        });
-      }
-    }
-  }
-
-  // 5. Scan Payload & Parameters for Unhashed PII Privacy Violations
+  // 9. Scan for Unhashed PII Privacy Violations
   const detectedPii = scanForPii(parameters);
   if (detectedPii.length > 0) {
-    validation.piiIssues = detectedPii;
     detectedPii.forEach((pii) => {
-      validation.warningsCount++;
-      validation.issues.push({
-        code: `PII_PRIVACY_${pii.type.toUpperCase()}`,
+      findings.push({
         severity: pii.severity || 'warning',
-        event: eventName,
-        parameter: pii.path,
+        category: 'privacy',
+        eventName: eventName,
+        pixelId: pixelId,
+        path: pii.path,
+        code: `PII_PRIVACY_${pii.type.toUpperCase()}`,
+        title: 'Raw Unhashed PII Detected',
+        detected: pii.detected || pii.path,
+        expected: 'SHA-256 hashed customer identifiers',
         message: pii.message,
-        recommendation: pii.recommendation
+        documentationReference: OFFICIAL_DOCS.MEASUREMENT_PIXEL,
+        recommendedFix: pii.recommendation
       });
-
-      // Update parameter result with PII alert
-      const rootParam = pii.path.split('.')[0].replace(/\[.*\]/, '');
-      if (validation.parameterResults[rootParam]) {
-        validation.parameterResults[rootParam].pii = true;
-        validation.parameterResults[rootParam].piiDetails = pii;
-      }
     });
   }
 
-  // 6. Compute Final Validation Status
-  if (validation.errorsCount > 0) {
-    validation.status = 'error';
-  } else if (validation.warningsCount > 0) {
-    validation.status = 'warning';
-  } else {
-    validation.status = 'valid';
+  // 10. Compile Status and Summary Counts
+  let errorsCount = 0;
+  let warningsCount = 0;
+  let infoCount = 0;
+  let parameterResults = {};
+
+  findings.forEach((f) => {
+    if (f.severity === 'error') errorsCount++;
+    else if (f.severity === 'warning') warningsCount++;
+    else if (f.severity === 'info') infoCount++;
+
+    const rootPath = f.path.split('.')[0].replace(/\[.*\]/, '');
+    if (!parameterResults[rootPath]) {
+      parameterResults[rootPath] = {
+        valid: f.severity !== 'error',
+        severity: f.severity,
+        code: f.code,
+        message: f.message
+      };
+    }
+  });
+
+  // Ensure valid entries for parameters with no issues
+  for (const pKey of Object.keys(parameters)) {
+    if (!parameterResults[pKey]) {
+      parameterResults[pKey] = {
+        valid: true,
+        severity: 'valid',
+        code: 'PARAM_VALID',
+        message: `Valid parameter "${pKey}".`
+      };
+    }
   }
 
-  return validation;
+  let finalStatus = 'valid';
+  if (errorsCount > 0) finalStatus = 'error';
+  else if (warningsCount > 0) finalStatus = 'warning';
+
+  return {
+    status: finalStatus,
+    isCustom: isCustomEvent,
+    canonicalName: canonicalName,
+    dataShape: schema ? schema.dataShape : 'contents',
+    findings: findings,
+    issues: findings.filter((f) => f.severity === 'error' || f.severity === 'warning'),
+    parameterResults: parameterResults,
+    errorsCount: errorsCount,
+    warningsCount: warningsCount,
+    infoCount: infoCount
+  };
 }
