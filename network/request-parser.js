@@ -249,6 +249,9 @@ export function extractUserMatchingEnvelope(userObj) {
   if (userObj.js && typeof userObj.js === 'object') {
     sources.push({ sourceLabel: 'JS Matching', data: userObj.js });
   }
+  if (userObj.in && typeof userObj.in === 'object') {
+    sources.push({ sourceLabel: 'SDK Identifier (user.in)', data: userObj.in });
+  }
   if (userObj.fm && typeof userObj.fm === 'object') {
     sources.push({ sourceLabel: 'Form Matching', data: userObj.fm });
   }
@@ -350,9 +353,18 @@ export function extractUserMatchingEnvelope(userObj) {
       fields.push({ type: 'postal_code', label: 'Postal Code', source: sLabel, value: pcVal, masked: String(pcVal), isHashed: false });
     }
 
-    // 5. External ID (external_id or id)
-    if (fm.external_id) {
-      fields.push({ type: 'external_id', label: 'External ID', source: sLabel, value: fm.external_id, masked: String(fm.external_id), isHashed: isSha256(fm.external_id) });
+    // 5. External ID (external_id, eid, or id)
+    const eidVal = fm.external_id || fm.eid || fm.id;
+    if (eidVal) {
+      const isHash = isSha256(eidVal);
+      fields.push({
+        type: 'external_id',
+        label: 'External ID (eid)',
+        source: sLabel,
+        value: eidVal,
+        masked: isHash ? `SHA-256 (${maskSha(eidVal)})` : String(eidVal),
+        isHashed: isHash
+      });
     }
   });
 

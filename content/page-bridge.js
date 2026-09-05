@@ -177,11 +177,23 @@
   // 2. Outgoing Network Monitor (fetch, beacon, xhr)
   // ==========================================
 
-  const OPENAI_ENDPOINTS = ['bzr.openai.com', 'bzrcdn.openai.com'];
+  const OPENAI_ENDPOINTS = [
+    'bzr.openai.com',
+    'bzrcdn.openai.com',
+    '/v1/sdk/events',
+    '/events?pid=',
+    'st=oaiq-web'
+  ];
 
   function isTargetNetworkUrl(url) {
     if (!url || typeof url !== 'string') return false;
-    return OPENAI_ENDPOINTS.some((ep) => url.includes(ep));
+    const clean = url.toLowerCase();
+    return (
+      clean.includes('bzr.openai.com') ||
+      clean.includes('bzrcdn.openai.com') ||
+      clean.includes('/v1/sdk/events') ||
+      (clean.includes('/events') && (clean.includes('pid=') || clean.includes('oaiq')))
+    );
   }
 
   // Wrap window.fetch
@@ -252,6 +264,45 @@
         });
       }
       return originalSendBeacon.apply(this, arguments);
+    };
+  }
+
+  // Wrap XMLHttpRequest
+  if (typeof window.XMLHttpRequest === 'function') {
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this.__oaiq_url = url;
+      this.__oaiq_method = method;
+      return origOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function (body) {
+      const url = this.__oaiq_url;
+      if (isTargetNetworkUrl(url)) {
+        let payload = null;
+        try {
+          payload = typeof body === 'string' ? JSON.parse(body) : body;
+        } catch {
+          payload = body;
+        }
+
+        const start = Date.now();
+        this.addEventListener('loadend', () => {
+          sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+            url: url,
+            method: this.__oaiq_method || 'POST',
+            status: this.status,
+            ok: this.status >= 200 && this.status < 300,
+            duration: Date.now() - start,
+            timestamp: start,
+            payload: payload,
+            via: 'xhr'
+          });
+        });
+      }
+      return origSend.apply(this, arguments);
     };
   }
 
