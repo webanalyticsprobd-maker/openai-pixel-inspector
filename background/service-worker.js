@@ -83,13 +83,6 @@ function getOrCreateTabState(tabId, url = '', title = '') {
   return state;
 }
 
-function broadcastToTabHud(tabId, eventData) {
-  if (!tabId || tabId < 0) return;
-  try {
-    chrome.tabs.sendMessage(tabId, { action: 'HUD_PUSH_EVENT', event: eventData }).catch(() => {});
-  } catch {}
-}
-
 function updateBadge(tabId, state) {
   if (!state || !tabId || tabId < 0 || typeof chrome.action === 'undefined') return;
   const errCount = state.stats ? state.stats.errorEvents : 0;
@@ -202,9 +195,6 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         }
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
-        if (batch.events && batch.events.length > 0) {
-          batch.events.forEach(evt => broadcastToTabHud(tabId, evt));
-        }
         return;
       }
 
