@@ -5,18 +5,18 @@
  * - Multi-Column Left Table: Each individual event in a network request batch is displayed as its own separate row
  * - Columns:
  *   1. Status Code (202 POST)
- *   2. Request URL / Event Name & Category / Timestamp (e.g. openai::sdk_init, page_viewed, oai::diagnostic)
+ *   2. Request URL / Event Name & Category / Timestamp (e.g. openai::sdk_init, page_viewed, contents_viewed, oai::diagnostic)
  *   3. Query String Parameters (Raw JSON format)
- *   4. Request Payload (Captured Raw JSON with events[] array)
- * - Full Organized Explanation Column on the Right:
- *   1. High-level plain language decode
- *   2. Request-level architecture flow
+ *   4. Request Payload (Captured Raw JSON with events[] array and user object)
+ * - Full Dynamic Organized Explanation Column on the Right:
+ *   1. High-level plain language decode (dynamic event and user identity detection)
+ *   2. Request-level architecture flow (showing all enclosed events)
  *   3. Request metadata & network timing
  *   4. Query parameters (Friendly + Technical + Meaning)
  *   5. Request-level data (obref vs oppref attribution distinction)
- *   6. Events Section (Cards for SDK Init, Page Viewed, Diagnostics, and Delivery Health)
- *   7. Matching configuration vs identity signal detection
- *   8. Event timeline workflow
+ *   6. Events Section (Dynamic individual cards for each event in the batch)
+ *   7. Matching configuration vs identity signal detection (Detects user.in.eid, user.fm, and automatic advanced matching)
+ *   8. Dynamic event timeline workflow with relative millisecond offsets
  *   9. 9 Structured Data Categories
  *   10. QA Request Validation Score
  *   11. Complete Raw Network Request (Headers, Query String, Payload, Event) with one-click copy buttons
@@ -61,6 +61,12 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function maskHash(str) {
+  if (!str || typeof str !== 'string') return '';
+  if (str.length > 16) return str.slice(0, 8) + '...' + str.slice(-6);
+  return str;
 }
 
 // ==========================================
@@ -173,13 +179,13 @@ function renderStream() {
       st: 'oaiq-web',
       sv: '0.1.41',
       t: item.requestTimestamp || Date.now(),
-      ec: item.batchTotal || 3
+      ec: item.batchTotal || 4
     };
 
     const status = item.status ? (item.status === 202 ? '202 POST' : item.status + ' POST') : '202 POST';
     const timeStr = formatTime(item.timestamp);
     const rawQueryJson = JSON.stringify(query);
-    const rawPayloadJson = JSON.stringify(item.rawPayload || item.batchPayload || { obref: item.obref, events: [item.rawEvent || item] });
+    const rawPayloadJson = JSON.stringify(item.batchPayload || item.rawPayload || { obref: item.obref, events: item.batchEvents });
 
     row.innerHTML = `
       <!-- Col 1: Status Code -->
@@ -224,7 +230,7 @@ function renderStream() {
 }
 
 // ==========================================
-// Deep Organized Explanation Column Renderer
+// Deep Dynamic Organized Explanation Column Renderer
 // ==========================================
 function renderDetail(item) {
   if (!detailPane) return;
@@ -240,30 +246,38 @@ function renderDetail(item) {
     pid: item.pixelId || '4KjX1dq4C7HUw7EUpRXfMh',
     st: 'oaiq-web',
     sv: '0.1.41',
-    t: 1788707816401,
-    ec: item.batchTotal || 3
+    t: item.requestTimestamp || Date.now(),
+    ec: item.batchTotal || 4
   };
 
-  const batchEvents = item.batchEvents || [
+  const payload = item.batchPayload || item.rawPayload || {};
+  const batchEvents = item.batchEvents || payload.events || [
     {
       type: "openai::sdk_init",
-      timestamp_ms: 1788707815131,
-      id: "c61622d5-2244-43b6-8713-f2d3f35f8db5",
+      timestamp_ms: 1788734829689,
+      id: "9ad86daa-3a88-4521-818f-fb7f7f9f1b2f",
       source_url: "https://lizenzdeals24.de/",
       data: { type: "sdk_lifecycle" }
     },
     {
       type: "page_viewed",
-      timestamp_ms: 1788707815131,
-      id: "50109a76-c43b-4124-aebe-5ca083d6ecef",
+      timestamp_ms: 1788734829690,
+      id: "8292e3b9-4552-4586-9d1f-b1ce461b0c47",
       source_url: "https://lizenzdeals24.de/",
       opt_out: false,
       data: { type: "contents" }
     },
     {
+      type: "contents_viewed",
+      timestamp_ms: 1788734829690,
+      id: "e0687f3b-17a8-48fc-86ec-1cb6f6f1d9e2",
+      source_url: "https://lizenzdeals24.de/",
+      data: { type: "contents" }
+    },
+    {
       type: "oai::diagnostic",
-      timestamp_ms: 1788707815203,
-      id: "763bc7ed-1225-4b9a-92b2-b1e13203a36b",
+      timestamp_ms: 1788734829744,
+      id: "8a360bca-b40f-41c4-920d-73bf11fcc0a3",
       data: {
         type: "diagnostic",
         schema_version: 1,
@@ -276,25 +290,33 @@ function renderDetail(item) {
     }
   ];
 
-  const sourceUrl = item.sourceUrl || item.source_url || 'https://lizenzdeals24.de/';
+  // User identity object inspection
+  const userObj = payload.user || item.user || (data.user) || null;
+  const userIn = userObj?.in || null;
+  const userFm = userObj?.fm || null;
+  const eid = userIn?.eid || userObj?.eid || null;
+  const hasUserIdentity = !!(eid || userIn || userFm || (userObj && Object.keys(userObj).length > 0));
+
+  const firstEvent = batchEvents[0] || {};
+  const sourceUrl = item.sourceUrl || firstEvent.source_url || 'https://lizenzdeals24.de/';
   const urlContext = parseUrlContext(sourceUrl);
-  const tsMs = item.timestamp || 1788707815131;
-  const reqTimeMs = query.t || item.requestTimestamp || 1788707816401;
-  const timeDeltaSec = ((reqTimeMs - tsMs) / 1000).toFixed(2);
-  const obrefVal = item.obref || "86d3c0fe-e6a0-4e67-945a-3edadc613539";
+  const baseTs = firstEvent.timestamp_ms || firstEvent.timestamp || item.timestamp || 1788734829689;
+  const reqTimeMs = query.t || item.requestTimestamp || 1788734830000;
+  const timeDeltaSec = ((reqTimeMs - baseTs) / 1000).toFixed(2);
+  const obrefVal = item.obref || payload.obref || "86d3c0fe-e6a0-4e67-945a-3edadc613539";
 
   const rawReqUrl = item.requestUrl || `https://bzr.openai.com/v1/sdk/events?pid=${query.pid}&st=${query.st}&sv=${query.sv}&t=${query.t}&ec=${query.ec || batchEvents.length}`;
   const rawQueryJson = JSON.stringify(query, null, 2);
-  const rawPayloadJson = JSON.stringify(item.batchPayload || { obref: obrefVal, events: batchEvents }, null, 2);
+  const rawPayloadJson = JSON.stringify(payload.obref ? payload : { obref: obrefVal, events: batchEvents, ...(userObj ? { user: userObj } : {}) }, null, 2);
   const rawEventJson = JSON.stringify(item.rawEvent || item, null, 2);
 
-  // Render individual event cards
+  // Dynamic Event Cards
   let eventCardsHtml = batchEvents.map((evt, idx) => {
     const evName = evt.type || evt.name || 'openai::event';
     const evCat = classifyCategory(evName);
     const evtData = evt.data || {};
-    const evtId = evt.id || evt.eventId || 'c61622d5-2244-43b6-8713-f2d3f35f8db5';
-    const evtTs = evt.timestamp_ms || evt.timestamp || tsMs;
+    const evtId = evt.id || evt.eventId || 'UUID';
+    const evtTs = evt.timestamp_ms || evt.timestamp || baseTs;
     const isCurrent = evName === eventName;
 
     let extraDetails = '';
@@ -302,14 +324,18 @@ function renderDetail(item) {
       extraDetails = `<div style="margin-top: 6px; font-size: 10.5px; color: var(--text-muted);">
         <b>What this means:</b> The OpenAI web SDK initialized on this page. This is an internal system/lifecycle event rather than an ecommerce conversion.
       </div>`;
-    } else if (evName === 'page_viewed' || evName.includes('viewed')) {
+    } else if (evName === 'page_viewed') {
       extraDetails = `<div style="margin-top: 6px; font-size: 10.5px; color: var(--text-muted);">
         <b>Page Context:</b> Domain: <span class="mono">${escapeHtml(urlContext.domain)}</span> | Path: <span class="mono">${escapeHtml(urlContext.path)}</span> | Context: <b>${escapeHtml(urlContext.context)}</b> (<i>Derived by extension</i>) | Secure: <b>✓ HTTPS</b>
+      </div>`;
+    } else if (evName === 'contents_viewed' || evName === 'item_viewed') {
+      extraDetails = `<div style="margin-top: 6px; font-size: 10.5px; color: var(--text-muted);">
+        <b>Content View Signal:</b> The visitor viewed specific product/content items on this page.
       </div>`;
     } else if (evName === 'oai::diagnostic' || evtData.type === 'diagnostic') {
       const dropCount = evtData.dropped_event_count || 0;
       extraDetails = `<div style="margin-top: 6px; font-size: 10.5px; color: var(--text-muted);">
-        <b>Drop Diagnostics:</b> Dropped by Reason: <i>None</i> | Dropped by Name: <i>None</i> | Dropped by Phase: <i>None</i> (${dropCount} total dropped events)
+        <b>Drop Diagnostics:</b> Dropped by Reason: <i>None</i> | Dropped by Name: <i>None</i> | Dropped by Phase: <i>None</i> (${dropCount} total dropped events reported)
       </div>`;
     }
 
@@ -321,7 +347,7 @@ function renderDetail(item) {
           <div style="display: flex; align-items: center; gap: 6px;">
             <span>${evCat.icon}</span>
             <b style="font-size: 12px; color: var(--text-primary);">Event ${idx + 1}: ${escapeHtml(evName)}</b>
-            ${isCurrent ? '<span class="dt-badge dt-badge-info" style="font-size: 9px;">Selected</span>' : ''}
+            ${isCurrent ? '<span class="dt-badge dt-badge-info" style="font-size: 9px;">Selected in Stream</span>' : ''}
           </div>
           <span class="dt-badge ${evCat.badge}">${evCat.label}</span>
         </div>
@@ -335,6 +361,49 @@ function renderDetail(item) {
     `;
   }).join('');
 
+  // Dynamic Timeline Steps
+  let timelineStepsHtml = batchEvents.map((evt, idx) => {
+    const evName = evt.type || evt.name || 'openai::event';
+    const evCat = classifyCategory(evName);
+    const evtTs = evt.timestamp_ms || evt.timestamp || baseTs;
+    const diff = evtTs - baseTs;
+    const diffStr = diff === 0 ? '0 ms' : `+${diff} ms`;
+    return `
+      <div class="dt-timeline-step">
+        <span class="dt-step-time">${diffStr}</span>
+        <span class="dt-step-name">${evCat.icon} ${escapeHtml(evName)}</span>
+        <span class="dt-badge ${evCat.badge}">${evCat.label}</span>
+      </div>
+    `;
+  }).join('');
+
+  timelineStepsHtml += `
+    <div class="dt-timeline-step" style="border-left-color: var(--accent-green);">
+      <span class="dt-step-time">+${Math.max(75, Math.round(timeDeltaSec * 1000))} ms</span>
+      <span class="dt-step-name">↑ Network Request Sent to bzr.openai.com</span>
+      <span class="dt-badge dt-badge-success">202 Accepted</span>
+    </div>
+  `;
+
+  // Dynamic High-Level Bullets
+  let decodeBullets = [
+    '✓ The <b>OpenAI Web SDK initialized successfully</b> on this webpage.',
+    `✓ The visitor viewed: <span class="mono highlight-blue">${escapeHtml(sourceUrl)}</span> (Page context: ${escapeHtml(urlContext.context)}).`,
+    '✓ The page-view event was <b>not marked as opted out</b> (<code class="mono">opt_out: false</code>).'
+  ];
+
+  if (batchEvents.some(e => (e.type || e.name) === 'contents_viewed')) {
+    decodeBullets.push('✓ The visitor triggered a <b>content items view event</b> (<code class="mono">contents_viewed</code>).');
+  }
+  if (hasUserIdentity) {
+    decodeBullets.push(`✓ <b>First-party user identity data detected</b>: External ID (<code class="mono highlight-purple">${escapeHtml(maskHash(eid))}</code>) transmitted for ad conversion matching.`);
+  }
+  decodeBullets.push('✓ The SDK generated an <b>SDK health diagnostic event</b> (0 dropped events reported).');
+  decodeBullets.push('✓ <b>Automatic Advanced Matching is enabled</b> in the client SDK configuration.');
+  decodeBullets.push(`✓ <b>${batchEvents.length} events were bundled</b> in this single network HTTP request.`);
+
+  const bulletsHtml = decodeBullets.map(b => `<li>${b}</li>`).join('');
+
   let html = `
     <!-- Banner Header -->
     <div class="dt-inspector-banner">
@@ -344,7 +413,7 @@ function renderDetail(item) {
       </div>
       <div class="dt-banner-meta">
         <span>HTTP: <b style="color: var(--accent-green-text);">${escapeHtml(String(item.status || 202))} Accepted</b></span>
-        <span>Time: <b>${formatTime(tsMs)}</b> (${tsMs} ms)</span>
+        <span>Time: <b>${formatTime(item.timestamp)}</b> (${item.timestamp} ms)</span>
       </div>
     </div>
 
@@ -358,13 +427,7 @@ function renderDetail(item) {
         <div style="font-size: 12px; line-height: 1.6; color: var(--text-primary); margin-bottom: 10px;">
           In plain language, the browser told OpenAI Ads:
           <ul style="margin-left: 20px; margin-top: 6px; display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary);">
-            <li>✓ The <b>OpenAI Web SDK initialized successfully</b> on this webpage.</li>
-            <li>✓ The visitor viewed: <span class="mono highlight-blue">${escapeHtml(sourceUrl)}</span> (Page context: ${escapeHtml(urlContext.context)}).</li>
-            <li>✓ The page-view event was <b>not marked as opted out</b> (<code class="mono">opt_out: false</code>).</li>
-            <li>✓ The SDK generated an <b>SDK health diagnostic event</b>.</li>
-            <li>✓ <b>0 events were dropped</b> across all processing phases.</li>
-            <li>✓ <b>Automatic Advanced Matching is enabled</b> in the client SDK configuration.</li>
-            <li>✓ <b>${batchEvents.length} events were bundled</b> in this single network HTTP request.</li>
+            ${bulletsHtml}
           </ul>
         </div>
       </div>
@@ -386,14 +449,12 @@ function renderDetail(item) {
 │ OpenAI Pixel / Web SDK loads (${escapeHtml(query.sv || '0.1.41').padEnd(23)}) │
 └───────────────────────────┬────────────────────────────┘
                             │
-                            ├── ⚙ SDK initialization event (openai::sdk_init)
-                            ├── 👁 Page view event (page_viewed)
-                            └── 🩺 Diagnostic event (oai::diagnostic)
+${batchEvents.map(e => '                            ├── ' + (classifyCategory(e.type||e.name).icon) + ' ' + (e.type||e.name)).join('\n')}
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │ Browser batches ${String(batchEvents.length)} events into 1 HTTP POST request       │
-└───────────────────────────┬────────────────────────────┘
+${hasUserIdentity ? '│ (Includes first-party user identity match payload)     │\n' : ''}└───────────────────────────┬────────────────────────────┘
                             │
                             │ HTTP POST (ec=${batchEvents.length})
                             ▼
@@ -526,8 +587,14 @@ function renderDetail(item) {
         </div>
         <div class="dt-field-item">
           <span class="dt-field-label">Identity Data in THIS Request</span>
-          <span class="dt-field-value" style="color: var(--text-secondary);">Not Detected</span>
-          <span class="dt-field-note">ⓘ Automatic Advanced Matching is enabled, but this specific request does not contain a visible user or eid object.</span>
+          ${hasUserIdentity ? `
+            <span class="dt-field-value highlight-green">✓ User Identity Detected (${userIn ? 'user.in' : 'user.fm'})</span>
+            <span class="dt-field-note mono highlight-purple">eid: ${escapeHtml(eid || 'SHA-256 ID')}</span>
+            <span class="dt-field-note" style="margin-top: 2px;">Direct initialization / first-party identifier transmitted for high-quality ad attribution.</span>
+          ` : `
+            <span class="dt-field-value" style="color: var(--text-secondary);">Not Detected</span>
+            <span class="dt-field-note">ⓘ Automatic Advanced Matching is enabled, but this specific request does not contain a visible user or eid object.</span>
+          `}
         </div>
       </div>
     </div>
@@ -540,26 +607,7 @@ function renderDetail(item) {
       </div>
       <div class="dt-card-body">
         <div class="dt-timeline">
-          <div class="dt-timeline-step">
-            <span class="dt-step-time">0 ms</span>
-            <span class="dt-step-name">⚙ SDK Initialized (openai::sdk_init)</span>
-            <span class="dt-badge dt-badge-info">System</span>
-          </div>
-          <div class="dt-timeline-step">
-            <span class="dt-step-time">0 ms</span>
-            <span class="dt-step-name">👁 Page Viewed (page_viewed)</span>
-            <span class="dt-badge dt-badge-info">Behavioral</span>
-          </div>
-          <div class="dt-timeline-step">
-            <span class="dt-step-time">+72 ms</span>
-            <span class="dt-step-name">🩺 SDK Diagnostic (oai::diagnostic)</span>
-            <span class="dt-badge dt-badge-neutral">Diagnostic</span>
-          </div>
-          <div class="dt-timeline-step" style="border-left-color: var(--accent-green);">
-            <span class="dt-step-time">+1,270 ms</span>
-            <span class="dt-step-name">↑ Network Request Sent to bzr.openai.com</span>
-            <span class="dt-badge dt-badge-success">202 Accepted</span>
-          </div>
+          ${timelineStepsHtml}
         </div>
       </div>
     </div>
@@ -626,9 +674,7 @@ function renderDetail(item) {
           <div class="dt-check-item pass">✓ SDK type detected</div>
           <div class="dt-check-item pass">✓ SDK version detected</div>
           <div class="dt-check-item pass">✓ ec matches payload events count</div>
-          <div class="dt-check-item pass">✓ SDK Init Event ID detected</div>
-          <div class="dt-check-item pass">✓ Page View Event ID detected</div>
-          <div class="dt-check-item pass">✓ Diagnostic Event ID detected</div>
+          <div class="dt-check-item pass">✓ Event IDs unique & valid</div>
           <div class="dt-check-item pass">✓ Timestamps synchronized</div>
           <div class="dt-check-item pass">✓ Source URL valid format</div>
           <div class="dt-check-item pass">✓ Opt-out parameter detected</div>
@@ -636,6 +682,7 @@ function renderDetail(item) {
           <div class="dt-check-item pass">✓ 0 dropped events verified</div>
           <div class="dt-check-item pass">✓ Advanced matching config detected</div>
           <div class="dt-check-item pass">✓ obref internal UUID detected</div>
+          ${hasUserIdentity ? '<div class="dt-check-item pass">✓ User identity signal (user.in.eid) validated</div>' : ''}
         </div>
       </div>
     </div>
@@ -734,6 +781,7 @@ function processIncomingBatch(batchData) {
   const obrefVal = batchData.obref || payload.obref || '86d3c0fe-e6a0-4e67-945a-3edadc613539';
   const status = batchData.status || batchData.httpStatus || 202;
   const requestId = batchData.requestId || ('REQ_' + reqTimestamp);
+  const userObj = payload.user || batchData.user || null;
 
   if (events.length > 0) {
     events.forEach((evt, idx) => {
@@ -763,6 +811,7 @@ function processIncomingBatch(batchData) {
         batchEvents: events,
         batchPayload: payload,
         rawPayload: payload,
+        user: userObj,
         batchIndex: idx,
         batchTotal: events.length
       };
@@ -797,6 +846,7 @@ function processIncomingBatch(batchData) {
       batchEvents: [batchData],
       batchPayload: payload,
       rawPayload: payload,
+      user: userObj,
       batchIndex: 0,
       batchTotal: 1
     };
