@@ -620,3 +620,48 @@ body.theme-light .dt-row.selected {
   background: var(--accent-green);
   display: inline-block;
 }
+
+/* Batch Event Styles in Left Column */
+.dt-batch-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.dt-batch-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(16, 163, 127, 0.15);
+  color: var(--accent-green-text);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  display: inline-block;
+}
+
+.dt-batch-events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 3px 0 5px 0;
+}
+
+.dt-batch-event-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.dt-event-icon {
+  font-size: 11px;
+}
+
+.dt-category-mini-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}

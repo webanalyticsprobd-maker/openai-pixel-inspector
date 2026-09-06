@@ -308,9 +308,7 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         state.networkSummary = store.getNetworkActivitySummary();
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
-        if (batch.events && batch.events.length > 0) {
-          batch.events.forEach(evt => broadcastToDevTools(tabId, { action: 'NEW_EVENT', event: evt }));
-        }
+        broadcastToDevTools(tabId, { action: 'NEW_BATCH', batch: batch, openAIRequest: batch.openAIRequest });
       }
     },
     { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] },
