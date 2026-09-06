@@ -2,10 +2,10 @@
  * OpenAI Ads Pixel Inspector - Chrome DevTools Panel Controller
  * 
  * Features:
- * - Multi-Column Left Table: Shows FULL BATCH REQUESTS with ALL enclosed events listed
+ * - Multi-Column Left Table: Each individual event in a network request batch is displayed as its own separate row
  * - Columns:
  *   1. Status Code (202 POST)
- *   2. Request URL / Batch Events / Timestamp (Lists all enclosed events e.g. openai::sdk_init, page_viewed, oai::diagnostic)
+ *   2. Request URL / Event Name & Category / Timestamp (e.g. openai::sdk_init, page_viewed, oai::diagnostic)
  *   3. Query String Parameters (Raw JSON format)
  *   4. Request Payload (Captured Raw JSON with events[] array)
  * - Full Organized Explanation Column on the Right:
@@ -14,7 +14,7 @@
  *   3. Request metadata & network timing
  *   4. Query parameters (Friendly + Technical + Meaning)
  *   5. Request-level data (obref vs oppref attribution distinction)
- *   6. Events Section (Individual Cards for each event in the batch)
+ *   6. Events Section (Cards for SDK Init, Page Viewed, Diagnostics, and Delivery Health)
  *   7. Matching configuration vs identity signal detection
  *   8. Event timeline workflow
  *   9. 9 Structured Data Categories
@@ -22,9 +22,9 @@
  *   11. Complete Raw Network Request (Headers, Query String, Payload, Event) with one-click copy buttons
  */
 
-import { parseOpenAINetworkBatch, normalizeOpenAIRequest } from '../network/request-parser.js';
+import { parseOpenAINetworkBatch } from '../network/request-parser.js';
 
-let capturedBatchesList = [];
+let capturedItemsList = [];
 let selectedIndex = -1;
 let filterMode = 'all';
 let searchQuery = '';
@@ -138,24 +138,20 @@ function renderStream() {
   if (!streamList) return;
   streamList.innerHTML = '';
 
-  const filtered = capturedBatchesList.filter(batch => {
-    const events = batch.events || (batch.rawPayload?.events) || [];
-    const eventNames = events.map(e => (e.type || e.name || '').toLowerCase());
+  const filtered = capturedItemsList.filter(item => {
+    const n = (item.eventName || item.type || '').toLowerCase();
     
     if (filterMode === 'conversion') {
-      const hasConversion = eventNames.some(n => ['items_added', 'checkout_started', 'order_created', 'lead_submitted'].includes(n));
-      if (!hasConversion) return false;
+      if (!['items_added', 'checkout_started', 'order_created', 'lead_submitted'].includes(n)) return false;
     } else if (filterMode === 'behavioral') {
-      const hasBehavioral = eventNames.some(n => ['page_viewed', 'item_viewed', 'contents_viewed'].includes(n));
-      if (!hasBehavioral) return false;
+      if (!['page_viewed', 'item_viewed', 'contents_viewed', 'contact_viewed'].includes(n)) return false;
     } else if (filterMode === 'diagnostic') {
-      const hasDiagnostic = eventNames.some(n => ['openai::sdk_init', 'oai::diagnostic'].includes(n) || n.includes('diagnostic'));
-      if (!hasDiagnostic) return false;
+      if (!['openai::sdk_init', 'oai::diagnostic'].includes(n) && !n.includes('diagnostic')) return false;
     }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      const str = JSON.stringify(batch).toLowerCase();
+      const str = JSON.stringify(item).toLowerCase();
       if (!str.includes(q)) return false;
     }
     return true;
@@ -166,41 +162,24 @@ function renderStream() {
     return;
   }
 
-  filtered.forEach((batch, idx) => {
+  filtered.forEach((item, idx) => {
     const row = document.createElement('div');
     row.className = 'dt-row ' + (selectedIndex === idx ? 'selected' : '');
 
-    const query = batch.query || {
-      pid: batch.pixelId || '4KjX1dq4C7HUw7EUpRXfMh',
-      st: batch.sdkType || 'oaiq-web',
-      sv: batch.sdkVersion || '0.1.41',
-      t: batch.timestamp || Date.now(),
-      ec: batch.events?.length || 3
+    const eventName = item.eventName || item.type || 'openai::event';
+    const cat = classifyCategory(eventName);
+    const query = item.query || {
+      pid: item.pixelId || '4KjX1dq4C7HUw7EUpRXfMh',
+      st: 'oaiq-web',
+      sv: '0.1.41',
+      t: item.requestTimestamp || Date.now(),
+      ec: item.batchTotal || 3
     };
 
-    const events = batch.events || (batch.rawPayload?.events) || [];
-    const status = batch.status ? (batch.status === 202 ? '202 POST' : batch.status + ' POST') : '202 POST';
-    const timeStr = formatTime(batch.timestamp);
+    const status = item.status ? (item.status === 202 ? '202 POST' : item.status + ' POST') : '202 POST';
+    const timeStr = formatTime(item.timestamp);
     const rawQueryJson = JSON.stringify(query);
-    const rawPayloadJson = JSON.stringify(batch.rawPayload || { obref: batch.obref, events: events });
-
-    // Build events list HTML for the left column
-    let eventsListHtml = '';
-    if (events.length > 0) {
-      eventsListHtml = '<div class="dt-batch-events-list">' + events.map(evt => {
-        const evName = evt.type || evt.name || 'event';
-        const cat = classifyCategory(evName);
-        return `<div class="dt-batch-event-item">
-          <span class="dt-event-icon">${cat.icon}</span>
-          <span class="dt-event-name" style="font-size: 11px;">${escapeHtml(evName)}</span>
-          <span class="dt-category-mini-badge ${cat.badge}">${cat.label}</span>
-        </div>`;
-      }).join('') + '</div>';
-    } else {
-      eventsListHtml = '<div class="dt-event-name" style="margin-bottom: 4px;">openai::event</div>';
-    }
-
-    const batchPillHtml = events.length > 1 ? `<span class="dt-batch-pill">📦 Batch (${events.length} Events)</span>` : '';
+    const rawPayloadJson = JSON.stringify(item.rawPayload || item.batchPayload || { obref: item.obref, events: [item.rawEvent || item] });
 
     row.innerHTML = `
       <!-- Col 1: Status Code -->
@@ -208,14 +187,14 @@ function renderStream() {
         <span class="dt-badge dt-badge-success">${escapeHtml(status)}</span>
       </div>
 
-      <!-- Col 2: Request URL, Batch Events, Timestamp -->
+      <!-- Col 2: Request URL, Event Name & Category, Timestamp -->
       <div class="col-request-info dt-cell-stack">
-        <div class="dt-batch-header">
-          ${batchPillHtml}
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span class="dt-event-name">${escapeHtml(eventName)}</span>
+          <span class="dt-badge ${cat.badge}" style="font-size: 9.5px; padding: 1px 5px;">${cat.label}</span>
         </div>
-        ${eventsListHtml}
-        <span class="dt-url-text" title="${escapeHtml(batch.requestUrl || 'https://bzr.openai.com/v1/sdk/events')}">bzr.openai.com/v1/sdk/events</span>
-        <span class="dt-time-text">${escapeHtml(timeStr)} (${batch.timestamp || Date.now()})</span>
+        <span class="dt-url-text" title="${escapeHtml(item.requestUrl || 'https://bzr.openai.com/v1/sdk/events')}">bzr.openai.com/v1/sdk/events</span>
+        <span class="dt-time-text">${escapeHtml(timeStr)} (${item.timestamp || Date.now()})</span>
       </div>
 
       <!-- Col 3: Query String Parameters Raw JSON -->
@@ -232,37 +211,40 @@ function renderStream() {
     row.addEventListener('click', () => {
       selectedIndex = idx;
       renderStream();
-      renderDetail(batch);
+      renderDetail(item);
     });
 
     streamList.appendChild(row);
   });
 
   if (counterText) {
-    const totalEvents = capturedBatchesList.reduce((acc, b) => acc + (b.events?.length || 1), 0);
-    counterText.textContent = `${capturedBatchesList.length} HTTP request batch(es) recorded (${totalEvents} events total)`;
+    const totalRequests = new Set(capturedItemsList.map(i => i.requestId || i.obref || i.requestUrl)).size;
+    counterText.textContent = `${capturedItemsList.length} event(s) captured across ${Math.max(1, totalRequests)} HTTP network request(s)`;
   }
 }
 
 // ==========================================
 // Deep Organized Explanation Column Renderer
 // ==========================================
-function renderDetail(batch) {
+function renderDetail(item) {
   if (!detailPane) return;
-  if (!batch) {
+  if (!item) {
     detailPane.innerHTML = '<div class="dt-empty-detail"><div class="dt-empty-icon">📡</div><h3>Select a captured OpenAI Pixel event or request</h3><p>The browser network request is the source of truth. Select any entry on the left to inspect.</p></div>';
     return;
   }
 
-  const query = batch.query || {
-    pid: batch.pixelId || '4KjX1dq4C7HUw7EUpRXfMh',
-    st: batch.sdkType || 'oaiq-web',
-    sv: batch.sdkVersion || '0.1.41',
-    t: batch.timestamp || 1788707816401,
-    ec: batch.events?.length || 3
+  const eventName = item.eventName || item.type || 'openai::sdk_init';
+  const cat = classifyCategory(eventName);
+  const data = item.data || item.parameters || {};
+  const query = item.query || {
+    pid: item.pixelId || '4KjX1dq4C7HUw7EUpRXfMh',
+    st: 'oaiq-web',
+    sv: '0.1.41',
+    t: 1788707816401,
+    ec: item.batchTotal || 3
   };
 
-  const events = batch.events || (batch.rawPayload?.events) || [
+  const batchEvents = item.batchEvents || [
     {
       type: "openai::sdk_init",
       timestamp_ms: 1788707815131,
@@ -294,27 +276,26 @@ function renderDetail(batch) {
     }
   ];
 
-  const firstEvent = events[0] || {};
-  const sourceUrl = firstEvent.source_url || firstEvent.url || batch.sourceUrl || 'https://lizenzdeals24.de/';
+  const sourceUrl = item.sourceUrl || item.source_url || 'https://lizenzdeals24.de/';
   const urlContext = parseUrlContext(sourceUrl);
-  const tsMs = firstEvent.timestamp_ms || firstEvent.timestamp || batch.timestamp || 1788707815131;
-  const reqTimeMs = query.t || batch.timestamp || 1788707816401;
+  const tsMs = item.timestamp || 1788707815131;
+  const reqTimeMs = query.t || item.requestTimestamp || 1788707816401;
   const timeDeltaSec = ((reqTimeMs - tsMs) / 1000).toFixed(2);
-  const obrefVal = batch.obref || batch.rawPayload?.obref || "86d3c0fe-e6a0-4e67-945a-3edadc613539";
+  const obrefVal = item.obref || "86d3c0fe-e6a0-4e67-945a-3edadc613539";
 
-  const rawReqUrl = batch.requestUrl || `https://bzr.openai.com/v1/sdk/events?pid=${query.pid}&st=${query.st}&sv=${query.sv}&t=${query.t}&ec=${query.ec || events.length}`;
+  const rawReqUrl = item.requestUrl || `https://bzr.openai.com/v1/sdk/events?pid=${query.pid}&st=${query.st}&sv=${query.sv}&t=${query.t}&ec=${query.ec || batchEvents.length}`;
   const rawQueryJson = JSON.stringify(query, null, 2);
-  const rawPayloadJson = JSON.stringify(batch.rawPayload || { obref: obrefVal, events: events }, null, 2);
+  const rawPayloadJson = JSON.stringify(item.batchPayload || { obref: obrefVal, events: batchEvents }, null, 2);
+  const rawEventJson = JSON.stringify(item.rawEvent || item, null, 2);
 
   // Render individual event cards
-  let eventCardsHtml = events.map((evt, idx) => {
+  let eventCardsHtml = batchEvents.map((evt, idx) => {
     const evName = evt.type || evt.name || 'openai::event';
-    const cat = classifyCategory(evName);
+    const evCat = classifyCategory(evName);
     const evtData = evt.data || {};
-    const evtId = evt.id || evt.eventId || 'UUID';
+    const evtId = evt.id || evt.eventId || 'c61622d5-2244-43b6-8713-f2d3f35f8db5';
     const evtTs = evt.timestamp_ms || evt.timestamp || tsMs;
-    const evtUrl = evt.source_url || sourceUrl;
-    const optOut = evt.opt_out !== undefined ? String(evt.opt_out) : 'false';
+    const isCurrent = evName === eventName;
 
     let extraDetails = '';
     if (evName === 'openai::sdk_init') {
@@ -332,14 +313,17 @@ function renderDetail(batch) {
       </div>`;
     }
 
+    const highlightStyle = isCurrent ? 'border: 2px solid var(--accent-blue); box-shadow: 0 0 0 1px var(--accent-blue);' : 'border: 1px solid var(--border-subtle);';
+
     return `
-      <div style="background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+      <div style="background: var(--bg-primary); ${highlightStyle} border-radius: 6px; padding: 10px; margin-bottom: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span>${cat.icon}</span>
+            <span>${evCat.icon}</span>
             <b style="font-size: 12px; color: var(--text-primary);">Event ${idx + 1}: ${escapeHtml(evName)}</b>
+            ${isCurrent ? '<span class="dt-badge dt-badge-info" style="font-size: 9px;">Selected</span>' : ''}
           </div>
-          <span class="dt-badge ${cat.badge}">${cat.label}</span>
+          <span class="dt-badge ${evCat.badge}">${evCat.label}</span>
         </div>
         <div class="dt-grid-3" style="margin-top: 8px;">
           <div><span class="dt-field-label">Event ID:</span> <span class="mono" style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(evtId)}</span></div>
@@ -355,11 +339,11 @@ function renderDetail(batch) {
     <!-- Banner Header -->
     <div class="dt-inspector-banner">
       <div class="dt-banner-title-group">
-        <span class="dt-badge dt-badge-success">📦 Batch (${events.length} Events)</span>
-        <span class="dt-banner-event-name">OpenAI Ads Network Batch</span>
+        <span class="dt-badge ${cat.badge}">${cat.label}</span>
+        <span class="dt-banner-event-name">${escapeHtml(eventName)}</span>
       </div>
       <div class="dt-banner-meta">
-        <span>HTTP: <b style="color: var(--accent-green-text);">${escapeHtml(String(batch.status || 202))} Accepted</b></span>
+        <span>HTTP: <b style="color: var(--accent-green-text);">${escapeHtml(String(item.status || 202))} Accepted</b></span>
         <span>Time: <b>${formatTime(tsMs)}</b> (${tsMs} ms)</span>
       </div>
     </div>
@@ -380,7 +364,7 @@ function renderDetail(batch) {
             <li>✓ The SDK generated an <b>SDK health diagnostic event</b>.</li>
             <li>✓ <b>0 events were dropped</b> across all processing phases.</li>
             <li>✓ <b>Automatic Advanced Matching is enabled</b> in the client SDK configuration.</li>
-            <li>✓ <b>${events.length} events were bundled</b> in this single network HTTP request.</li>
+            <li>✓ <b>${batchEvents.length} events were bundled</b> in this single network HTTP request.</li>
           </ul>
         </div>
       </div>
@@ -408,10 +392,10 @@ function renderDetail(batch) {
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│ Browser batches ${String(events.length)} events into 1 HTTP POST request       │
+│ Browser batches ${String(batchEvents.length)} events into 1 HTTP POST request       │
 └───────────────────────────┬────────────────────────────┘
                             │
-                            │ HTTP POST (ec=${events.length})
+                            │ HTTP POST (ec=${batchEvents.length})
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │ https://bzr.openai.com/v1/sdk/events                   │
@@ -446,7 +430,7 @@ function renderDetail(batch) {
         </div>
         <div class="dt-field-item">
           <span class="dt-field-label">Events Bundled in Request</span>
-          <span class="dt-field-value highlight-purple">${events.length} Events (ec=${query.ec || events.length})</span>
+          <span class="dt-field-value highlight-purple">${batchEvents.length} Events (ec=${query.ec || batchEvents.length})</span>
           <span class="dt-field-note">Multiple events aggregated into 1 network transmission</span>
         </div>
         <div class="dt-field-item">
@@ -491,7 +475,7 @@ function renderDetail(batch) {
         </div>
         <div class="dt-field-item">
           <span class="dt-field-label">Event Count (ec)</span>
-          <span class="dt-field-value highlight-green">${events.length} event(s)</span>
+          <span class="dt-field-value highlight-green">${batchEvents.length} event(s)</span>
           <span class="dt-field-note">Declared count of events enclosed in events[] payload</span>
         </div>
       </div>
@@ -520,7 +504,7 @@ function renderDetail(batch) {
     <!-- 6. EVENTS IN THIS REQUEST -->
     <div class="dt-card">
       <div class="dt-card-header">
-        <span>6. Events in This Request (${events.length} Events Batched)</span>
+        <span>6. Events in This Request (${batchEvents.length} Events Batched)</span>
         <span class="dt-card-header-badge">events[] Array</span>
       </div>
       <div class="dt-card-body">
@@ -589,7 +573,7 @@ function renderDetail(batch) {
       <div class="dt-card-body dt-grid-3">
         <div class="dt-field-item">
           <span class="dt-field-label">1. Request Metadata</span>
-          <span class="dt-field-value" style="font-size: 11px;">✓ URL, Method, 202, ec=${events.length}</span>
+          <span class="dt-field-value" style="font-size: 11px;">✓ URL, Method, 202, ec=${batchEvents.length}</span>
         </div>
         <div class="dt-field-item">
           <span class="dt-field-label">2. Pixel / SDK Data</span>
@@ -688,7 +672,7 @@ function renderDetail(batch) {
           <button class="dt-btn-copy" id="btn-copy-url">Copy Request URL</button>
           <button class="dt-btn-copy" id="btn-copy-query">Copy Query Parameters</button>
           <button class="dt-btn-copy" id="btn-copy-payload">Copy Request Payload</button>
-          <button class="dt-btn-copy" id="btn-copy-event">Copy Batch JSON</button>
+          <button class="dt-btn-copy" id="btn-copy-event">Copy Event JSON</button>
         </div>
       </div>
     </div>
@@ -710,8 +694,8 @@ function renderDetail(batch) {
     flashBtn(detailPane.querySelector('#btn-copy-payload'), 'Payload Copied!');
   });
   detailPane.querySelector('#btn-copy-event')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(rawPayloadJson);
-    flashBtn(detailPane.querySelector('#btn-copy-event'), 'Batch Copied!');
+    navigator.clipboard.writeText(rawEventJson);
+    flashBtn(detailPane.querySelector('#btn-copy-event'), 'Event Copied!');
   });
 }
 
@@ -723,48 +707,114 @@ function flashBtn(btn, text) {
 }
 
 // ==========================================
-// Real-Time Push Listener (No Refresh Needed!)
+// Ingest & Flatten Batch into Individual Event Rows
 // ==========================================
-function pushNewBatch(batch) {
-  if (!batch) return;
+function processIncomingBatch(batchData) {
+  if (!batchData) return;
   
-  // Normalize batch structure
-  const reqUrl = batch.requestUrl || batch.url || batch.request?.fullUrl || '';
-  const payload = batch.rawPayload || batch.payload || batch.raw?.parsedBody || {};
-  const events = batch.events || payload.events || [];
-  const query = batch.query || (reqUrl ? Object.fromEntries(new URL(reqUrl, 'https://bzr.openai.com').searchParams.entries()) : {});
+  const reqUrl = batchData.requestUrl || batchData.url || batchData.request?.fullUrl || 'https://bzr.openai.com/v1/sdk/events';
+  const payload = batchData.rawPayload || batchData.payload || batchData.raw?.parsedBody || {};
   
-  const batchId = batch.requestId || batch.id || (reqUrl + '_' + (batch.timestamp || Date.now()));
-  
-  const normalizedBatch = {
-    id: batchId,
-    requestId: batch.requestId || batchId,
-    requestUrl: reqUrl,
-    status: batch.status || batch.httpStatus || 202,
-    timestamp: batch.timestamp || Date.now(),
-    pixelId: batch.pixelId || query.pid || '4KjX1dq4C7HUw7EUpRXfMh',
-    sdkType: batch.sdkType || query.st || 'oaiq-web',
-    sdkVersion: batch.sdkVersion || query.sv || '0.1.41',
-    obref: batch.obref || payload.obref || '86d3c0fe-e6a0-4e67-945a-3edadc613539',
-    events: events,
-    query: query,
-    rawPayload: payload
-  };
-
-  const exists = capturedBatchesList.some(b => b.id === normalizedBatch.id || (b.requestUrl === normalizedBatch.requestUrl && b.timestamp === normalizedBatch.timestamp));
-  
-  if (!exists) {
-    capturedBatchesList.unshift(normalizedBatch);
-    if (capturedBatchesList.length > 300) capturedBatchesList.pop();
-    
-    if (selectedIndex <= 0) {
-      selectedIndex = 0;
-      renderStream();
-      renderDetail(capturedBatchesList[0]);
-    } else {
-      selectedIndex++;
-      renderStream();
+  let query = batchData.query;
+  if (!query || Object.keys(query).length === 0) {
+    try {
+      query = Object.fromEntries(new URL(reqUrl, 'https://bzr.openai.com').searchParams.entries());
+    } catch {
+      query = {};
     }
+  }
+
+  // Filter out invalid empty dummy requests
+  if (!query.pid && (!payload.events || payload.events.length === 0) && !payload.obref) {
+    return;
+  }
+
+  const events = batchData.events || payload.events || [];
+  const reqTimestamp = batchData.timestamp || (query.t ? parseInt(query.t, 10) : Date.now());
+  const obrefVal = batchData.obref || payload.obref || '86d3c0fe-e6a0-4e67-945a-3edadc613539';
+  const status = batchData.status || batchData.httpStatus || 202;
+  const requestId = batchData.requestId || ('REQ_' + reqTimestamp);
+
+  if (events.length > 0) {
+    events.forEach((evt, idx) => {
+      const evName = evt.type || evt.name || 'openai::event';
+      const evTs = evt.timestamp_ms || evt.timestamp || reqTimestamp;
+      const evId = evt.id || evt.eventId || (requestId + '_' + idx);
+      
+      const item = {
+        id: evId,
+        uniqueKey: evId + '_' + evTs,
+        requestId: requestId,
+        eventName: evName,
+        type: evName,
+        data: evt.data || {},
+        parameters: evt.data || {},
+        sourceUrl: evt.source_url || evt.url || batchData.sourceUrl || 'https://lizenzdeals24.de/',
+        timestamp: evTs,
+        requestTimestamp: reqTimestamp,
+        status: status,
+        requestUrl: reqUrl,
+        pixelId: query.pid || batchData.pixelId || '4KjX1dq4C7HUw7EUpRXfMh',
+        sdkType: query.st || 'oaiq-web',
+        sdkVersion: query.sv || '0.1.41',
+        obref: obrefVal,
+        query: query,
+        rawEvent: evt,
+        batchEvents: events,
+        batchPayload: payload,
+        rawPayload: payload,
+        batchIndex: idx,
+        batchTotal: events.length
+      };
+
+      const exists = capturedItemsList.some(i => i.uniqueKey === item.uniqueKey || (i.eventName === item.eventName && i.timestamp === item.timestamp && i.requestId === item.requestId));
+      if (!exists) {
+        capturedItemsList.unshift(item);
+      }
+    });
+  } else {
+    // Single event or raw request
+    const evName = batchData.name || batchData.type || 'openai::event';
+    const item = {
+      id: requestId,
+      uniqueKey: requestId,
+      requestId: requestId,
+      eventName: evName,
+      type: evName,
+      data: batchData.data || {},
+      parameters: batchData.parameters || {},
+      sourceUrl: batchData.sourceUrl || 'https://lizenzdeals24.de/',
+      timestamp: reqTimestamp,
+      requestTimestamp: reqTimestamp,
+      status: status,
+      requestUrl: reqUrl,
+      pixelId: query.pid || '4KjX1dq4C7HUw7EUpRXfMh',
+      sdkType: query.st || 'oaiq-web',
+      sdkVersion: query.sv || '0.1.41',
+      obref: obrefVal,
+      query: query,
+      rawEvent: batchData,
+      batchEvents: [batchData],
+      batchPayload: payload,
+      rawPayload: payload,
+      batchIndex: 0,
+      batchTotal: 1
+    };
+    
+    const exists = capturedItemsList.some(i => i.uniqueKey === item.uniqueKey);
+    if (!exists) {
+      capturedItemsList.unshift(item);
+    }
+  }
+
+  if (capturedItemsList.length > 500) capturedItemsList.length = 500;
+  
+  if (selectedIndex <= 0) {
+    selectedIndex = 0;
+    renderStream();
+    renderDetail(capturedItemsList[0]);
+  } else {
+    renderStream();
   }
 }
 
@@ -778,11 +828,11 @@ function connectPort() {
     port = chrome.runtime.connect({ name: 'devtools-' + inspectedTabId });
     port.onMessage.addListener((msg) => {
       if (msg.action === 'SYNC_STATE' && msg.state?.capturedRequests) {
-        msg.state.capturedRequests.forEach(pushNewBatch);
+        msg.state.capturedRequests.forEach(processIncomingBatch);
       } else if (msg.action === 'NEW_BATCH' && msg.batch) {
-        pushNewBatch(msg.batch.parentRequest || msg.batch);
+        processIncomingBatch(msg.batch.parentRequest || msg.batch);
       } else if (msg.action === 'NEW_EVENT' && msg.event) {
-        pushNewBatch(msg.event.parentRequest || msg.event);
+        processIncomingBatch(msg.event.parentRequest || msg.event);
       }
     });
     port.onDisconnect.addListener(() => {
@@ -819,9 +869,9 @@ if (chrome.devtools && chrome.devtools.network) {
 
         const parsedBatch = parseOpenAINetworkBatch(netEntry);
         if (parsedBatch.parentRequest) {
-          pushNewBatch(parsedBatch.parentRequest);
+          processIncomingBatch(parsedBatch.parentRequest);
         } else {
-          pushNewBatch(netEntry);
+          processIncomingBatch(netEntry);
         }
       }
     } catch {}
@@ -835,17 +885,15 @@ function loadInitialState() {
     const res = chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: inspectedTabId }, (resp) => {
       if (!isContextValid() || chrome.runtime?.lastError) return;
       if (resp?.state?.capturedRequests && resp.state.capturedRequests.length > 0) {
-        resp.state.capturedRequests.forEach(pushNewBatch);
+        resp.state.capturedRequests.forEach(processIncomingBatch);
       } else if (resp?.state?.network && resp.state.network.length > 0) {
-        resp.state.network.forEach(pushNewBatch);
+        resp.state.network.forEach(processIncomingBatch);
       }
     });
     if (res && typeof res.catch === 'function') {
       res.catch(() => {});
     }
-  } catch (err) {
-    // Ignore context invalidation during extension reloads
-  }
+  } catch (err) {}
 }
 
 // Event Listeners
@@ -864,7 +912,7 @@ document.querySelectorAll('.dt-btn[data-filter]').forEach(btn => {
 });
 
 document.getElementById('btn-dt-clear')?.addEventListener('click', () => {
-  capturedBatchesList = [];
+  capturedItemsList = [];
   selectedIndex = -1;
   renderStream();
   renderDetail(null);
