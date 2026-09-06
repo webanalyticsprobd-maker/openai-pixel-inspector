@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OpenAI Ads Pixel Inspector",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Professional debugging, validation, journey audit, and attribution diagnostics tool for OpenAI Ads Pixel (oaiq).",
   "permissions": [
     "activeTab",
@@ -24,8 +24,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/hud.js",
+        "content/content.js"
+      ],
       "run_at": "document_start",
       "all_frames": false
     }
@@ -35,9 +40,14 @@
       "resources": [
         "content/page-bridge.js",
         "popup/report.html",
-        "popup/report.js"
+        "popup/report.js",
+        "content/hud.js",
+        "devtools/devtools.html",
+        "devtools/panel.html"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "action": {
@@ -56,5 +66,6 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "options_page": "options/options.html"
+  "options_page": "options/options.html",
+  "devtools_page": "devtools/devtools.html"
 }
