@@ -2,8 +2,8 @@
  * OpenAI Ads Pixel Inspector - Page Context Bridge (MAIN World)
  * 
  * Runs in the website's execution context to hook into window.oaiq, proxy
- * measure/init calls, monitor outgoing network tracking requests, and capture
- * SPA navigation changes.
+ * measure/init calls, monitor outgoing network tracking requests, and push
+ * rich, color-coded, organized and raw payloads directly to the browser console.
  */
 
 (function () {
@@ -19,10 +19,187 @@
 
   let activePixelIds = new Set();
   let isInitialized = false;
+  let isConsoleLoggingEnabled = true;
+
+  // Check stored preference
+  try {
+    const pref = localStorage.getItem('__oai_console_debug_enabled');
+    if (pref === 'false') isConsoleLoggingEnabled = false;
+  } catch {}
+
+  function formatTime(ts) {
+    const d = new Date(ts || Date.now());
+    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  }
+
+  function maskHash(hash) {
+    if (!hash || typeof hash !== 'string') return hash;
+    if (hash.length >= 32) return hash.slice(0, 8) + '...' + hash.slice(-6);
+    return hash;
+  }
+
+  function maskMatchingData(matching) {
+    if (!matching || typeof matching !== 'object') return matching;
+    const masked = {};
+    for (const [k, v] of Object.entries(matching)) {
+      if (typeof v === 'string') {
+        masked[k] = maskHash(v);
+      } else if (typeof v === 'object' && v !== null) {
+        masked[k] = maskMatchingData(v);
+      } else {
+        masked[k] = v;
+      }
+    }
+    return masked;
+  }
+
+  function parseQueryParams(url) {
+    const params = {};
+    try {
+      const qIdx = url.indexOf('?');
+      if (qIdx !== -1) {
+        const usp = new URLSearchParams(url.slice(qIdx));
+        for (const [k, v] of usp.entries()) {
+          params[k] = v;
+        }
+      }
+    } catch {}
+    return params;
+  }
+
+  function getHumanDescription(eventName, p) {
+    const curr = p.currency || 'USD';
+    const amt = typeof p.amount === 'number' ? (p.amount / 100).toFixed(2) : null;
+
+    if (eventName === 'openai::sdk_init') {
+      return 'SDK initialized. Browser connected to OpenAI Ads.';
+    }
+    if (eventName === 'page_viewed') {
+      return 'Page view tracked. Tells OpenAI the visitor loaded this URL.';
+    }
+    if (eventName === 'item_viewed') {
+      const title = p.contents?.[0]?.name || p.title || 'Product';
+      return 'Viewed item "' + title + '"' + (amt ? ' (' + curr + ' ' + amt + ')' : '') + '.';
+    }
+    if (eventName === 'items_added') {
+      return 'Added item to cart' + (amt ? ' (' + curr + ' ' + amt + ')' : '') + '.';
+    }
+    if (eventName === 'checkout_started') {
+      return 'Checkout initiated with ' + (p.contents?.length || 1) + ' item(s)' + (amt ? ' totaling ' + curr + ' ' + amt : '') + '.';
+    }
+    if (eventName === 'order_created') {
+      return 'Conversion completed! Order placed' + (amt ? ' for ' + curr + ' ' + amt : '') + '.';
+    }
+    if (eventName === 'lead_submitted') {
+      return 'Lead form submitted. High-intent conversion event.';
+    }
+    return 'Event "' + eventName + '" sent to OpenAI with ' + Object.keys(p).length + ' parameter(s).';
+  }
+
+  function getAttributionPurpose(eventName) {
+    switch (eventName) {
+      case 'page_viewed':
+        return 'Top of funnel audience tracking, retargeting pool building, and click-through attribution.';
+      case 'item_viewed':
+        return 'Catalog interaction analysis, intent detection, and dynamic product recommendations.';
+      case 'items_added':
+        return 'High-intent cart tracking, abandoned cart recovery, and mid-funnel bid optimization.';
+      case 'checkout_started':
+        return 'Checkout pipeline progression and purchase propensity scoring.';
+      case 'order_created':
+        return 'ROAS calculation, conversion attribution, machine-learning smart bidding optimization.';
+      case 'lead_submitted':
+        return 'B2B lead generation conversion attribution and customer lifetime value modeling.';
+      default:
+        return 'Custom audience segmentation and campaign conversion measurement.';
+    }
+  }
 
   /**
-   * Securely post message to content script
+   * PUSHES LIVE FORMATTED DEBUGGER LOG TO BROWSER CONSOLE
    */
+  function logLiveDebuggerToConsole(details) {
+    if (!isConsoleLoggingEnabled) return;
+
+    const {
+      type,
+      eventName,
+      pixelId,
+      status,
+      statusMessage,
+      parameters,
+      rawPayload,
+      url,
+      method,
+      httpStatus,
+      duration,
+      timestamp
+    } = details;
+
+    const timeStr = formatTime(timestamp);
+    const badgeColor = status === 'ERROR' ? '#ef4444' : (status === 'WARNING' ? '#f59e0b' : '#10a37f');
+    const typeLabel = type === 'NETWORK_REQUEST' ? 'HTTP BATCH' : 'oaiq("measure")';
+
+    console.groupCollapsed(
+      '%c[OpenAI Pixel Live Debugger]%c %c' + (eventName || 'Batch Request') + '%c %c' + (status || '200 OK') + '%c @ ' + timeStr,
+      'background: #0f172a; color: #10a37f; font-weight: 700; padding: 2px 7px; border-radius: 3px; font-size: 11px;',
+      '',
+      'background: #0284c7; color: #ffffff; font-weight: 700; padding: 2px 7px; border-radius: 3px; font-size: 11px;',
+      '',
+      'background: ' + badgeColor + '; color: #ffffff; font-weight: 700; padding: 2px 7px; border-radius: 3px; font-size: 11px;',
+      'color: #94a3b8; font-size: 11px; margin-left: 4px;'
+    );
+
+    // 1. Client-Friendly Human Explanations
+    const humanSummary = getHumanDescription(eventName || '', parameters || {});
+    const whySent = getAttributionPurpose(eventName || '');
+
+    console.log('%c[WHAT WAS SENT / HUMAN SUMMARY]:%c ' + humanSummary, 'font-weight: bold; color: #10a37f; font-size: 11.5px;', 'color: #334155; font-size: 11.5px;');
+    console.log('%c[WHY IS THIS SENT / ATTRIBUTION]:%c ' + whySent, 'font-weight: bold; color: #0284c7; font-size: 11.5px;', 'color: #334155; font-size: 11.5px;');
+
+    // 2. Organized Request Breakdown
+    console.group('%c📊 ORGANIZED REQUEST & PARAMETERS', 'font-weight: bold; color: #0f172a;');
+    console.log('Event Name:', eventName || 'N/A');
+    console.log('Pixel ID (pid):', pixelId || Array.from(activePixelIds)[0] || 'Auto-detected');
+    console.log('Trigger Mechanism:', typeLabel);
+    console.log('Timestamp (ms):', timestamp, '(' + new Date(timestamp).toISOString() + ')');
+    
+    if (statusMessage) {
+      console.log('Validation Note:', statusMessage);
+    }
+
+    if (parameters) {
+      if (typeof parameters.amount === 'number') {
+        const curr = parameters.currency || 'USD';
+        const major = (parameters.amount / 100).toFixed(2);
+        console.log('Monetary Amount:', parameters.amount, 'minor units (=' + curr + ' ' + major + ')');
+      }
+      if (parameters.contents && Array.isArray(parameters.contents) && parameters.contents.length > 0) {
+        console.log('Commerce Contents Items (' + parameters.contents.length + ' item' + (parameters.contents.length > 1 ? 's' : '') + '):');
+        console.table(parameters.contents);
+      }
+      if (parameters.user) {
+        console.log('Customer Matching Data (SHA-256 Masked):', maskMatchingData(parameters.user));
+      }
+      console.log('All Organized Parameters:', parameters);
+    }
+    console.groupEnd();
+
+    // 3. Raw Request Payload & Transport Data
+    console.group('%c⚡ RAW NETWORK PAYLOAD & TRANSPORT', 'font-weight: bold; color: #0f172a;');
+    if (url) {
+      console.log('Request Endpoint URL:', url);
+      console.log('HTTP Method:', method || 'POST');
+      if (typeof httpStatus !== 'undefined') console.log('HTTP Status Code:', httpStatus);
+      if (typeof duration !== 'undefined') console.log('Network Latency:', duration + 'ms');
+      console.log('Parsed Query String Parameters:', parseQueryParams(url));
+    }
+    console.log('Exact Raw Payload:', rawPayload || parameters || {});
+    console.groupEnd();
+
+    console.groupEnd();
+  }
+
   function sendToContentScript(type, payload = {}) {
     try {
       window.postMessage(
@@ -63,6 +240,17 @@
 
       if (pixelId) activePixelIds.add(pixelId);
 
+      logLiveDebuggerToConsole({
+        type: 'API_CALL',
+        eventName: 'openai::sdk_init',
+        pixelId: pixelId,
+        status: 'INITIALIZED',
+        statusMessage: 'Pixel initialized successfully on page',
+        parameters: config,
+        rawPayload: Array.from(args),
+        timestamp: Date.now()
+      });
+
       sendToContentScript('PIXEL_INIT_DETECTED', {
         pixelId: pixelId,
         config: config,
@@ -71,11 +259,22 @@
         rawArgs: Array.from(args)
       });
     } else if (command === 'measure') {
-      // oaiq("measure", eventName, properties, options)
       const eventName = args[1] || 'unknown';
       const properties = (args.length >= 3 && typeof args[2] === 'object' && args[2] !== null) ? args[2] : {};
       const options = (args.length >= 4 && typeof args[3] === 'object' && args[3] !== null) ? args[3] : {};
       const recipients = Array.from(activePixelIds);
+      const now = Date.now();
+
+      logLiveDebuggerToConsole({
+        type: 'API_CALL',
+        eventName: eventName,
+        pixelId: recipients[0] || null,
+        status: 'CAPTURED',
+        statusMessage: 'Event captured via window.oaiq("measure")',
+        parameters: properties,
+        rawPayload: Array.from(args),
+        timestamp: now
+      });
 
       sendToContentScript('PIXEL_EVENT_CAPTURED', {
         name: eventName,
@@ -89,11 +288,10 @@
         url: window.location.href,
         pathname: window.location.pathname,
         title: document.title,
-        timestamp: Date.now(),
+        timestamp: now,
         caller: 'oaiq("measure")'
       });
     } else if (command === 'measureSingle') {
-      // oaiq("measureSingle", pixelId, eventName, properties, options)
       const targetPixelId = args[1] || null;
       const eventName = args[2] || 'unknown';
       const properties = (args.length >= 4 && typeof args[3] === 'object' && args[3] !== null) ? args[3] : {};
@@ -101,6 +299,18 @@
 
       if (targetPixelId) activePixelIds.add(targetPixelId);
       const allPixels = Array.from(activePixelIds);
+      const now = Date.now();
+
+      logLiveDebuggerToConsole({
+        type: 'API_CALL',
+        eventName: eventName,
+        pixelId: targetPixelId,
+        status: 'CAPTURED',
+        statusMessage: 'Event captured via window.oaiq("measureSingle")',
+        parameters: properties,
+        rawPayload: Array.from(args),
+        timestamp: now
+      });
 
       sendToContentScript('PIXEL_EVENT_CAPTURED', {
         name: eventName,
@@ -115,13 +325,8 @@
         url: window.location.href,
         pathname: window.location.pathname,
         title: document.title,
-        timestamp: Date.now(),
+        timestamp: now,
         caller: 'oaiq("measureSingle")'
-      });
-    } else if (command === 'consent') {
-      sendToContentScript('PIXEL_CONSENT_DETECTED', {
-        consent: args[1],
-        timestamp: Date.now()
       });
     }
   }
@@ -129,7 +334,6 @@
   function hookOaiqFunction(oaiqFn) {
     if (!oaiqFn || oaiqFn.__OPENAI_INSPECTOR_WRAPPED__) return oaiqFn;
 
-    // Process any queued calls already in oaiq.q
     if (Array.isArray(oaiqFn.q)) {
       for (const callArgs of oaiqFn.q) {
         handleOaiqCall(callArgs);
@@ -141,7 +345,6 @@
       return oaiqFn.apply(this, arguments);
     };
 
-    // Copy properties like .q
     for (const key of Object.keys(oaiqFn)) {
       wrappedOaiq[key] = oaiqFn[key];
     }
@@ -151,12 +354,10 @@
     return wrappedOaiq;
   }
 
-  // Hook existing or future window.oaiq
   if (typeof window.oaiq !== 'undefined') {
     window.oaiq = hookOaiqFunction(window.oaiq);
   }
 
-  // Define getter/setter on window.oaiq so we intercept when scripts assign it later
   let internalOaiq = window.oaiq;
   try {
     Object.defineProperty(window, 'oaiq', {
@@ -177,14 +378,6 @@
   // 2. Outgoing Network Monitor (fetch, beacon, xhr)
   // ==========================================
 
-  const OPENAI_ENDPOINTS = [
-    'bzr.openai.com',
-    'bzrcdn.openai.com',
-    '/v1/sdk/events',
-    '/events?pid=',
-    'st=oaiq-web'
-  ];
-
   function isTargetNetworkUrl(url) {
     if (!url || typeof url !== 'string') return false;
     const clean = url.toLowerCase();
@@ -194,6 +387,46 @@
       clean.includes('/v1/sdk/events') ||
       (clean.includes('/events') && (clean.includes('pid=') || clean.includes('oaiq')))
     );
+  }
+
+  function processCapturedNetworkRequest(netData) {
+    const { url, method, status, payload, duration, timestamp } = netData;
+    const queryParams = parseQueryParams(url);
+    const pid = queryParams.pid || null;
+
+    if (payload && typeof payload === 'object' && Array.isArray(payload.events)) {
+      payload.events.forEach((evt, idx) => {
+        logLiveDebuggerToConsole({
+          type: 'NETWORK_REQUEST',
+          eventName: evt.type || 'unknown_event',
+          pixelId: pid,
+          status: status >= 200 && status < 300 ? '202 ACCEPTED' : ('STATUS ' + status),
+          statusMessage: 'Batch Item #' + (idx + 1) + ' of ' + payload.events.length + ' transmitted to bzr.openai.com',
+          parameters: evt.data || {},
+          rawPayload: evt,
+          url: url,
+          method: method,
+          httpStatus: status,
+          duration: duration,
+          timestamp: evt.timestamp_ms || timestamp
+        });
+      });
+    } else {
+      logLiveDebuggerToConsole({
+        type: 'NETWORK_REQUEST',
+        eventName: 'OpenAI Network Transmission',
+        pixelId: pid,
+        status: status >= 200 && status < 300 ? '202 ACCEPTED' : ('STATUS ' + status),
+        statusMessage: 'Direct payload sent to ' + url,
+        parameters: payload || {},
+        rawPayload: payload,
+        url: url,
+        method: method,
+        httpStatus: status,
+        duration: duration,
+        timestamp: timestamp
+      });
+    }
   }
 
   // Wrap window.fetch
@@ -214,7 +447,7 @@
 
         const start = Date.now();
         return originalFetch.apply(this, arguments).then((response) => {
-          sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+          const netData = {
             url: url,
             method: method,
             status: response.status,
@@ -222,10 +455,12 @@
             duration: Date.now() - start,
             timestamp: start,
             payload: payload
-          });
+          };
+          processCapturedNetworkRequest(netData);
+          sendToContentScript('NETWORK_REQUEST_CAPTURED', netData);
           return response;
         }).catch((err) => {
-          sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+          const netData = {
             url: url,
             method: method,
             status: 0,
@@ -234,7 +469,9 @@
             duration: Date.now() - start,
             timestamp: start,
             payload: payload
-          });
+          };
+          processCapturedNetworkRequest(netData);
+          sendToContentScript('NETWORK_REQUEST_CAPTURED', netData);
           throw err;
         });
       }
@@ -253,7 +490,7 @@
         } catch {
           payload = data;
         }
-        sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+        const netData = {
           url: url,
           method: 'POST',
           status: 200,
@@ -261,7 +498,9 @@
           timestamp: Date.now(),
           payload: payload,
           via: 'sendBeacon'
-        });
+        };
+        processCapturedNetworkRequest(netData);
+        sendToContentScript('NETWORK_REQUEST_CAPTURED', netData);
       }
       return originalSendBeacon.apply(this, arguments);
     };
@@ -290,7 +529,7 @@
 
         const start = Date.now();
         this.addEventListener('loadend', () => {
-          sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+          const netData = {
             url: url,
             method: this.__oaiq_method || 'POST',
             status: this.status,
@@ -299,17 +538,16 @@
             timestamp: start,
             payload: payload,
             via: 'xhr'
-          });
+          };
+          processCapturedNetworkRequest(netData);
+          sendToContentScript('NETWORK_REQUEST_CAPTURED', netData);
         });
       }
       return origSend.apply(this, arguments);
     };
   }
 
-  // ==========================================
-  // 3. SPA Route Navigation Observer
-  // ==========================================
-
+  // SPA navigation notification
   function notifyNavigation() {
     sendToContentScript('SPA_NAVIGATION_DETECTED', {
       url: window.location.href,
@@ -335,147 +573,11 @@
   window.addEventListener('popstate', notifyNavigation);
   window.addEventListener('hashchange', notifyNavigation);
 
-  // ==========================================
-  // 4. Google Tag Manager & dataLayer Hook
-  // ==========================================
-  function scanGtmContainers() {
-    const gtmIds = [];
-    if (typeof window.google_tag_manager === 'object' && window.google_tag_manager !== null) {
-      for (const key of Object.keys(window.google_tag_manager)) {
-        if (/^(?:GTM|G)-[A-Z0-9]+$/i.test(key)) {
-          gtmIds.push(key);
-        }
-      }
-    }
-    return gtmIds;
-  }
-
-  function handleDataLayerPush(args) {
-    if (!args || args.length === 0) return;
-    for (let i = 0; i < args.length; i++) {
-      const item = args[i];
-      if (typeof item === 'object' && item !== null) {
-        sendToContentScript('DATALAYER_EVENT_CAPTURED', {
-          event: item.event || 'dataLayer.push',
-          data: item,
-          timestamp: Date.now(),
-          gtmContainers: scanGtmContainers()
-        });
-      }
-    }
-  }
-
-  function hookDataLayer(dl) {
-    if (!dl || dl.__OPENAI_INSPECTOR_DL_WRAPPED__) return dl;
-    
-    // Process existing items
-    if (Array.isArray(dl)) {
-      for (let i = 0; i < dl.length; i++) {
-        if (typeof dl[i] === 'object' && dl[i] !== null) {
-          handleDataLayerPush([dl[i]]);
-        }
-      }
-    }
-
-    const origPush = dl.push;
-    dl.push = function () {
-      handleDataLayerPush(arguments);
-      return origPush.apply(this, arguments);
-    };
-    dl.__OPENAI_INSPECTOR_DL_WRAPPED__ = true;
-    return dl;
-  }
-
-  if (Array.isArray(window.dataLayer)) {
-    window.dataLayer = hookDataLayer(window.dataLayer);
-  }
-
-  let internalDataLayer = window.dataLayer;
-  try {
-    Object.defineProperty(window, 'dataLayer', {
-      configurable: true,
-      enumerable: true,
-      get: function () {
-        return internalDataLayer;
-      },
-      set: function (newDl) {
-        internalDataLayer = hookDataLayer(newDl);
-      }
-    });
-  } catch (err) {
-    console.debug('[OpenAI Pixel Inspector Bridge] dataLayer define error:', err);
-  }
-
-  // ==========================================
-  // 5. Server-Side Tracking Signal Scanner
-  // ==========================================
-  function scanServerSideSignals() {
-    const customLoaders = [];
-    const scriptSources = [];
-    const transportUrls = [];
-    let hasZarazGlobal = typeof window.zaraz !== 'undefined';
-
-    try {
-      const scripts = document.querySelectorAll('script[src]');
-      for (const s of scripts) {
-        const src = s.src || '';
-        if (src) {
-          scriptSources.push(src);
-          if (src.includes('gtm.js') || src.includes('gtag/js') || src.includes('zaraz') || src.includes('stape')) {
-            customLoaders.push(src);
-          }
-        }
-      }
-    } catch {}
-
-    if (Array.isArray(window.dataLayer)) {
-      for (const item of window.dataLayer) {
-        if (typeof item === 'object' && item !== null) {
-          for (const [k, v] of Object.entries(item)) {
-            if (typeof v === 'string' && (k === 'transport_url' || k === 'server_container_url' || k === 'server_url')) {
-              transportUrls.push(v);
-            }
-          }
-        }
-      }
-    }
-
-    return {
-      customLoaders: customLoaders,
-      scriptSources: scriptSources,
-      transportUrls: transportUrls,
-      hasZarazGlobal: hasZarazGlobal
-    };
-  }
-
-  // ==========================================
-  // 6. Message Listeners & Initial Handshake
-  // ==========================================
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window || !event.data || event.data.source !== CONTENT_SOURCE) {
-      return;
-    }
-    const { type } = event.data;
-    if (type === 'REQUEST_PAGE_STATE' || type === 'PING') {
-      sendToContentScript('PAGE_STATE_RESPONSE', {
-        url: window.location.href,
-        hasOaiqGlobal: typeof window.oaiq !== 'undefined',
-        isInitialized: isInitialized,
-        pixelIds: Array.from(activePixelIds),
-        gtmContainers: scanGtmContainers(),
-        serverSideSignals: scanServerSideSignals()
-      });
-    }
-  });
-
-  // Announce bridge ready
+  // Initial announcement
   sendToContentScript('BRIDGE_READY', {
     url: window.location.href,
     hasOaiqGlobal: typeof window.oaiq !== 'undefined',
     pixelIds: Array.from(activePixelIds),
-    isInitialized: isInitialized,
-    gtmContainers: scanGtmContainers(),
-    serverSideSignals: scanServerSideSignals()
+    isInitialized: isInitialized
   });
 })();

@@ -2,7 +2,7 @@
  * OpenAI Ads Pixel Inspector - Content Script (ISOLATED World)
  * 
  * Runs at document_start. Coordinates DOM detection, attribution parsing, 
- * page-bridge injection, On-Page HUD updates, and forwards events to background.
+ * page-bridge injection, and forwards events to the background service worker.
  */
 
 (function () {
@@ -13,27 +13,6 @@
 
   let isBridgeConnected = false;
 
-  function feedHudEvent(evt) {
-    if (window.__OPENAI_PIXEL_HUD_API__ && typeof window.__OPENAI_PIXEL_HUD_API__.addEvent === 'function') {
-      window.__OPENAI_PIXEL_HUD_API__.addEvent(evt);
-    }
-  }
-
-  function feedHudRequest(req) {
-    if (window.__OPENAI_PIXEL_HUD_API__ && typeof window.__OPENAI_PIXEL_HUD_API__.addNetworkRequest === 'function') {
-      window.__OPENAI_PIXEL_HUD_API__.addNetworkRequest(req);
-    }
-  }
-
-  function feedHudPixels(pixels) {
-    if (window.__OPENAI_PIXEL_HUD_API__ && typeof window.__OPENAI_PIXEL_HUD_API__.setPixels === 'function') {
-      window.__OPENAI_PIXEL_HUD_API__.setPixels(pixels);
-    }
-  }
-
-  /**
-   * DOM Script Detector (bundled inline for isolated script execution)
-   */
   function scanDOMForPixel() {
     const result = {
       detected: false,
@@ -79,9 +58,6 @@
     return result;
   }
 
-  /**
-   * Attribution & oppref Inspector (bundled inline for isolated script execution)
-   */
   function scanAttribution() {
     const attribution = {
       oppref: null,
@@ -140,9 +116,6 @@
     return attribution;
   }
 
-  /**
-   * Injects page-context bridge into MAIN world
-   */
   function injectBridge() {
     try {
       const script = document.createElement('script');
@@ -192,10 +165,6 @@
     const domScan = scanDOMForPixel();
     const attribution = scanAttribution();
 
-    if (domScan.pixelIds && domScan.pixelIds.length > 0) {
-      feedHudPixels(domScan.pixelIds);
-    }
-
     sendToBackground('FULL_PAGE_SCAN_RESULT', {
       domScan: domScan,
       attribution: attribution,
@@ -204,7 +173,6 @@
     });
   }
 
-  // Handle messages from Page Bridge
   window.addEventListener('message', (event) => {
     if (event.source !== window || !event.data || event.data.source !== BRIDGE_SOURCE) {
       return;
@@ -217,9 +185,6 @@
       case 'PAGE_STATE_RESPONSE':
       case 'PONG':
         isBridgeConnected = true;
-        if (payload?.pixelIds) {
-          feedHudPixels(payload.pixelIds);
-        }
         sendToBackground('BRIDGE_STATUS_UPDATE', {
           connected: true,
           details: payload
@@ -228,28 +193,15 @@
         break;
 
       case 'PIXEL_INIT_DETECTED':
-        if (payload?.allPixelIds) {
-          feedHudPixels(payload.allPixelIds);
-        }
-        feedHudEvent({
-          name: 'openai::sdk_init',
-          type: 'openai::sdk_init',
-          pixelId: payload.pixelId,
-          timestamp: payload.timestamp || Date.now(),
-          parameters: payload.config || {},
-          validation: { status: 'valid' }
-        });
         sendToBackground('PIXEL_INIT_DETECTED', payload);
         performFullScan();
         break;
 
       case 'PIXEL_EVENT_CAPTURED':
-        feedHudEvent(payload);
         sendToBackground('PIXEL_EVENT_CAPTURED', payload);
         break;
 
       case 'NETWORK_REQUEST_CAPTURED':
-        feedHudRequest(payload);
         sendToBackground('NETWORK_REQUEST_CAPTURED', payload);
         break;
 
@@ -267,7 +219,6 @@
     }
   });
 
-  // Handle messages from Popup or Background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) return false;
 
@@ -287,41 +238,12 @@
         sendResponse({ status: 'scan_executed' });
         break;
 
-      case 'TOGGLE_HUD':
-        if (window.__OPENAI_PIXEL_HUD_API__) {
-          window.__OPENAI_PIXEL_HUD_API__.toggleVisibility(message.visible);
-        }
-        sendResponse({ status: 'hud_toggled' });
-        break;
-
-      case 'HUD_PUSH_EVENT':
-        if (message.event) {
-          feedHudEvent(message.event);
-        }
-        sendResponse({ status: 'ok' });
-        break;
-
-      case 'CLEAR_HUD':
-        if (window.__OPENAI_PIXEL_HUD_API__) {
-          window.__OPENAI_PIXEL_HUD_API__.clear();
-        }
-        sendResponse({ status: 'ok' });
-        break;
-
       default:
         break;
     }
     return true;
   });
 
-  // Check stored preference for In-Page HUD visibility
-  chrome.storage?.local?.get(['inPageHudEnabled'], (res) => {
-    if (res && res.inPageHudEnabled === false && window.__OPENAI_PIXEL_HUD_API__) {
-      window.__OPENAI_PIXEL_HUD_API__.toggleVisibility(false);
-    }
-  });
-
-  // Initialize
   injectBridge();
 
   if (document.readyState === 'loading') {
