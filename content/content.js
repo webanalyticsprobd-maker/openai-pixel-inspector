@@ -147,7 +147,16 @@
     );
   }
 
+  function isContextValid() {
+    try {
+      return typeof chrome !== 'undefined' && !!chrome?.runtime?.id;
+    } catch {
+      return false;
+    }
+  }
+
   function sendToBackground(action, data = {}) {
+    if (!isContextValid()) return;
     try {
       chrome.runtime.sendMessage({
         action: action,
@@ -157,7 +166,7 @@
         data: data
       }).catch(() => {});
     } catch (err) {
-      console.debug('[OpenAI Pixel Inspector] Background message dispatch error:', err);
+      // Ignore extension context invalidation
     }
   }
 

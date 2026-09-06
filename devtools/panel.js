@@ -15,6 +15,7 @@
  *   9. 9 Structured Data Categories
  *   10. QA Request Validation Score
  *   11. Complete Raw Network Request (Headers, Query String, Payload, Event) with one-click copy buttons
+ * - Robust Extension Context Invalidation Handling & HTML Escaping
  */
 
 import { parseOpenAINetworkBatch } from '../network/request-parser.js';
@@ -23,7 +24,11 @@ let capturedEventsList = [];
 let selectedIndex = -1;
 let filterMode = 'all';
 let searchQuery = '';
-let currentTheme = localStorage.getItem('dt_theme') || (chrome.devtools?.panels?.themeName === 'dark' ? 'dark' : 'dark');
+let currentTheme = 'dark';
+
+try {
+  currentTheme = localStorage.getItem('dt_theme') || (chrome.devtools?.panels?.themeName === 'dark' ? 'dark' : 'dark');
+} catch {}
 
 const streamList = document.getElementById('dt-stream-list');
 const detailPane = document.getElementById('dt-detail-pane');
@@ -34,11 +39,34 @@ const themeBtnText = document.getElementById('theme-btn-text');
 const themeIconSlot = document.getElementById('theme-icon-slot');
 
 // ==========================================
+// Context & Escaping Helpers
+// ==========================================
+function isContextValid() {
+  try {
+    return typeof chrome !== 'undefined' && !!chrome?.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// ==========================================
 // Theme Management (Light vs Dark)
 // ==========================================
 function applyTheme(theme) {
   currentTheme = theme;
-  localStorage.setItem('dt_theme', theme);
+  try {
+    localStorage.setItem('dt_theme', theme);
+  } catch {}
   document.body.className = 'theme-' + theme;
   
   if (themeBtnText) {
@@ -148,27 +176,32 @@ function renderStream() {
     const rawQueryJson = JSON.stringify(query);
     const rawPayloadJson = JSON.stringify(parentReq.rawPayload || item.rawPayload || { obref: item.obref || "86d3c0fe-e6a0-4e67-945a-3edadc613539", events: [item] });
 
+    const safeUrl = escapeHtml(item.url || 'https://bzr.openai.com/v1/sdk/events');
+    const safeEventName = escapeHtml(eventName);
+    const safeQueryJson = escapeHtml(rawQueryJson);
+    const safePayloadJson = escapeHtml(rawPayloadJson);
+
     row.innerHTML = `
       <!-- Col 1: Status Code -->
       <div class="col-status">
-        <span class="dt-badge dt-badge-success">${status}</span>
+        <span class="dt-badge dt-badge-success">${escapeHtml(status)}</span>
       </div>
 
       <!-- Col 2: Request URL, Event Name, Timestamp -->
       <div class="col-request-info dt-cell-stack">
-        <span class="dt-event-name">${eventName}</span>
-        <span class="dt-url-text" title="${item.url || 'https://bzr.openai.com/v1/sdk/events'}">bzr.openai.com/v1/sdk/events</span>
-        <span class="dt-time-text">${timeStr} (${item.timestamp_ms || item.timestamp || Date.now()})</span>
+        <span class="dt-event-name">${safeEventName}</span>
+        <span class="dt-url-text" title="${safeUrl}">bzr.openai.com/v1/sdk/events</span>
+        <span class="dt-time-text">${escapeHtml(timeStr)} (${item.timestamp_ms || item.timestamp || Date.now()})</span>
       </div>
 
       <!-- Col 3: Query String Parameters Raw JSON -->
       <div class="col-query-raw">
-        <div class="dt-raw-snippet" title="Query String Raw JSON">${rawQueryJson}</div>
+        <div class="dt-raw-snippet" title="Query String Raw JSON">${safeQueryJson}</div>
       </div>
 
       <!-- Col 4: Request Payload Raw JSON -->
       <div class="col-payload-raw">
-        <div class="dt-raw-snippet" title="Captured Request Payload Raw JSON">${rawPayloadJson}</div>
+        <div class="dt-raw-snippet" title="Captured Request Payload Raw JSON">${safePayloadJson}</div>
       </div>
     `;
 
@@ -266,10 +299,10 @@ function renderDetail(item) {
     <div class="dt-inspector-banner">
       <div class="dt-banner-title-group">
         <span class="dt-badge ${cat.badge}">${cat.label}</span>
-        <span class="dt-banner-event-name">${eventName}</span>
+        <span class="dt-banner-event-name">${escapeHtml(eventName)}</span>
       </div>
       <div class="dt-banner-meta">
-        <span>HTTP: <b style="color: var(--accent-green-text);">${item.httpStatus || 202} Accepted</b></span>
+        <span>HTTP: <b style="color: var(--accent-green-text);">${escapeHtml(String(item.httpStatus || 202))} Accepted</b></span>
         <span>Time: <b>${formatTime(tsMs)}</b> (${tsMs} ms)</span>
       </div>
     </div>
@@ -285,7 +318,7 @@ function renderDetail(item) {
           In plain language, the browser told OpenAI Ads:
           <ul style="margin-left: 20px; margin-top: 6px; display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary);">
             <li>✓ The <b>OpenAI Web SDK initialized successfully</b> on this webpage.</li>
-            <li>✓ The visitor viewed: <span class="mono highlight-blue">${sourceUrl}</span> (Page context: ${urlContext.context}).</li>
+            <li>✓ The visitor viewed: <span class="mono highlight-blue">${escapeHtml(sourceUrl)}</span> (Page context: ${escapeHtml(urlContext.context)}).</li>
             <li>✓ The page-view event was <b>not marked as opted out</b> (<code class="mono">opt_out: false</code>).</li>
             <li>✓ The SDK generated an <b>SDK health diagnostic event</b>.</li>
             <li>✓ <b>0 events were dropped</b> across all processing phases.</li>
@@ -304,12 +337,12 @@ function renderDetail(item) {
       </div>
       <div class="dt-card-body">
         <div class="dt-flow-box">┌────────────────────────────────────────────────────────┐
-│ Visitor loads website: ${urlContext.domain.padEnd(31)} │
+│ Visitor loads website: ${escapeHtml(urlContext.domain).padEnd(31)} │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│ OpenAI Pixel / Web SDK loads (${(query.sv || '0.1.41').padEnd(23)}) │
+│ OpenAI Pixel / Web SDK loads (${escapeHtml(query.sv || '0.1.41').padEnd(23)}) │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ├── ⚙ SDK initialization event (openai::sdk_init)
@@ -381,17 +414,17 @@ function renderDetail(item) {
       <div class="dt-card-body dt-grid-2">
         <div class="dt-field-item">
           <span class="dt-field-label">Pixel ID (pid)</span>
-          <span class="dt-field-value mono highlight-blue">${query.pid || '4KjX1dq4C7HUw7EUpRXfMh'}</span>
+          <span class="dt-field-value mono highlight-blue">${escapeHtml(query.pid || '4KjX1dq4C7HUw7EUpRXfMh')}</span>
           <span class="dt-field-note">Unique OpenAI advertising data source identifier</span>
         </div>
         <div class="dt-field-item">
           <span class="dt-field-label">SDK Transport Type (st)</span>
-          <span class="dt-field-value mono">${query.st || 'oaiq-web'}</span>
+          <span class="dt-field-value mono">${escapeHtml(query.st || 'oaiq-web')}</span>
           <span class="dt-field-note">Identifies client web SDK transport layer</span>
         </div>
         <div class="dt-field-item">
           <span class="dt-field-label">SDK Version (sv)</span>
-          <span class="dt-field-value mono">${query.sv || '0.1.41'}</span>
+          <span class="dt-field-value mono">${escapeHtml(query.sv || '0.1.41')}</span>
           <span class="dt-field-note">Deployed OpenAI pixel library version</span>
         </div>
         <div class="dt-field-item">
@@ -416,7 +449,7 @@ function renderDetail(item) {
       <div class="dt-card-body dt-grid-2">
         <div class="dt-field-item">
           <span class="dt-field-label">Internal Reference (obref)</span>
-          <span class="dt-field-value mono highlight-amber">${obrefVal}</span>
+          <span class="dt-field-value mono highlight-amber">${escapeHtml(obrefVal)}</span>
           <span class="dt-field-note">Type: UUID-like identifier</span>
         </div>
         <div class="dt-field-item">
@@ -467,11 +500,11 @@ function renderDetail(item) {
             </div>
             <div class="dt-grid-3" style="margin-top: 8px;">
               <div><span class="dt-field-label">Event ID:</span> <span class="mono" style="font-size: 10px; color: var(--text-secondary);">50109a76-c43b-4124-aebe-5ca083d6ecef</span></div>
-              <div><span class="dt-field-label">Page URL:</span> <span class="mono highlight-blue" style="font-size: 10px;">${sourceUrl}</span></div>
+              <div><span class="dt-field-label">Page URL:</span> <span class="mono highlight-blue" style="font-size: 10px;">${escapeHtml(sourceUrl)}</span></div>
               <div><span class="dt-field-label">Opt Out:</span> <span class="mono highlight-green" style="font-size: 10px;">false (Event active)</span></div>
             </div>
             <div style="margin-top: 6px; font-size: 10.5px; color: var(--text-muted);">
-              <b>Page Context:</b> Domain: <span class="mono">${urlContext.domain}</span> | Path: <span class="mono">${urlContext.path}</span> | Context: <b>${urlContext.context}</b> (<i>Derived by extension</i>) | Secure: <b>✓ HTTPS</b>
+              <b>Page Context:</b> Domain: <span class="mono">${escapeHtml(urlContext.domain)}</span> | Path: <span class="mono">${escapeHtml(urlContext.path)}</span> | Context: <b>${escapeHtml(urlContext.context)}</b> (<i>Derived by extension</i>) | Secure: <b>✓ HTTPS</b>
             </div>
           </div>
 
@@ -636,21 +669,21 @@ function renderDetail(item) {
         <div style="margin-bottom: 12px;">
           <span class="dt-field-label" style="margin-bottom: 4px; display: block;">Request URL:</span>
           <div class="dt-code-wrapper">
-            <pre class="dt-code-block">${rawReqUrl}</pre>
+            <pre class="dt-code-block">${escapeHtml(rawReqUrl)}</pre>
           </div>
         </div>
 
         <div style="margin-bottom: 12px;">
           <span class="dt-field-label" style="margin-bottom: 4px; display: block;">Query String Parameters (Raw JSON):</span>
           <div class="dt-code-wrapper">
-            <pre class="dt-code-block">${rawQueryJson}</pre>
+            <pre class="dt-code-block">${escapeHtml(rawQueryJson)}</pre>
           </div>
         </div>
 
         <div style="margin-bottom: 12px;">
           <span class="dt-field-label" style="margin-bottom: 4px; display: block;">Request Payload (Captured Raw JSON):</span>
           <div class="dt-code-wrapper">
-            <pre class="dt-code-block" id="raw-payload-block">${rawPayloadJson}</pre>
+            <pre class="dt-code-block" id="raw-payload-block">${escapeHtml(rawPayloadJson)}</pre>
           </div>
         </div>
 
@@ -715,10 +748,13 @@ function pushNewEvent(evt) {
 }
 
 // 1. Long-Lived Port to Background Service Worker
+let port = null;
 const inspectedTabId = chrome.devtools?.inspectedWindow?.tabId;
-if (inspectedTabId) {
+
+function connectPort() {
+  if (!isContextValid() || !inspectedTabId) return;
   try {
-    const port = chrome.runtime.connect({ name: 'devtools-' + inspectedTabId });
+    port = chrome.runtime.connect({ name: 'devtools-' + inspectedTabId });
     port.onMessage.addListener((msg) => {
       if (msg.action === 'SYNC_STATE' && msg.state?.events) {
         msg.state.events.forEach(pushNewEvent);
@@ -726,57 +762,76 @@ if (inspectedTabId) {
         pushNewEvent(msg.event);
       }
     });
+    port.onDisconnect.addListener(() => {
+      port = null;
+    });
   } catch (err) {
-    console.debug('[OpenAI DevTools] Port connect error:', err);
+    port = null;
   }
 }
+
+connectPort();
 
 // 2. DevTools Network API Listener
 if (chrome.devtools && chrome.devtools.network) {
   chrome.devtools.network.onRequestFinished.addListener((request) => {
-    const url = request.request.url || '';
-    if (url.includes('bzr.openai.com') || url.includes('/v1/sdk/events') || url.includes('st=oaiq-web')) {
-      let postData = null;
-      try {
-        if (request.request.postData?.text) {
-          postData = JSON.parse(request.request.postData.text);
+    try {
+      const url = request.request?.url || '';
+      if (url.includes('bzr.openai.com') || url.includes('/v1/sdk/events') || url.includes('st=oaiq-web')) {
+        let postData = null;
+        try {
+          if (request.request.postData?.text) {
+            postData = JSON.parse(request.request.postData.text);
+          }
+        } catch {}
+
+        const netEntry = {
+          url: url,
+          method: request.request.method,
+          httpStatus: request.response?.status || 202,
+          timestamp: Date.now(),
+          rawPayload: postData
+        };
+
+        const parsedBatch = parseOpenAINetworkBatch(netEntry);
+        if (parsedBatch.events && parsedBatch.events.length > 0) {
+          parsedBatch.events.forEach(evt => {
+            evt.httpStatus = request.response?.status || 202;
+            evt.parentRequest = parsedBatch.parentRequest;
+            pushNewEvent(evt);
+          });
+        } else {
+          pushNewEvent(netEntry);
         }
-      } catch {}
-
-      const netEntry = {
-        url: url,
-        method: request.request.method,
-        httpStatus: request.response.status,
-        timestamp: Date.now(),
-        rawPayload: postData
-      };
-
-      const parsedBatch = parseOpenAINetworkBatch(netEntry);
-      if (parsedBatch.events && parsedBatch.events.length > 0) {
-        parsedBatch.events.forEach(evt => {
-          evt.httpStatus = request.response.status;
-          evt.parentRequest = parsedBatch.parentRequest;
-          pushNewEvent(evt);
-        });
-      } else {
-        pushNewEvent(netEntry);
       }
-    }
+    } catch {}
   });
 }
 
-// 3. Fallback Periodic Polling
+// 3. Fallback Periodic Polling with Context Guard
+let pollInterval = null;
+
 function loadInitialState() {
-  if (inspectedTabId) {
+  if (!isContextValid() || !inspectedTabId) {
+    if (pollInterval) clearInterval(pollInterval);
+    return;
+  }
+  try {
     chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: inspectedTabId }, (resp) => {
+      if (!isContextValid() || chrome.runtime.lastError) {
+        if (pollInterval) clearInterval(pollInterval);
+        return;
+      }
       if (resp?.state?.events && resp.state.events.length > 0) {
         resp.state.events.forEach(pushNewEvent);
       }
     });
+  } catch (err) {
+    if (pollInterval) clearInterval(pollInterval);
   }
 }
 
-setInterval(loadInitialState, 1500);
+pollInterval = setInterval(loadInitialState, 2000);
 
 // Event Listeners
 searchInput?.addEventListener('input', (e) => {
