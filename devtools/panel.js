@@ -828,32 +828,25 @@ if (chrome.devtools && chrome.devtools.network) {
   });
 }
 
-// 3. Fallback Periodic Polling with Context Guard
-let pollInterval = null;
-
+// 3. One-Time State Loader with Context Guard
 function loadInitialState() {
-  if (!isContextValid() || !inspectedTabId) {
-    if (pollInterval) clearInterval(pollInterval);
-    return;
-  }
+  if (!isContextValid() || !inspectedTabId) return;
   try {
-    chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: inspectedTabId }, (resp) => {
-      if (!isContextValid() || chrome.runtime.lastError) {
-        if (pollInterval) clearInterval(pollInterval);
-        return;
-      }
+    const res = chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: inspectedTabId }, (resp) => {
+      if (!isContextValid() || chrome.runtime?.lastError) return;
       if (resp?.state?.capturedRequests && resp.state.capturedRequests.length > 0) {
         resp.state.capturedRequests.forEach(pushNewBatch);
       } else if (resp?.state?.network && resp.state.network.length > 0) {
         resp.state.network.forEach(pushNewBatch);
       }
     });
+    if (res && typeof res.catch === 'function') {
+      res.catch(() => {});
+    }
   } catch (err) {
-    if (pollInterval) clearInterval(pollInterval);
+    // Ignore context invalidation during extension reloads
   }
 }
-
-pollInterval = setInterval(loadInitialState, 2000);
 
 // Event Listeners
 searchInput?.addEventListener('input', (e) => {
