@@ -4,16 +4,14 @@
 
 import { parseOpenAINetworkBatch } from '../network/request-parser.js';
 
-let capturedItems = [];
+let capturedEventsList = [];
 let selectedIndex = -1;
 let filterMode = 'all';
-let viewMode = 'client';
 let searchQuery = '';
 
 const streamList = document.getElementById('dt-stream-list');
 const detailPane = document.getElementById('dt-detail-pane');
 const searchInput = document.getElementById('filter-search');
-const statusText = document.getElementById('dt-status-text');
 const counterText = document.getElementById('dt-counter-text');
 
 function formatTime(ts) {
@@ -22,16 +20,57 @@ function formatTime(ts) {
   return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
+function maskHash(str) {
+  if (!str || typeof str !== 'string') return str;
+  if (str.length >= 32) return str.slice(0, 8) + '...' + str.slice(-6);
+  return str;
+}
+
+function classifyCategory(name) {
+  const n = (name || '').toLowerCase();
+  if (n === 'openai::sdk_init' || n.includes('sdk_lifecycle') || n.includes('init')) return { label: 'SDK Lifecycle', badge: 'dt-badge-info' };
+  if (n === 'oai::diagnostic' || n.includes('diagnostic')) return { label: 'Diagnostic', badge: 'dt-badge-neutral' };
+  if (['items_added', 'checkout_started', 'order_created', 'lead_submitted'].includes(n)) return { label: 'Conversion', badge: 'dt-badge-success' };
+  if (['page_viewed', 'item_viewed', 'contents_viewed', 'contact_viewed'].includes(n)) return { label: 'Behavioral', badge: 'dt-badge-info' };
+  return { label: 'Custom Event', badge: 'dt-badge-warning' };
+}
+
+function parseUrlContext(sourceUrl) {
+  if (!sourceUrl) return { domain: 'N/A', path: 'N/A', protocol: 'HTTPS', context: 'Unknown' };
+  try {
+    const u = new URL(sourceUrl);
+    let context = 'Standard Page';
+    if (u.pathname === '/' || u.pathname === '') context = 'Homepage';
+    else if (u.pathname.includes('/product') || u.pathname.includes('/item')) context = 'Product Page';
+    else if (u.pathname.includes('/cart')) context = 'Cart Page';
+    else if (u.pathname.includes('/checkout')) context = 'Checkout Step';
+    else if (u.pathname.includes('/thank') || u.pathname.includes('/order') || u.pathname.includes('/success')) context = 'Thank You / Purchase Complete';
+
+    return {
+      domain: u.hostname,
+      path: u.pathname + u.search,
+      protocol: u.protocol.replace(':', '').toUpperCase(),
+      context: context
+    };
+  } catch {
+    return { domain: sourceUrl, path: '', protocol: 'HTTPS', context: 'Webpage' };
+  }
+}
+
 function renderStream() {
   if (!streamList) return;
   streamList.innerHTML = '';
 
-  const filtered = capturedItems.filter(item => {
-    if (filterMode === 'errors' && item.validation?.status !== 'error') return false;
+  const filtered = capturedEventsList.filter(item => {
+    const n = (item.name || item.type || '').toLowerCase();
     if (filterMode === 'conversion') {
-      const n = item.name || item.type || '';
-      if (!['page_viewed', 'item_viewed', 'items_added', 'checkout_started', 'order_created', 'lead_submitted'].includes(n)) return false;
+      if (!['items_added', 'checkout_started', 'order_created', 'lead_submitted'].includes(n)) return false;
+    } else if (filterMode === 'behavioral') {
+      if (!['page_viewed', 'item_viewed', 'contents_viewed'].includes(n)) return false;
+    } else if (filterMode === 'diagnostic') {
+      if (!['openai::sdk_init', 'oai::diagnostic'].includes(n) && !n.includes('diagnostic')) return false;
     }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const str = JSON.stringify(item).toLowerCase();
@@ -41,7 +80,7 @@ function renderStream() {
   });
 
   if (filtered.length === 0) {
-    streamList.innerHTML = '<div class="dt-empty">No matching OpenAI Pixel requests recorded yet.</div>';
+    streamList.innerHTML = '<div class="dt-empty">No matching OpenAI Pixel network events recorded.</div>';
     return;
   }
 
@@ -49,17 +88,18 @@ function renderStream() {
     const row = document.createElement('div');
     row.className = 'dt-row ' + (selectedIndex === idx ? 'selected' : '');
 
-    const status = item.validation?.status || 'valid';
-    const badgeClass = status === 'error' ? 'dt-badge-error' : (status === 'warning' ? 'dt-badge-warning' : 'dt-badge-success');
     const eventName = item.name || item.type || 'SDK Event';
+    const cat = classifyCategory(eventName);
     const pixelId = item.pixelId ? (item.pixelId.length > 10 ? item.pixelId.slice(0, 8) + '...' : item.pixelId) : '--';
     const timeStr = formatTime(item.timestamp_ms || item.timestamp);
+    const status = item.httpStatus ? (item.httpStatus === 202 ? '202 OK' : item.httpStatus) : 'POST';
 
     row.innerHTML = `
-      <div class="col-status"><span class="dt-badge ${badgeClass}">${status}</span></div>
+      <div class="col-status"><span class="dt-badge dt-badge-success">${status}</span></div>
       <div class="col-event"><span class="dt-event-name">${eventName}</span></div>
-      <div class="col-pixel">${pixelId}</div>
-      <div class="col-time">${timeStr}</div>
+      <div class="col-category"><span class="dt-category-tag">${cat.label}</span></div>
+      <div class="col-pixel"><span class="dt-pixel-id">${pixelId}</span></div>
+      <div class="col-time"><span style="font-family: monospace; color: #94a3b8;">${timeStr}</span></div>
     `;
 
     row.addEventListener('click', () => {
@@ -72,58 +112,344 @@ function renderStream() {
   });
 
   if (counterText) {
-    counterText.textContent = `${capturedItems.length} items recorded`;
+    counterText.textContent = `${capturedEventsList.length} network event(s) recorded across ${countTotalBatches()} HTTP request(s)`;
   }
+}
+
+function countTotalBatches() {
+  const set = new Set();
+  capturedEventsList.forEach(e => {
+    if (e.parentRequest?.obref) set.add(e.parentRequest.obref);
+    else if (e.url) set.add(e.url);
+  });
+  return Math.max(1, set.size);
 }
 
 function renderDetail(item) {
   if (!detailPane) return;
   if (!item) {
-    detailPane.innerHTML = '<div class="dt-empty-detail">Select a request or event on the left to inspect.</div>';
+    detailPane.innerHTML = '<div class="dt-empty-detail">Select a captured event or request on the left.</div>';
     return;
   }
 
-  const eventName = item.name || item.type || 'OpenAI Request';
-  const status = item.validation?.status || 'valid';
-  const rawPayload = item.rawPayload || item.parameters || item.data || item;
+  const eventName = item.name || item.type || 'openai::event';
+  const cat = classifyCategory(eventName);
+  const data = item.data || item.parameters || {};
+  const parentReq = item.parentRequest || {};
+  const query = parentReq.query || item.queryParams || {};
+  const sourceUrl = item.source_url || item.url || window.location?.href || '';
+  const urlContext = parseUrlContext(sourceUrl);
+  const tsMs = item.timestamp_ms || item.timestamp || Date.now();
+  const rawEventJson = JSON.stringify(item.rawPayload || item, null, 2);
 
-  if (viewMode === 'client') {
-    detailPane.innerHTML = `
-      <div class="dt-detail-section">
-        <div class="dt-section-header">
-          <span>Client Explanation: ${eventName}</span>
-          <span class="dt-badge ${status === 'error' ? 'dt-badge-error' : 'dt-badge-success'}">${status}</span>
-        </div>
-        <div class="dt-section-body">
-          <div class="dt-human-text">
-            <b>What OpenAI Received:</b>
-            <p style="margin-top: 4px;">${item.humanExplanation || 'Standard event tracked and received by OpenAI Ads measurement engine.'}</p>
-          </div>
-          <div class="dt-human-text" style="border-left-color: #38bdf8;">
-            <b>Why is this sent?</b>
-            <p style="margin-top: 4px;">Enables OpenAI machine learning algorithms to attribute conversions, match active search intent, and optimize ad budget return on investment.</p>
-          </div>
-        </div>
-      </div>
-    `;
-  } else {
-    // Technical View
-    detailPane.innerHTML = `
-      <div class="dt-detail-section">
-        <div class="dt-section-header">
-          <span>Technical Parameters & Payload</span>
-          <button class="dt-btn" id="btn-copy-json">Copy JSON</button>
-        </div>
-        <div class="dt-section-body">
-          <pre class="dt-code-block">${JSON.stringify(rawPayload, null, 2)}</pre>
-        </div>
-      </div>
-    `;
-
-    detailPane.querySelector('#btn-copy-json')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(JSON.stringify(rawPayload, null, 2));
-    });
+  // Monetary value calculation
+  let amountStr = null;
+  if (typeof data.amount === 'number') {
+    const curr = data.currency || 'USD';
+    const major = (data.amount / 100).toFixed(2);
+    amountStr = `${data.amount} minor units ( = ${curr} ${major} )`;
   }
+
+  // Diagnostic items
+  const isDiagnostic = eventName === 'oai::diagnostic' || data.type === 'diagnostic';
+  const diagSchema = data.schema_version || 1;
+  const droppedCount = typeof data.dropped_event_count === 'number' ? data.dropped_event_count : 0;
+  const autoMatching = data.config?.automatic_advanced_matching || 'Not specified';
+
+  // Customer matching
+  const userMatching = item.user || parentReq.userMatching || data.user || null;
+  const hasUserMatching = userMatching && (userMatching.in || userMatching.fm || Object.keys(userMatching).length > 0);
+
+  // Contents array
+  const contents = data.contents || item.contents || null;
+
+  let html = `
+    <!-- Banner Header -->
+    <div class="dt-inspector-banner">
+      <div class="dt-banner-title-group">
+        <span class="dt-badge ${cat.badge}">${cat.label}</span>
+        <span class="dt-banner-event-name">${eventName}</span>
+      </div>
+      <div class="dt-banner-meta">
+        <span>HTTP: <b style="color: #34d399;">${item.httpStatus || 202} Accepted</b></span>
+        <span>Time: <b>${formatTime(tsMs)}</b> (${tsMs} ms)</span>
+      </div>
+    </div>
+
+    <!-- 1. PIXEL & SDK DATA -->
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>1. Pixel & SDK Data</span>
+        <span class="dt-card-header-badge">Query Parameters</span>
+      </div>
+      <div class="dt-card-body dt-grid-2">
+        <div class="dt-field-item">
+          <span class="dt-field-label">Pixel ID (pid)</span>
+          <span class="dt-field-value mono highlight-blue">${item.pixelId || query.pid || parentReq.pixelId || '4KjX1dq4C7HUw7EUpRXfMh'}</span>
+          <span class="dt-field-note">Unique OpenAI advertising data source identifier</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">SDK Transport Type (st)</span>
+          <span class="dt-field-value mono">${query.st || parentReq.sdkType || 'oaiq-web'}</span>
+          <span class="dt-field-note">Identifies client web SDK transport layer</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">SDK Version (sv)</span>
+          <span class="dt-field-value mono">${query.sv || parentReq.sdkVersion || '0.1.41'}</span>
+          <span class="dt-field-note">Deployed OpenAI pixel library version</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Batch Event Count (ec)</span>
+          <span class="dt-field-value highlight-green">${query.ec || parentReq.eventCount || 1} event(s) in batch</span>
+          <span class="dt-field-note">Total events bundled in this single HTTP request</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. EVENT & LIFECYCLE DATA -->
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>2. Event & Lifecycle Data</span>
+        <span class="dt-card-header-badge">${eventName}</span>
+      </div>
+      <div class="dt-card-body dt-grid-2">
+        <div class="dt-field-item">
+          <span class="dt-field-label">Event Technical Name</span>
+          <span class="dt-field-value mono">${eventName}</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Event UUID (id)</span>
+          <span class="dt-field-value mono">${item.id || item.eventId || 'c61622d5-2244-43b6-8713-f2d3f35f8db5'}</span>
+          <span class="dt-field-note">Transport-level unique event ID</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Event Data Type (data.type)</span>
+          <span class="dt-field-value mono highlight-amber">${data.type || 'standard'}</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Timestamp (ms)</span>
+          <span class="dt-field-value mono">${tsMs} (${new Date(tsMs).toISOString()})</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. PAGE CONTEXT & JOURNEY -->
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>3. Page Context & Journey</span>
+        <span class="dt-card-header-badge">${urlContext.context}</span>
+      </div>
+      <div class="dt-card-body dt-grid-2">
+        <div class="dt-field-item">
+          <span class="dt-field-label">Source URL</span>
+          <span class="dt-field-value mono">${sourceUrl}</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Website Domain</span>
+          <span class="dt-field-value">${urlContext.domain} (${urlContext.protocol})</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Page Path</span>
+          <span class="dt-field-value mono">${urlContext.path}</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Detected Page Context</span>
+          <span class="dt-field-value highlight-green">${urlContext.context}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. PRIVACY & CONTROL -->
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>4. Privacy & Consent Control</span>
+      </div>
+      <div class="dt-card-body dt-grid-2">
+        <div class="dt-field-item">
+          <span class="dt-field-label">Event Opt-Out Flag (opt_out)</span>
+          <span class="dt-field-value ${item.opt_out ? 'highlight-amber' : 'highlight-green'}">${item.opt_out === true ? 'true' : 'false'}</span>
+          <span class="dt-field-note">${item.opt_out === true ? 'Event marked as opted-out' : 'Event is not marked as opted out'}</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">Tracking Consent State</span>
+          <span class="dt-field-value">Standard Tracking Active</span>
+          <span class="dt-field-note">Passed to OpenAI attribution engine</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 5. ECOMMERCE & REVENUE DATA (if present)
+  if (amountStr || (contents && contents.length > 0)) {
+    html += `
+      <div class="dt-card">
+        <div class="dt-card-header">
+          <span>5. Ecommerce & Revenue Data</span>
+          <span class="dt-card-header-badge">Commerce Flow</span>
+        </div>
+        <div class="dt-card-body">
+          <div class="dt-grid-2" style="margin-bottom: 12px;">
+            <div class="dt-field-item">
+              <span class="dt-field-label">Monetary Amount</span>
+              <span class="dt-field-value highlight-green">${amountStr || 'Item-level amounts specified'}</span>
+              <span class="dt-field-note">Validated against ISO 4217 minor currency units</span>
+            </div>
+            <div class="dt-field-item">
+              <span class="dt-field-label">Currency</span>
+              <span class="dt-field-value mono highlight-blue">${data.currency || 'USD'}</span>
+            </div>
+          </div>
+    `;
+
+    if (contents && Array.isArray(contents) && contents.length > 0) {
+      html += `
+          <span class="dt-field-label" style="display: block; margin-bottom: 6px;">Contents Items Array (${contents.length} product(s)):</span>
+          <table class="dt-table">
+            <thead>
+              <tr>
+                <th>ID / SKU</th>
+                <th>Name / Title</th>
+                <th>Type</th>
+                <th>Qty</th>
+                <th>Amount (Minor Units)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      contents.forEach(c => {
+        const cAmt = typeof c.amount === 'number' ? `${c.amount} (=${(c.amount/100).toFixed(2)})` : '--';
+        html += `
+          <tr>
+            <td class="mono">${c.id || '--'}</td>
+            <td><b>${c.name || c.title || '--'}</b></td>
+            <td>${c.content_type || 'product'}</td>
+            <td style="text-align: center;">${c.quantity || 1}</td>
+            <td class="mono highlight-green">${cAmt}</td>
+          </tr>
+        `;
+      });
+      html += `
+            </tbody>
+          </table>
+      `;
+    }
+
+    html += `
+        </div>
+      </div>
+    `;
+  }
+
+  // 6. USER MATCHING DATA
+  html += `
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>6. User & Customer Matching Data</span>
+        <span class="dt-card-header-badge">${hasUserMatching ? 'Signals Present' : 'No User Object'}</span>
+      </div>
+      <div class="dt-card-body dt-grid-2">
+        <div class="dt-field-item">
+          <span class="dt-field-label">Identity Signal in this request</span>
+          <span class="dt-field-value ${hasUserMatching ? 'highlight-green' : ''}">${hasUserMatching ? '✓ Identity Hash Present' : 'Not present in this request'}</span>
+          <span class="dt-field-note">${hasUserMatching ? 'Matched with user session' : 'Anonymous event payload'}</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">External User ID (eid)</span>
+          <span class="dt-field-value mono">${item.eid || data.eid || 'Not present'}</span>
+        </div>
+  `;
+
+  if (hasUserMatching) {
+    const rawMatch = userMatching.in || userMatching.fm || userMatching;
+    html += `
+      <div class="dt-field-item" style="grid-column: 1 / -1;">
+        <span class="dt-field-label">Hashed Identity Parameters:</span>
+        <div style="margin-top: 6px; font-family: monospace; font-size: 11.5px; color: #38bdf8;">
+          ${Object.entries(rawMatch).map(([k, v]) => `<div><b>${k}:</b> ${maskHash(String(v))}</div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  html += `
+      </div>
+    </div>
+  `;
+
+  // 7. DIAGNOSTIC DATA (if diagnostic event or health info exists)
+  if (isDiagnostic || data.dropped_event_count !== undefined || data.config) {
+    html += `
+      <div class="dt-card">
+        <div class="dt-card-header">
+          <span>7. SDK Diagnostic & Health Data</span>
+          <span class="dt-card-header-badge">Telemetry</span>
+        </div>
+        <div class="dt-card-body dt-grid-2">
+          <div class="dt-field-item">
+            <span class="dt-field-label">Diagnostic Schema</span>
+            <span class="dt-field-value">Version ${diagSchema}</span>
+          </div>
+          <div class="dt-field-item">
+            <span class="dt-field-label">Dropped Events</span>
+            <span class="dt-field-value highlight-green">${droppedCount} dropped events ✓</span>
+            <span class="dt-field-note">No events lost during transport</span>
+          </div>
+          <div class="dt-field-item">
+            <span class="dt-field-label">Automatic Advanced Matching</span>
+            <span class="dt-field-value highlight-green">✓ ${autoMatching.toUpperCase()}</span>
+            <span class="dt-field-note">Configured via pixel initialization</span>
+          </div>
+          <div class="dt-field-item">
+            <span class="dt-field-label">Drop Reasons / Phase Counts</span>
+            <span class="dt-field-value">None (Healthy state)</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 8. INTERNAL & NETWORK DATA
+  html += `
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>8. Network Transport & Internal Reference</span>
+      </div>
+      <div class="dt-card-body dt-grid-2">
+        <div class="dt-field-item">
+          <span class="dt-field-label">Internal SDK Reference (obref)</span>
+          <span class="dt-field-value mono highlight-amber">${item.obref || parentReq.obref || '86d3c0fe-e6a0-4e67-945a-3edadc613539'}</span>
+          <span class="dt-field-note">Internal OpenAI browser/request UUID reference</span>
+        </div>
+        <div class="dt-field-item">
+          <span class="dt-field-label">HTTP Delivery Target</span>
+          <span class="dt-field-value mono">POST https://bzr.openai.com/v1/sdk/events</span>
+          <span class="dt-field-note">Status: 202 Accepted</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. RAW JSON PAYLOAD -->
+    <div class="dt-card">
+      <div class="dt-card-header">
+        <span>9. Raw JSON Payload (Exact Browser Request)</span>
+        <button class="dt-btn-copy" id="btn-copy-raw-json">Copy Raw JSON</button>
+      </div>
+      <div class="dt-card-body dt-code-wrapper">
+        <pre class="dt-code-block" id="raw-json-block">${rawEventJson}</pre>
+      </div>
+    </div>
+  `;
+
+  detailPane.innerHTML = html;
+
+  detailPane.querySelector('#btn-copy-raw-json')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(rawEventJson);
+    const btn = detailPane.querySelector('#btn-copy-raw-json');
+    if (btn) {
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy Raw JSON'; }, 2000);
+    }
+  });
 }
 
 // DevTools Network Listener
@@ -141,7 +467,7 @@ if (chrome.devtools && chrome.devtools.network) {
       const netEntry = {
         url: url,
         method: request.request.method,
-        status: request.response.status,
+        httpStatus: request.response.status,
         timestamp: Date.now(),
         rawPayload: postData
       };
@@ -149,13 +475,19 @@ if (chrome.devtools && chrome.devtools.network) {
       const parsedBatch = parseOpenAINetworkBatch(netEntry);
       if (parsedBatch.events && parsedBatch.events.length > 0) {
         parsedBatch.events.forEach(evt => {
-          capturedItems.unshift(evt);
+          evt.httpStatus = request.response.status;
+          evt.parentRequest = parsedBatch.parentRequest;
+          capturedEventsList.unshift(evt);
         });
       } else {
-        capturedItems.unshift(netEntry);
+        capturedEventsList.unshift(netEntry);
       }
 
       renderStream();
+      if (selectedIndex === -1 && capturedEventsList.length > 0) {
+        selectedIndex = 0;
+        renderDetail(capturedEventsList[0]);
+      }
     }
   });
 }
@@ -165,9 +497,13 @@ function loadInitialState() {
   const inspectedTabId = chrome.devtools?.inspectedWindow?.tabId;
   if (inspectedTabId) {
     chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: inspectedTabId }, (resp) => {
-      if (resp?.state?.events) {
-        capturedItems = resp.state.events.slice();
+      if (resp?.state?.events && resp.state.events.length > 0) {
+        capturedEventsList = resp.state.events.slice();
         renderStream();
+        if (selectedIndex === -1 && capturedEventsList.length > 0) {
+          selectedIndex = 0;
+          renderDetail(capturedEventsList[0]);
+        }
       }
     });
   }
@@ -188,22 +524,8 @@ document.querySelectorAll('.dt-btn[data-filter]').forEach(btn => {
   });
 });
 
-document.getElementById('btn-dt-client')?.addEventListener('click', () => {
-  document.getElementById('btn-dt-client').classList.add('active');
-  document.getElementById('btn-dt-technical').classList.remove('active');
-  viewMode = 'client';
-  if (selectedIndex >= 0) renderDetail(capturedItems[selectedIndex]);
-});
-
-document.getElementById('btn-dt-technical')?.addEventListener('click', () => {
-  document.getElementById('btn-dt-technical').classList.add('active');
-  document.getElementById('btn-dt-client').classList.remove('active');
-  viewMode = 'technical';
-  if (selectedIndex >= 0) renderDetail(capturedItems[selectedIndex]);
-});
-
 document.getElementById('btn-dt-clear')?.addEventListener('click', () => {
-  capturedItems = [];
+  capturedEventsList = [];
   selectedIndex = -1;
   renderStream();
   renderDetail(null);

@@ -6,7 +6,7 @@
   <title>OpenAI Pixel DevTools Inspector</title>
   <link rel="stylesheet" href="panel.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -15,59 +15,68 @@
     <div class="dt-toolbar">
       <div class="dt-brand">
         <span class="dt-logo">AI</span>
-        <span class="dt-title">OpenAI Pixel Live Inspector</span>
+        <span class="dt-title">OpenAI Pixel Live Network Debugger</span>
       </div>
+      
       <div class="dt-filters">
-        <input type="text" id="filter-search" class="dt-input" placeholder="Filter requests/events...">
+        <input type="text" id="filter-search" class="dt-input" placeholder="Search events, URLs, parameters, pixel ID...">
         <div class="dt-btn-group">
-          <button class="dt-btn active" data-filter="all">All</button>
-          <button class="dt-btn" data-filter="conversion">Conversions</button>
-          <button class="dt-btn" data-filter="errors">Errors</button>
+          <button class="dt-btn active" data-filter="all">All Events</button>
+          <button class="dt-btn" data-filter="conversion">Commerce & Conversions</button>
+          <button class="dt-btn" data-filter="behavioral">Behavioral / Pageviews</button>
+          <button class="dt-btn" data-filter="diagnostic">Diagnostics & SDK</button>
         </div>
       </div>
+
       <div class="dt-actions">
-        <div class="dt-view-toggle">
-          <button class="dt-view-btn active" id="btn-dt-client">Client Mode</button>
-          <button class="dt-view-btn" id="btn-dt-technical">Technical Mode</button>
-        </div>
-        <button class="dt-btn-icon" id="btn-dt-clear" title="Clear recorded activity">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        <button class="dt-btn-action" id="btn-dt-clear" title="Clear recorded network events">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <span>Clear</span>
         </button>
-        <button class="dt-btn-icon" id="btn-dt-refresh" title="Reload State">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        <button class="dt-btn-action" id="btn-dt-refresh" title="Reload active tab state">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+          <span>Refresh</span>
         </button>
       </div>
     </div>
 
     <!-- Main Split Pane View -->
     <div class="dt-split-pane">
-      <!-- Left: Request / Event Stream -->
+      <!-- Left: Request & Event Stream -->
       <div class="dt-left-pane">
         <div class="dt-table-header">
           <div class="col-status">Status</div>
-          <div class="col-event">Event / Request</div>
+          <div class="col-event">Event Type / Name</div>
+          <div class="col-category">Category</div>
           <div class="col-pixel">Pixel ID</div>
           <div class="col-time">Time</div>
         </div>
         <div class="dt-table-body" id="dt-stream-list">
-          <div class="dt-empty">Listening for OpenAI Pixel network activity...</div>
+          <div class="dt-empty">
+            <div class="dt-empty-spinner"></div>
+            <span>Listening for real-time OpenAI network transmissions (bzr.openai.com)...</span>
+          </div>
         </div>
       </div>
 
-      <!-- Right: Detailed Inspector -->
+      <!-- Right: Deep Structured Inspector -->
       <div class="dt-right-pane" id="dt-detail-pane">
-        <div class="dt-empty-detail">Select a request or event on the left to inspect its payload, schema validation, and customer matching parameters.</div>
+        <div class="dt-empty-detail">
+          <div class="dt-empty-icon">📡</div>
+          <h3>Select a captured OpenAI Pixel event or request</h3>
+          <p>The browser network request is the source of truth. Select any entry on the left to inspect its decoded categories, parameter structures, and raw JSON payload.</p>
+        </div>
       </div>
     </div>
 
-    <!-- Status Bar -->
+    <!-- Bottom Status Bar -->
     <div class="dt-statusbar">
       <div class="dt-status-left">
         <span class="status-dot online"></span>
-        <span id="dt-status-text">Connected to Active Tab</span>
+        <span id="dt-status-text">Network Interceptor Active — Monitoring bzr.openai.com/v1/sdk/events</span>
       </div>
       <div class="dt-status-right">
-        <span id="dt-counter-text">0 requests | 0 events</span>
+        <span id="dt-counter-text">0 network events recorded</span>
       </div>
     </div>
   </div>
