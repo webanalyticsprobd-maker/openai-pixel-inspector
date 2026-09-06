@@ -19,7 +19,7 @@
       </div>
       
       <div class="dt-filters">
-        <input type="text" id="filter-search" class="dt-input" placeholder="Search events, URLs, parameters, pixel ID...">
+        <input type="text" id="filter-search" class="dt-input" placeholder="Search events, URLs, parameters, pixel ID, payload JSON...">
         <div class="dt-btn-group">
           <button class="dt-btn active" data-filter="all">All Events</button>
           <button class="dt-btn" data-filter="conversion">Commerce & Conversions</button>
@@ -48,14 +48,13 @@
 
     <!-- Main Split Pane View -->
     <div class="dt-split-pane">
-      <!-- Left: Request & Event Stream -->
+      <!-- Left: Request Stream Multi-Column Grid -->
       <div class="dt-left-pane">
         <div class="dt-table-header">
           <div class="col-status">Status</div>
-          <div class="col-event">Event Type / Name</div>
-          <div class="col-category">Category</div>
-          <div class="col-pixel">Pixel ID</div>
-          <div class="col-time">Time</div>
+          <div class="col-request-info">Request URL / Event / Time</div>
+          <div class="col-query-raw">Query String Parameters (Raw JSON)</div>
+          <div class="col-payload-raw">Request Payload (Captured Raw JSON)</div>
         </div>
         <div class="dt-table-body" id="dt-stream-list">
           <div class="dt-empty">
@@ -65,12 +64,12 @@
         </div>
       </div>
 
-      <!-- Right: Deep Structured Inspector -->
+      <!-- Right: Deep Organized Explanation Column -->
       <div class="dt-right-pane" id="dt-detail-pane">
         <div class="dt-empty-detail">
           <div class="dt-empty-icon">📡</div>
           <h3>Select a captured OpenAI Pixel event or request</h3>
-          <p>The browser network request is the source of truth. Select any entry on the left to inspect its decoded categories, parameter structures, and raw JSON payload.</p>
+          <p>The browser network request is the source of truth. Select any entry on the left to inspect its complete organized explanation, request-level architecture, decoded parameters, and raw JSON payload.</p>
         </div>
       </div>
     </div>
