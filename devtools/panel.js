@@ -1,5 +1,11 @@
 /**
  * OpenAI Ads Pixel Inspector - Chrome DevTools Panel Controller
+ * 
+ * Features:
+ * - Real-time push listener from Background Service Worker
+ * - Auto-selects and auto-renders newly captured network events instantly
+ * - Light / Dark Theme toggle support with memory persistence
+ * - Deep 9-category structured inspector with exact raw JSON payload
  */
 
 import { parseOpenAINetworkBatch } from '../network/request-parser.js';
@@ -8,12 +14,45 @@ let capturedEventsList = [];
 let selectedIndex = -1;
 let filterMode = 'all';
 let searchQuery = '';
+let currentTheme = localStorage.getItem('dt_theme') || (chrome.devtools?.panels?.themeName === 'dark' ? 'dark' : 'dark');
 
 const streamList = document.getElementById('dt-stream-list');
 const detailPane = document.getElementById('dt-detail-pane');
 const searchInput = document.getElementById('filter-search');
 const counterText = document.getElementById('dt-counter-text');
+const btnTheme = document.getElementById('btn-dt-theme');
+const themeBtnText = document.getElementById('theme-btn-text');
+const themeIconSlot = document.getElementById('theme-icon-slot');
 
+// ==========================================
+// Theme Management (Light vs Dark)
+// ==========================================
+function applyTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('dt_theme', theme);
+  document.body.className = 'theme-' + theme;
+  
+  if (themeBtnText) {
+    themeBtnText.textContent = theme === 'dark' ? 'Light' : 'Dark';
+  }
+  if (themeIconSlot) {
+    if (theme === 'dark') {
+      themeIconSlot.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+    } else {
+      themeIconSlot.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
+  }
+}
+
+btnTheme?.addEventListener('click', () => {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
+
+applyTheme(currentTheme);
+
+// ==========================================
+// Formatting & Helpers
+// ==========================================
 function formatTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -57,6 +96,9 @@ function parseUrlContext(sourceUrl) {
   }
 }
 
+// ==========================================
+// Event Stream List Renderer
+// ==========================================
 function renderStream() {
   if (!streamList) return;
   streamList.innerHTML = '';
@@ -80,7 +122,7 @@ function renderStream() {
   });
 
   if (filtered.length === 0) {
-    streamList.innerHTML = '<div class="dt-empty">No matching OpenAI Pixel network events recorded.</div>';
+    streamList.innerHTML = '<div class="dt-empty"><div class="dt-empty-spinner"></div><span>Listening for OpenAI Pixel network activity...</span></div>';
     return;
   }
 
@@ -92,14 +134,14 @@ function renderStream() {
     const cat = classifyCategory(eventName);
     const pixelId = item.pixelId ? (item.pixelId.length > 10 ? item.pixelId.slice(0, 8) + '...' : item.pixelId) : '--';
     const timeStr = formatTime(item.timestamp_ms || item.timestamp);
-    const status = item.httpStatus ? (item.httpStatus === 202 ? '202 OK' : item.httpStatus) : 'POST';
+    const status = item.httpStatus ? (item.httpStatus === 202 ? '202 OK' : item.httpStatus) : '202 OK';
 
     row.innerHTML = `
       <div class="col-status"><span class="dt-badge dt-badge-success">${status}</span></div>
       <div class="col-event"><span class="dt-event-name">${eventName}</span></div>
       <div class="col-category"><span class="dt-category-tag">${cat.label}</span></div>
       <div class="col-pixel"><span class="dt-pixel-id">${pixelId}</span></div>
-      <div class="col-time"><span style="font-family: monospace; color: #94a3b8;">${timeStr}</span></div>
+      <div class="col-time"><span style="font-family: monospace; color: var(--text-secondary);">${timeStr}</span></div>
     `;
 
     row.addEventListener('click', () => {
@@ -125,10 +167,13 @@ function countTotalBatches() {
   return Math.max(1, set.size);
 }
 
+// ==========================================
+// Deep 9-Category Detail Renderer
+// ==========================================
 function renderDetail(item) {
   if (!detailPane) return;
   if (!item) {
-    detailPane.innerHTML = '<div class="dt-empty-detail">Select a captured event or request on the left.</div>';
+    detailPane.innerHTML = '<div class="dt-empty-detail"><div class="dt-empty-icon">📡</div><h3>Select a captured OpenAI Pixel event or request</h3><p>The browser network request is the source of truth. Select any entry on the left to inspect.</p></div>';
     return;
   }
 
@@ -171,7 +216,7 @@ function renderDetail(item) {
         <span class="dt-banner-event-name">${eventName}</span>
       </div>
       <div class="dt-banner-meta">
-        <span>HTTP: <b style="color: #34d399;">${item.httpStatus || 202} Accepted</b></span>
+        <span>HTTP: <b style="color: var(--accent-green-text);">${item.httpStatus || 202} Accepted</b></span>
         <span>Time: <b>${formatTime(tsMs)}</b> (${tsMs} ms)</span>
       </div>
     </div>
@@ -364,7 +409,7 @@ function renderDetail(item) {
     html += `
       <div class="dt-field-item" style="grid-column: 1 / -1;">
         <span class="dt-field-label">Hashed Identity Parameters:</span>
-        <div style="margin-top: 6px; font-family: monospace; font-size: 11.5px; color: #38bdf8;">
+        <div style="margin-top: 6px; font-family: monospace; font-size: 11.5px; color: var(--accent-blue-text);">
           ${Object.entries(rawMatch).map(([k, v]) => `<div><b>${k}:</b> ${maskHash(String(v))}</div>`).join('')}
         </div>
       </div>
@@ -452,7 +497,46 @@ function renderDetail(item) {
   });
 }
 
-// DevTools Network Listener
+// ==========================================
+// Real-Time Push Listener (No Refresh Needed!)
+// ==========================================
+function pushNewEvent(evt) {
+  if (!evt) return;
+  const id = evt.id || (evt.type + '_' + (evt.timestamp_ms || evt.timestamp));
+  const exists = capturedEventsList.some(e => (e.id && e.id === id) || (e.type === evt.type && (e.timestamp_ms || e.timestamp) === (evt.timestamp_ms || evt.timestamp)));
+  if (!exists) {
+    capturedEventsList.unshift(evt);
+    if (capturedEventsList.length > 500) capturedEventsList.pop();
+    
+    if (selectedIndex <= 0) {
+      selectedIndex = 0;
+      renderStream();
+      renderDetail(capturedEventsList[0]);
+    } else {
+      selectedIndex++;
+      renderStream();
+    }
+  }
+}
+
+// 1. Long-Lived Port to Background Service Worker
+const inspectedTabId = chrome.devtools?.inspectedWindow?.tabId;
+if (inspectedTabId) {
+  try {
+    const port = chrome.runtime.connect({ name: 'devtools-' + inspectedTabId });
+    port.onMessage.addListener((msg) => {
+      if (msg.action === 'SYNC_STATE' && msg.state?.events) {
+        msg.state.events.forEach(pushNewEvent);
+      } else if (msg.action === 'NEW_EVENT' && msg.event) {
+        pushNewEvent(msg.event);
+      }
+    });
+  } catch (err) {
+    console.debug('[OpenAI DevTools] Port connect error:', err);
+  }
+}
+
+// 2. DevTools Network API Listener
 if (chrome.devtools && chrome.devtools.network) {
   chrome.devtools.network.onRequestFinished.addListener((request) => {
     const url = request.request.url || '';
@@ -477,37 +561,27 @@ if (chrome.devtools && chrome.devtools.network) {
         parsedBatch.events.forEach(evt => {
           evt.httpStatus = request.response.status;
           evt.parentRequest = parsedBatch.parentRequest;
-          capturedEventsList.unshift(evt);
+          pushNewEvent(evt);
         });
       } else {
-        capturedEventsList.unshift(netEntry);
-      }
-
-      renderStream();
-      if (selectedIndex === -1 && capturedEventsList.length > 0) {
-        selectedIndex = 0;
-        renderDetail(capturedEventsList[0]);
+        pushNewEvent(netEntry);
       }
     }
   });
 }
 
-// Fetch Initial State from background
+// 3. Fallback Periodic Polling
 function loadInitialState() {
-  const inspectedTabId = chrome.devtools?.inspectedWindow?.tabId;
   if (inspectedTabId) {
     chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: inspectedTabId }, (resp) => {
       if (resp?.state?.events && resp.state.events.length > 0) {
-        capturedEventsList = resp.state.events.slice();
-        renderStream();
-        if (selectedIndex === -1 && capturedEventsList.length > 0) {
-          selectedIndex = 0;
-          renderDetail(capturedEventsList[0]);
-        }
+        resp.state.events.forEach(pushNewEvent);
       }
     });
   }
 }
+
+setInterval(loadInitialState, 1500);
 
 // Event Listeners
 searchInput?.addEventListener('input', (e) => {

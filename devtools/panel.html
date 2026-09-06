@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="theme-dark">
   <div class="devtools-container">
     <!-- Top Toolbar -->
     <div class="dt-toolbar">
@@ -29,6 +29,12 @@
       </div>
 
       <div class="dt-actions">
+        <button class="dt-btn-action" id="btn-dt-theme" title="Toggle Light / Dark Theme">
+          <span id="theme-icon-slot">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </span>
+          <span id="theme-btn-text">Light</span>
+        </button>
         <button class="dt-btn-action" id="btn-dt-clear" title="Clear recorded network events">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
           <span>Clear</span>
@@ -73,7 +79,7 @@
     <div class="dt-statusbar">
       <div class="dt-status-left">
         <span class="status-dot online"></span>
-        <span id="dt-status-text">Network Interceptor Active — Monitoring bzr.openai.com/v1/sdk/events</span>
+        <span id="dt-status-text">Live Interceptor Connected — Monitoring bzr.openai.com/v1/sdk/events</span>
       </div>
       <div class="dt-status-right">
         <span id="dt-counter-text">0 network events recorded</span>

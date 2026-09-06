@@ -1,3 +1,42 @@
+
+// =========================================================================
+// DevTools Long-Lived Port Connection Manager (Real-time push streaming)
+// =========================================================================
+const devtoolsPorts = new Map(); // tabId -> Set of ports
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name.startsWith('devtools-')) {
+    const tabId = parseInt(port.name.replace('devtools-', ''), 10);
+    if (!devtoolsPorts.has(tabId)) {
+      devtoolsPorts.set(tabId, new Set());
+    }
+    devtoolsPorts.get(tabId).add(port);
+
+    const state = getOrCreateTabState(tabId);
+    port.postMessage({ action: 'SYNC_STATE', state: state });
+
+    port.onDisconnect.addListener(() => {
+      const ports = devtoolsPorts.get(tabId);
+      if (ports) {
+        ports.delete(port);
+        if (ports.size === 0) devtoolsPorts.delete(tabId);
+      }
+    });
+  }
+});
+
+function broadcastToDevTools(tabId, message) {
+  if (!tabId || tabId < 0) return;
+  const ports = devtoolsPorts.get(tabId);
+  if (ports) {
+    for (const port of ports) {
+      try {
+        port.postMessage(message);
+      } catch {}
+    }
+  }
+}
+
 /**
  * OpenAI Ads Pixel Inspector - Background Service Worker (Manifest V3)
  * 
@@ -269,6 +308,9 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         state.networkSummary = store.getNetworkActivitySummary();
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
+        if (batch.events && batch.events.length > 0) {
+          batch.events.forEach(evt => broadcastToDevTools(tabId, { action: 'NEW_EVENT', event: evt }));
+        }
       }
     },
     { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] },
