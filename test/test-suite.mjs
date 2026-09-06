@@ -25,6 +25,7 @@ import {
 } from '../validators/parameter-validator.js';
 import { validateEvent } from '../validators/event-validator.js';
 import { normalizeEvent } from '../core/normalizer.js';
+import { EventStore } from '../core/event-store.js';
 
 let totalTests = 0;
 let passedTests = 0;
@@ -206,6 +207,57 @@ test('Detects and reconciles item-level vs event-level value discrepancy', () =>
   assert.notStrictEqual(eventAmount, calculatedItemTotal);
   const diffMajor = (eventAmount - calculatedItemTotal) / 100;
   assert.strictEqual(diffMajor, 346.50);
+});
+
+// 12. 4-Layer Validation Classification & RuleSource Verification
+test('Tags validation findings with exact ruleSource metadata', () => {
+  // Schema error: non-integer amount
+  const evt = normalizeEvent({
+    name: 'order_created',
+    data: { type: 'contents', amount: 842.59, currency: 'EUR' }
+  });
+  assert.strictEqual(evt.validation.errorsCount > 0, true);
+  const schemaFinding = evt.validation.findings.find(f => f.code === 'PARAM_AMOUNT_NOT_INTEGER');
+  assert.strictEqual(schemaFinding.ruleSource, 'Official OpenAI Schema');
+});
+
+// 13. Currency Minor Unit Zero-Decimal Handling (JPY)
+test('Decodes zero-decimal minor unit currencies correctly (JPY/KRW)', () => {
+  assert.strictEqual(getCurrencyDecimalPlaces('JPY'), 0);
+  assert.strictEqual(getCurrencyDecimalPlaces('KRW'), 0);
+});
+
+// 14. EventStore Debugger QA Score Calculation
+test('Calculates Debugger QA Score with 6-layer breakdown', () => {
+  const store = new EventStore();
+  const res = store.calculateDebuggerQAScore();
+  assert.strictEqual(res.score > 0, true);
+  assert.strictEqual(res.breakdown.network.max, 15);
+  assert.strictEqual(res.breakdown.schema.max, 30);
+  assert.strictEqual(res.breakdown.requiredFields.max, 20);
+  assert.strictEqual(res.breakdown.consistency.max, 15);
+  assert.strictEqual(res.breakdown.matching.max, 10);
+  assert.strictEqual(res.breakdown.diagnostics.max, 10);
+});
+
+// 15. Strict Separation of obref and oppref
+test('Strictly separates obref from oppref attribution', () => {
+  const rawBatch = {
+    url: 'https://bzr.openai.com/v1/sdk/events?pid=4KjX1dq4C7HUw7EUpRXfMh&st=oaiq-web&sv=0.1.41',
+    method: 'POST',
+    status: 202,
+    rawPayload: {
+      obref: 'browser-sdk-uuid-1234',
+      events: [
+        { type: 'page_viewed', id: 'evt_1', data: { type: 'contents' } }
+      ]
+    }
+  };
+
+  const parsed = parseOpenAINetworkBatch(rawBatch);
+  assert.strictEqual(parsed.parentRequest.obref, 'browser-sdk-uuid-1234');
+  assert.strictEqual(parsed.openAIRequest.transport.obref, 'browser-sdk-uuid-1234');
+  assert.strictEqual(parsed.openAIRequest.query.pid, '4KjX1dq4C7HUw7EUpRXfMh');
 });
 
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);

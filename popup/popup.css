@@ -2551,3 +2551,172 @@ body[data-theme="light"] .json-null {
   display: inline-block;
   margin-bottom: 4px;
 }
+
+/* ==========================================================================
+   Live Debugger & Network Request Inspector Enhancements
+   ========================================================================== */
+.view-mode-toggle {
+  display: inline-flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1px;
+  margin-right: 4px;
+}
+
+.view-mode-btn {
+  background: transparent;
+  border: none;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.view-mode-btn:hover {
+  color: var(--text-main);
+}
+
+.view-mode-btn.active {
+  background: var(--accent-brand);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Network Request Card Deep Inspector */
+.net-req-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  transition: border-color 0.15s ease;
+}
+
+.net-req-card:hover {
+  border-color: var(--border-strong);
+}
+
+.net-req-header {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: var(--bg-card);
+  user-select: none;
+}
+
+.net-req-header:hover {
+  background: var(--bg-subtle);
+}
+
+.net-req-method {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-brand-subtle);
+  color: var(--accent-brand);
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--accent-brand-border);
+}
+
+.net-req-url {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-main);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net-req-body {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+
+.net-event-chip {
+  display: inline-block;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-main);
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+
+.net-req-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.net-req-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.net-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.btn-net-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-net-copy:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--border-strong);
+}
+
+.btn-net-copy.copied {
+  background: var(--status-success) !important;
+  color: #fff !important;
+  border-color: var(--status-success) !important;
+}
+
+.derived-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--accent-brand);
+  background: var(--accent-brand-subtle);
+  border: 1px solid var(--accent-brand-border);
+  padding: 1px 3px;
+  border-radius: 2px;
+  margin-left: 3px;
+  font-weight: 500;
+}
+

@@ -7,6 +7,12 @@
  * - Multiple Pixels:   https://developers.openai.com/ads/multiple-pixels
  */
 
+export const SCHEMA_METADATA = {
+  validatorRulesVersion: '2026.09.06',
+  docsSource: 'OpenAI Ads Documentation',
+  docsCheckedAt: '2026-09-06'
+};
+
 export const OFFICIAL_DOCS = {
   MEASUREMENT_PIXEL: 'https://developers.openai.com/ads/measurement-pixel',
   COMMERCE_FLOW: 'https://developers.openai.com/ads/measurement-pixel#commerce-flow',
@@ -14,9 +20,102 @@ export const OFFICIAL_DOCS = {
   MULTIPLE_PIXELS: 'https://developers.openai.com/ads/multiple-pixels'
 };
 
+/**
+ * Central Official Event Schema Registry
+ * Explicitly maps documented browser-relevant event names to category and expected dataType.
+ */
+export const EVENT_REGISTRY = {
+  // Behavioral / Page
+  page_viewed: {
+    friendlyName: 'Page Viewed',
+    category: 'behavioral',
+    dataType: 'contents',
+    icon: '👁'
+  },
+  contents_viewed: {
+    friendlyName: 'Contents Viewed',
+    category: 'content',
+    dataType: 'contents',
+    icon: '📦'
+  },
+  // Ecommerce Funnel
+  items_added: {
+    friendlyName: 'Items Added',
+    category: 'ecommerce',
+    dataType: 'contents',
+    icon: '🛒'
+  },
+  checkout_started: {
+    friendlyName: 'Checkout Started',
+    category: 'ecommerce',
+    dataType: 'contents',
+    icon: '🧾'
+  },
+  order_created: {
+    friendlyName: 'Order Created',
+    category: 'ecommerce',
+    dataType: 'contents',
+    icon: '💰'
+  },
+  // Lead Generation
+  lead_created: {
+    friendlyName: 'Lead Created',
+    category: 'leadgen',
+    dataType: 'customer_action',
+    icon: '📩'
+  },
+  registration_completed: {
+    friendlyName: 'Registration Completed',
+    category: 'leadgen',
+    dataType: 'customer_action',
+    icon: '👤'
+  },
+  appointment_scheduled: {
+    friendlyName: 'Appointment Scheduled',
+    category: 'leadgen',
+    dataType: 'customer_action',
+    icon: '📅'
+  },
+  // Subscription
+  subscription_created: {
+    friendlyName: 'Subscription Created',
+    category: 'subscription',
+    dataType: 'plan_enrollment',
+    icon: '💳'
+  },
+  trial_started: {
+    friendlyName: 'Trial Started',
+    category: 'subscription',
+    dataType: 'plan_enrollment',
+    icon: '🧪'
+  },
+  // Custom
+  custom: {
+    friendlyName: 'Custom Event',
+    category: 'custom',
+    dataType: 'custom',
+    icon: '⚡'
+  },
+  // System / SDK Internal Lifecycle
+  'openai::sdk_init': {
+    friendlyName: 'OpenAI SDK Initialized',
+    category: 'system',
+    dataType: 'sdk_lifecycle',
+    icon: '⚙'
+  },
+  // Diagnostic
+  'oai::diagnostic': {
+    friendlyName: 'SDK Diagnostic',
+    category: 'diagnostic',
+    dataType: 'diagnostic',
+    icon: '🩺'
+  }
+};
+
 export const CURRENCY_DECIMAL_PLACES = {
   // 0 Decimal Places (Multiplier: 10^0 = 1)
   'JPY': 0, 'KRW': 0, 'VND': 0, 'CLP': 0, 'ISK': 0, 'PYG': 0, 'RWF': 0, 'UGX': 0,
+  'BIF': 0, 'DJF': 0, 'GNF': 0, 'KMF': 0, 'MGA': 0, 'XAF': 0, 'XOF': 0, 'XPF': 0,
   
   // 3 Decimal Places (Multiplier: 10^3 = 1000)
   'KWD': 3, 'BHD': 3, 'OMR': 3, 'JOD': 3, 'TND': 3, 'IQD': 3, 'LYD': 3,
@@ -48,10 +147,30 @@ export function getCurrencySmallestUnitName(currencyCode) {
     case 'CHF': return 'rappen/centimes';
     case 'KWD': case 'BHD': case 'IQD': case 'JOD': return 'fils';
     case 'OMR': return 'baisa';
-    case 'JPY': return 'yen (0 decimals)';
-    case 'KRW': return 'won (0 decimals)';
-    case 'VND': return 'dong (0 decimals)';
+    case 'JPY': return 'yen (0 minor units)';
+    case 'KRW': return 'won (0 minor units)';
+    case 'VND': return 'dong (0 minor units)';
     default: return `${getCurrencyDecimalPlaces(clean)} decimal minor units`;
+  }
+}
+
+/**
+ * Decodes integer minor currency units into human-readable major currency amount.
+ * Respects ISO 4217 currency exponent table.
+ */
+export function decodeMoney(amount, currencyCode = 'USD') {
+  if (typeof amount !== 'number' || isNaN(amount)) return null;
+  const decimals = getCurrencyDecimalPlaces(currencyCode);
+  const major = amount / Math.pow(10, decimals);
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode.toUpperCase(),
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(major);
+  } catch {
+    return `${currencyCode.toUpperCase()} ${major.toFixed(decimals)}`;
   }
 }
 
@@ -397,3 +516,105 @@ export const CUSTOM_EVENT_RULES = {
   recommendedCase: 'lowercase',
   reservedWords: new Set(['init', 'consent', 'config', 'set', 'get', 'measure', 'measureSingle', ...STANDARD_EVENT_NAMES])
 };
+
+/**
+ * Deterministic Explanations Dictionary: "Why is this data sent?"
+ * Provides reliable, client-friendly definitions for all observed fields without AI hallucinations.
+ */
+export const FIELD_EXPLANATIONS = {
+  amount: {
+    label: 'Amount',
+    meaning: 'The monetary value associated with this event in the currency\'s integer minor unit.',
+    docNote: 'OpenAI requires monetary amounts as integers in minor currency units (e.g. cents, pence, fils).'
+  },
+  currency: {
+    label: 'Currency',
+    meaning: 'Tells OpenAI how to interpret the amount (ISO 4217 currency code).',
+    docNote: 'Required whenever amount is sent.'
+  },
+  source_url: {
+    label: 'Source URL',
+    meaning: 'The exact webpage address where this event occurred.',
+    docNote: 'Automatically captured by the OpenAI web SDK for context and conversion URL attribution.'
+  },
+  referrer_url: {
+    label: 'Referrer URL',
+    meaning: 'The previous or referring page the visitor navigated from before triggering this event.',
+    docNote: 'Enables OpenAI to construct the user journey path leading to the action.'
+  },
+  event_id: {
+    label: 'Event Deduplication ID',
+    meaning: 'Advertiser-supplied identifier used to deduplicate identical conversions sent via both browser Pixel and Conversions API.',
+    docNote: 'Deduplication uses Pixel ID + Event Name + event_id.'
+  },
+  id: {
+    label: 'Transport Event ID',
+    meaning: 'Unique UUID identifier assigned to this individual event object by the browser SDK.',
+    docNote: 'Internal observed identifier in the transport batch.'
+  },
+  opt_out: {
+    label: 'Event Opt-Out Flag',
+    meaning: 'Specifies whether this specific event is opted out of future user-level personalization.',
+    docNote: 'opt_out=false indicates the event is not opted out of personalization. It does not prove complete CMP consent.'
+  },
+  obref: {
+    label: 'Internal Browser Reference (obref)',
+    meaning: 'Internal OpenAI browser/request reference (UUID-like identifier).',
+    docNote: 'Generated internally by the OpenAI SDK per request batch. Not to be confused with oppref or event_id.'
+  },
+  oppref: {
+    label: 'OpenAI Click Reference (oppref)',
+    meaning: 'OpenAI ad-click identifier passed in the landing URL parameter for conversion attribution.',
+    docNote: 'Documented 30-day attribution token stored in the __oppref first-party cookie.'
+  },
+  pid: {
+    label: 'Pixel ID (pid)',
+    meaning: 'Identifies the specific OpenAI Ads pixel / data source receiving this event.',
+    docNote: 'Found in the query string (pid=) and matches the advertiser account.'
+  },
+  st: {
+    label: 'SDK Transport Type (st)',
+    meaning: 'Identifies the web SDK or transport protocol (e.g. oaiq-web).',
+    docNote: 'Standard query parameter sent by official web SDK.'
+  },
+  sv: {
+    label: 'SDK Version (sv)',
+    meaning: 'The version of the OpenAI web SDK running in the visitor browser (e.g. 0.1.41).',
+    docNote: 'Helps diagnose feature support and library versioning.'
+  },
+  t: {
+    label: 'Request Timestamp (t)',
+    meaning: 'The Unix epoch timestamp in milliseconds when the browser dispatched the HTTP POST batch.',
+    docNote: 'Compared against event timestamps to calculate network batching delay.'
+  },
+  ec: {
+    label: 'Event Count (ec)',
+    meaning: 'The total number of individual event objects batched inside this network request.',
+    docNote: 'Should strictly match the length of the events[] array.'
+  },
+  contents: {
+    label: 'Contents Array',
+    meaning: 'List of specific products or content items involved in the user action.',
+    docNote: 'Supports id, name, content_type, quantity, amount, and currency in the browser JS Pixel.'
+  },
+  eid: {
+    label: 'External Identity Signal (eid)',
+    meaning: 'Hashed or pseudonymous identity matching signal for advertising attribution.',
+    docNote: 'Enables OpenAI to match conversions to ad clicks without exposing raw customer details.'
+  },
+  automatic_advanced_matching: {
+    label: 'Automatic Advanced Matching',
+    meaning: 'SDK configuration indicating whether browser-side automatic hashing and normalization is active.',
+    docNote: 'Reported in oai::diagnostic events under config.automatic_advanced_matching.'
+  }
+};
+
+export function getFieldExplanation(fieldName) {
+  if (!fieldName) return null;
+  const clean = fieldName.toLowerCase().trim();
+  return FIELD_EXPLANATIONS[clean] || {
+    label: fieldName,
+    meaning: 'Observed technical parameter in the OpenAI network request payload.',
+    docNote: 'Preserved exactly as captured from the browser network stream.'
+  };
+}

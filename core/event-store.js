@@ -20,6 +20,8 @@ export class EventStore {
     this.events = [];
     this.duplicates = [];
     this.parentRequests = [];
+    this.capturedRequests = []; // Stores up to 500 normalized OpenAIRequest containers
+    this.maxRequests = 500;
     this.sdkEvents = [];
     this.latestDiagnostics = null;
     this.latestUserMatching = null;
@@ -32,6 +34,7 @@ export class EventStore {
     this.events = [];
     this.duplicates = [];
     this.parentRequests = [];
+    this.capturedRequests = [];
     this.sdkEvents = [];
     this.latestDiagnostics = null;
     this.latestUserMatching = null;
@@ -71,6 +74,15 @@ export class EventStore {
 
     if (batch.parentRequest) {
       this.parentRequests.push(batch.parentRequest);
+      if (batch.openAIRequest) {
+        this.capturedRequests.push(batch.openAIRequest);
+        if (this.capturedRequests.length > this.maxRequests) {
+          this.capturedRequests.shift();
+        }
+      }
+      if (this.parentRequests.length > this.maxRequests) {
+        this.parentRequests.shift();
+      }
       const pid = batch.parentRequest.pixelId || 'DEFAULT_PIXEL';
       this.registerPixelId(pid, batch.parentRequest.timestamp);
       if (this.pixelRegistry[pid]) {
@@ -341,6 +353,19 @@ export class EventStore {
               reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
             };
           }
+
+          // Rapid burst frequency detection (e.g. 3+ events within 1000ms)
+          if (timeDiff < 1000) {
+            const burstCount = this.events.filter(e => e.name === newEvent.name && e.pixelId === newEvent.pixelId && Math.abs(newEvent.timestamp - e.timestamp) < 1000).length;
+            if (burstCount >= 2) {
+              return {
+                type: 'same_pixel_duplicate',
+                event: existing,
+                timeDiff: timeDiff,
+                reason: `Rapid burst frequency anomaly: ${burstCount + 1} "${newEvent.name}" events fired within 1000ms`
+              };
+            }
+          }
         } else {
           // Multi-Pixel Delivery Check (Same user action broadcast to different Pixel IDs)
           return {
@@ -472,6 +497,105 @@ export class EventStore {
       warningsCount: warningCount,
       totalEvents: this.events.length,
       networkRequestsCount: this.parentRequests.length
+    };
+  }
+
+  /**
+   * Calculates comprehensive Debugger QA Score (0-100) with categorical breakdown:
+   * - Network Layer (15 pts)
+   * - Schema Validity (30 pts)
+   * - Required Fields (20 pts)
+   * - Payload Consistency (15 pts)
+   * - Customer Matching (10 pts)
+   * - Diagnostics Telemetry (10 pts)
+   */
+  calculateDebuggerQAScore() {
+    let networkScore = 15;
+    let schemaScore = 30;
+    let requiredScore = 20;
+    let consistencyScore = 15;
+    let matchingScore = 10;
+    let diagnosticsScore = 10;
+
+    const breakdown = {
+      network: { score: 15, max: 15, deductions: [] },
+      schema: { score: 30, max: 30, deductions: [] },
+      requiredFields: { score: 20, max: 20, deductions: [] },
+      consistency: { score: 15, max: 15, deductions: [] },
+      matching: { score: 10, max: 10, deductions: [] },
+      diagnostics: { score: 10, max: 10, deductions: [] }
+    };
+
+    // 1. Network Layer checks
+    for (const req of this.capturedRequests) {
+      if (req.validation?.errors?.length > 0) {
+        networkScore = Math.max(0, networkScore - 5);
+        breakdown.network.deductions.push(...req.validation.errors);
+      }
+    }
+    breakdown.network.score = networkScore;
+
+    // 2. Events checks across Schema, Required, Consistency
+    for (const evt of this.events) {
+      const findings = evt.validation?.findings || [];
+      for (const f of findings) {
+        if (f.ruleSource === 'Official OpenAI Schema' || f.category === 'schema' || f.category === 'shape') {
+          if (f.severity === 'error') {
+            schemaScore = Math.max(0, schemaScore - 8);
+            breakdown.schema.deductions.push(f.message);
+          } else {
+            schemaScore = Math.max(0, schemaScore - 3);
+            breakdown.schema.deductions.push(f.message);
+          }
+        } else if (f.category === 'required_field' || f.code?.includes('REQUIRED')) {
+          requiredScore = Math.max(0, requiredScore - 5);
+          breakdown.requiredFields.deductions.push(f.message);
+        } else if (f.ruleSource === 'Debugger Semantic QA' || f.category === 'consistency' || f.category === 'item_sum') {
+          consistencyScore = Math.max(0, consistencyScore - 4);
+          breakdown.consistency.deductions.push(f.message);
+        } else if (f.ruleSource === 'Heuristic QA' || f.category === 'duplicate' || f.category === 'burst') {
+          consistencyScore = Math.max(0, consistencyScore - 3);
+          breakdown.consistency.deductions.push(f.message);
+        }
+      }
+    }
+    breakdown.schema.score = schemaScore;
+    breakdown.requiredFields.score = requiredScore;
+    breakdown.consistency.score = consistencyScore;
+
+    // 3. User Matching Coverage
+    if (this.latestUserMatching && this.latestUserMatching.detected) {
+      if (this.latestUserMatching.rawPiiDetected) {
+        matchingScore = Math.max(0, matchingScore - 10);
+        breakdown.matching.deductions.push('Unmasked raw PII detected in user matching envelope');
+      } else {
+        const hasEmail = this.latestUserMatching.fields?.some(f => f.type === 'email');
+        const hasPhoneOrEid = this.latestUserMatching.fields?.some(f => f.type === 'phone' || f.type === 'external_id');
+        if (!hasEmail && !hasPhoneOrEid) {
+          matchingScore = 4;
+          breakdown.matching.deductions.push('Weak matching: No email, phone, or external ID provided');
+        }
+      }
+    } else {
+      matchingScore = 5; // Neutral baseline when not provided
+    }
+    breakdown.matching.score = matchingScore;
+
+    // 4. SDK Diagnostics
+    if (this.latestDiagnostics) {
+      const dropped = this.latestDiagnostics.droppedEventCount || 0;
+      if (dropped > 0) {
+        diagnosticsScore = Math.max(0, diagnosticsScore - Math.min(10, dropped * 2));
+        breakdown.diagnostics.deductions.push(`${dropped} events dropped by SDK`);
+      }
+    }
+    breakdown.diagnostics.score = diagnosticsScore;
+
+    const totalScore = networkScore + schemaScore + requiredScore + consistencyScore + matchingScore + diagnosticsScore;
+
+    return {
+      score: Math.max(0, Math.min(100, totalScore)),
+      breakdown: breakdown
     };
   }
 

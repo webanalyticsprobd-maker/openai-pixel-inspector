@@ -1,13 +1,11 @@
 /**
  * OpenAI Ads Pixel Inspector - Comprehensive Event Validation Engine
  * 
- * Validates events against the central OpenAI Pixel schema.
- * Emits standardized finding objects with machine-readable codes and precise payload paths.
- * 
- * Three Validation Layers:
- * - Layer A: Official Documentation Schema Errors (Wrong type, missing required, string amounts)
- * - Layer B: Semantic Commerce Consistency Warnings (100x major/minor unit mismatches)
- * - Layer C: Internal SDK Information & Telemetry
+ * Four Validation Layers:
+ * - Level 1: Network Validation (HTTPS, POST, 202 Accepted, PID presence, ec count matching)
+ * - Level 2: Official Schema Validation (Rule Source: "Official OpenAI Schema")
+ * - Level 3: Data Quality & Consistency (Rule Source: "Debugger Semantic QA")
+ * - Level 4: Implementation & Journey QA (Rule Source: "Heuristic QA")
  */
 
 import {
@@ -15,27 +13,18 @@ import {
   CAPI_ONLY_EVENTS,
   STANDARD_EVENT_ALIASES,
   OPENAI_PIXEL_SCHEMA,
+  EVENT_REGISTRY,
   CUSTOM_EVENT_RULES,
   OFFICIAL_DOCS,
+  SCHEMA_METADATA,
+  decodeMoney,
   getCurrencyDecimalPlaces
 } from './schemas.js';
 import { validateParameter, validateContentsArray } from './parameter-validator.js';
 import { scanForPii } from './pii-scanner.js';
 
 export function formatHumanReadableAmount(amount, currencyCode = 'USD') {
-  if (typeof amount !== 'number' || isNaN(amount)) return null;
-  const decimals = getCurrencyDecimalPlaces(currencyCode);
-  const major = amount / Math.pow(10, decimals);
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currencyCode.toUpperCase(),
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals
-    }).format(major);
-  } catch {
-    return `${currencyCode.toUpperCase()} ${major.toFixed(decimals)}`;
-  }
+  return decodeMoney(amount, currencyCode);
 }
 
 export function validateEvent(event) {
@@ -56,10 +45,11 @@ export function validateEvent(event) {
 
   const findings = [];
 
-  // 1. Event Name Validation
+  // LEVEL 2: OFFICIAL SCHEMA VALIDATION - Event Name Validation
   if (isCapiOnlyEvent) {
     findings.push({
       severity: 'warning',
+      ruleSource: 'Official OpenAI Schema',
       category: 'event',
       eventName: eventName,
       pixelId: pixelId,
@@ -75,6 +65,7 @@ export function validateEvent(event) {
   } else if (!isStandardJsEvent && canonicalName !== 'custom') {
     findings.push({
       severity: 'error',
+      ruleSource: 'Official OpenAI Schema',
       category: 'event',
       eventName: eventName,
       pixelId: pixelId,
@@ -91,8 +82,29 @@ export function validateEvent(event) {
     });
   }
 
-  // Retrieve schema rules
+  // Retrieve schema rules from registry
+  const registryEntry = EVENT_REGISTRY[canonicalName] || (isCustomEvent ? EVENT_REGISTRY['custom'] : null);
   const schema = OPENAI_PIXEL_SCHEMA.events[canonicalName] || (isCustomEvent ? OPENAI_PIXEL_SCHEMA.events['custom'] : null);
+  const expectedDataType = registryEntry?.dataType || schema?.dataShape || 'contents';
+
+  // LEVEL 2: Mandatory Event Data-Type Check (HARD RULE)
+  if (parameters.type !== undefined && parameters.type !== expectedDataType) {
+    findings.push({
+      severity: 'error',
+      ruleSource: 'Official OpenAI Schema',
+      category: 'shape',
+      eventName: eventName,
+      pixelId: pixelId,
+      path: 'data.type',
+      code: 'EVENT_DATA_TYPE_MISMATCH',
+      title: 'Event Data Type Mismatch',
+      detected: String(parameters.type),
+      expected: expectedDataType,
+      message: `Event "${eventName}" expects data.type: "${expectedDataType}", but received "${parameters.type}".`,
+      documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+      recommendedFix: `Set data.type to "${expectedDataType}" in the event payload.`
+    });
+  }
 
   if (schema) {
     // 2. Validate Required Parameters
@@ -101,6 +113,7 @@ export function validateEvent(event) {
         if (parameters[reqField] === undefined || parameters[reqField] === null) {
           findings.push({
             severity: 'error',
+            ruleSource: 'Official OpenAI Schema',
             category: 'parameter',
             eventName: eventName,
             pixelId: pixelId,
@@ -123,6 +136,7 @@ export function validateEvent(event) {
         if (parameters[recField] === undefined || parameters[recField] === null || parameters[recField] === '') {
           findings.push({
             severity: 'warning',
+            ruleSource: 'Official OpenAI Schema',
             category: 'parameter',
             eventName: eventName,
             pixelId: pixelId,
@@ -139,7 +153,7 @@ export function validateEvent(event) {
       }
     }
 
-    // 4. Validate Conditional Requirements (e.g. currency required when amount is sent)
+    // 4. Validate Conditional Requirements (currency required whenever amount is sent)
     if (schema.conditionalRequired && Array.isArray(schema.conditionalRequired)) {
       for (const cond of schema.conditionalRequired) {
         if (parameters[cond.when] !== undefined && parameters[cond.when] !== null) {
@@ -147,6 +161,7 @@ export function validateEvent(event) {
             if (parameters[reqField] === undefined || parameters[reqField] === null || parameters[reqField] === '') {
               findings.push({
                 severity: 'error',
+                ruleSource: 'Official OpenAI Schema',
                 category: 'parameter',
                 eventName: eventName,
                 pixelId: pixelId,
@@ -154,7 +169,7 @@ export function validateEvent(event) {
                 code: 'PARAM_AMOUNT_MISSING_CURRENCY',
                 title: `Missing Required "${reqField}"`,
                 detected: 'undefined',
-                expected: '3-letter ISO 4217 currency code (e.g. "USD")',
+                expected: '3-letter ISO 4217 currency code (e.g. "USD", "EUR")',
                 message: cond.message || `Parameter "${reqField}" is required when "${cond.when}" is provided.`,
                 documentationReference: schema.docUrl || OFFICIAL_DOCS.SUPPORTED_EVENTS,
                 recommendedFix: `Add "${reqField}" to event parameters whenever "${cond.when}" is sent.`
@@ -162,6 +177,27 @@ export function validateEvent(event) {
             }
           }
         }
+      }
+    }
+
+    // Amount minor currency unit integer check
+    if (parameters.amount !== undefined && parameters.amount !== null) {
+      if (typeof parameters.amount === 'number' && !Number.isInteger(parameters.amount)) {
+        findings.push({
+          severity: 'error',
+          ruleSource: 'Official OpenAI Schema',
+          category: 'parameter',
+          eventName: eventName,
+          pixelId: pixelId,
+          path: 'amount',
+          code: 'PARAM_AMOUNT_NOT_INTEGER',
+          title: 'Invalid Amount Format (Expected Integer Minor Units)',
+          detected: parameters.amount,
+          expected: 'Integer minor units without decimals (e.g. 84259)',
+          message: `OpenAI requires monetary amounts to be integers in the currency's minor unit. Received ${parameters.amount}, likely intended ${Math.round(parameters.amount * 100)}.`,
+          documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
+          recommendedFix: `Convert amount to integer minor units (multiply major currency by 100 for 2-decimal currencies e.g. EUR/USD).`
+        });
       }
     }
 
@@ -175,6 +211,7 @@ export function validateEvent(event) {
       if (!allowedSet.has(paramKey) && !isCustomEvent) {
         findings.push({
           severity: 'warning',
+          ruleSource: 'Official OpenAI Schema',
           category: 'parameter',
           eventName: eventName,
           pixelId: pixelId,
@@ -194,6 +231,7 @@ export function validateEvent(event) {
         const finding = validateParameter(paramKey, paramVal, paramRule, parameters, eventName, '');
         if (finding) {
           finding.pixelId = pixelId;
+          if (!finding.ruleSource) finding.ruleSource = 'Official OpenAI Schema';
           findings.push(finding);
         }
       }
@@ -204,11 +242,12 @@ export function validateEvent(event) {
       const contentsFindings = validateContentsArray(parameters.contents, parameters, eventName);
       contentsFindings.forEach((f) => {
         f.pixelId = pixelId;
+        if (!f.ruleSource) f.ruleSource = 'Official OpenAI Schema';
         findings.push(f);
       });
     }
 
-    // 7. Layer B: Semantic Commerce Consistency Check (e.g. 100x Major/Minor Unit Mismatch)
+    // 7. LEVEL 3: DATA QUALITY & SEMANTIC QA (Reconciliation between Item Totals and Event Amount)
     if (
       typeof parameters.amount === 'number' &&
       Array.isArray(parameters.contents) &&
@@ -218,31 +257,81 @@ export function validateEvent(event) {
       const mult = (curr === 'JPY' || curr === 'KRW' || curr === 'VND') ? 1 : ((curr === 'KWD' || curr === 'BHD') ? 1000 : 100);
 
       const firstItem = parameters.contents[0];
+      const qty = Number(firstItem.quantity) || 1;
+
+      // Check single-item unit mismatch (e.g. data.amount = 35000, contents[0].amount = 350)
       if (
         parameters.contents.length === 1 &&
         typeof firstItem.amount === 'number'
       ) {
-        const qty = Number(firstItem.quantity) || 1;
         const itemLineTotal = firstItem.amount * qty;
 
         if (mult > 1 && itemLineTotal * mult === parameters.amount) {
-          const eventFormatted = formatHumanReadableAmount(parameters.amount, curr);
-          const itemFormatted = formatHumanReadableAmount(firstItem.amount, curr);
+          const eventFormatted = decodeMoney(parameters.amount, curr);
+          const itemFormatted = decodeMoney(firstItem.amount, curr);
+          const expectedItemMinor = Math.round(parameters.amount / qty);
+          const expectedFormatted = decodeMoney(expectedItemMinor, curr);
 
           findings.push({
             severity: 'warning',
+            ruleSource: 'Debugger Semantic QA',
             category: 'commerce_consistency',
             eventName: eventName,
             pixelId: pixelId,
             path: 'contents[0].amount',
             code: 'COMMERCE_VALUE_MISMATCH',
-            title: 'Possible Major/Minor Currency Unit Mismatch',
+            title: 'Value Mismatch (Major/Minor Unit Discrepancy)',
             detected: `Event amount: ${parameters.amount} (${eventFormatted}), Item amount: ${firstItem.amount} (${itemFormatted}) × ${qty}`,
-            expected: `Consistent minor units across event and item levels (e.g. ${Math.round(parameters.amount / qty)} per item)`,
-            message: `The item total (${firstItem.amount} × ${qty} = ${itemLineTotal}) is inconsistent with the event amount (${parameters.amount}) by exactly ${mult}x. The event amount appears to use minor units (${eventFormatted}) while the item amount may have been provided in major units (${itemFormatted}).`,
+            expected: `Consistent minor units across event and item levels (${expectedItemMinor} = ${expectedFormatted} per item)`,
+            message: `Event total (${eventFormatted}) differs from item total (${itemFormatted}) by exactly ${mult}x. The event amount uses minor units while contents[0].amount appears to have been passed in major units. Review contents[0].amount = ${firstItem.amount}.`,
             documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
-            recommendedFix: `Confirm whether contents[0].amount should be ${Math.round(parameters.amount / qty)} (${formatHumanReadableAmount(Math.round(parameters.amount / qty), curr)}).`
+            recommendedFix: `Confirm whether contents[0].amount should be ${expectedItemMinor} (${expectedFormatted}).`
           });
+        } else if (itemLineTotal !== parameters.amount) {
+          const eventFormatted = decodeMoney(parameters.amount, curr);
+          const itemFormatted = decodeMoney(itemLineTotal, curr);
+
+          findings.push({
+            severity: 'warning',
+            ruleSource: 'Debugger Semantic QA',
+            category: 'commerce_consistency',
+            eventName: eventName,
+            pixelId: pixelId,
+            path: 'contents[0].amount',
+            code: 'COMMERCE_LINE_TOTAL_MISMATCH',
+            title: 'Item Total Differs from Event Total',
+            detected: `Item total: ${itemLineTotal} (${itemFormatted}), Event amount: ${parameters.amount} (${eventFormatted})`,
+            expected: `Item line total to equal event amount`,
+            message: `The calculated item line total (${firstItem.amount} × ${qty} = ${itemLineTotal}) does not match the event-level amount (${parameters.amount}).`,
+            documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
+            recommendedFix: `Verify product unit prices and quantities match the total order value.`
+          });
+        }
+      } else if (parameters.contents.length > 1) {
+        // Multi-item total sum check
+        const allHaveAmounts = parameters.contents.every(item => typeof item.amount === 'number');
+        if (allHaveAmounts) {
+          const sumItems = parameters.contents.reduce((sum, item) => sum + (item.amount * (Number(item.quantity) || 1)), 0);
+          if (sumItems !== parameters.amount) {
+            const eventFormatted = decodeMoney(parameters.amount, curr);
+            const sumFormatted = decodeMoney(sumItems, curr);
+
+            findings.push({
+              severity: 'warning',
+              ruleSource: 'Debugger Semantic QA',
+              category: 'commerce_consistency',
+              eventName: eventName,
+              pixelId: pixelId,
+              path: 'contents',
+              code: 'COMMERCE_MULTI_ITEM_SUM_MISMATCH',
+              title: 'Multi-Item Sum Differs from Event Total',
+              detected: `Calculated items sum: ${sumItems} (${sumFormatted}), Event amount: ${parameters.amount} (${eventFormatted})`,
+              expected: `SUM(item amount × quantity) equals event total`,
+              message: `The sum of all items in contents[] (${sumFormatted}) differs from event amount (${eventFormatted}).`,
+              documentationReference: OFFICIAL_DOCS.COMMERCE_FLOW,
+              recommendedFix: `Reconcile individual item amounts with the parent event amount.`
+            });
+          }
         }
       }
     }
@@ -254,6 +343,7 @@ export function validateEvent(event) {
     if (!customName) {
       findings.push({
         severity: 'error',
+        ruleSource: 'Official OpenAI Schema',
         category: 'event',
         eventName: eventName,
         pixelId: pixelId,
@@ -270,6 +360,7 @@ export function validateEvent(event) {
       if (customName.length > CUSTOM_EVENT_RULES.maxLength) {
         findings.push({
           severity: 'warning',
+          ruleSource: 'Official OpenAI Schema',
           category: 'event',
           eventName: eventName,
           pixelId: pixelId,
@@ -286,6 +377,7 @@ export function validateEvent(event) {
       if (!CUSTOM_EVENT_RULES.validPattern.test(customName)) {
         findings.push({
           severity: 'warning',
+          ruleSource: 'Official OpenAI Schema',
           category: 'event',
           eventName: eventName,
           pixelId: pixelId,
@@ -293,15 +385,33 @@ export function validateEvent(event) {
           code: 'CUSTOM_NAME_INVALID_FORMAT',
           title: 'Invalid Custom Event Name Format',
           detected: customName,
-          expected: 'Alphanumeric, underscores, or hyphens',
-          message: 'Custom event name must start and end with an alphanumeric character and contain only alphanumeric, underscores, or hyphens.',
+          expected: 'Alphanumeric, underscores, or hyphens (must start and end with letter or number)',
+          message: 'Custom event name must start and end with a letter or number and contain only letters, numbers, underscores, or hyphens (no spaces or punctuation).',
           documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
           recommendedFix: 'Use clean identifiers such as "quote_requested" or "video_completed".'
+        });
+      }
+      if (customName !== customName.toLowerCase()) {
+        findings.push({
+          severity: 'warning',
+          ruleSource: 'Official OpenAI Schema',
+          category: 'event',
+          eventName: eventName,
+          pixelId: pixelId,
+          path: 'options.custom_event_name',
+          code: 'CUSTOM_NAME_UPPERCASE',
+          title: 'Custom Event Name Contains Uppercase',
+          detected: customName,
+          expected: 'Lowercase snake_case format',
+          message: `Custom event names are officially recommended to be lowercase: "${customName.toLowerCase()}".`,
+          documentationReference: OFFICIAL_DOCS.SUPPORTED_EVENTS,
+          recommendedFix: `Rename custom event to "${customName.toLowerCase()}".`
         });
       }
       if (STANDARD_JS_EVENTS.includes(customName) && customName !== 'custom') {
         findings.push({
           severity: 'warning',
+          ruleSource: 'Official OpenAI Schema',
           category: 'event',
           eventName: eventName,
           pixelId: pixelId,
@@ -322,6 +432,7 @@ export function validateEvent(event) {
   if (options.event_id) {
     findings.push({
       severity: 'info',
+      ruleSource: 'Official OpenAI Schema',
       category: 'deduplication',
       eventName: eventName,
       pixelId: pixelId,
@@ -342,6 +453,7 @@ export function validateEvent(event) {
     detectedPii.forEach((pii) => {
       findings.push({
         severity: pii.severity || 'warning',
+        ruleSource: 'Official OpenAI Schema',
         category: 'privacy',
         eventName: eventName,
         pixelId: pixelId,
@@ -399,7 +511,7 @@ export function validateEvent(event) {
     status: finalStatus,
     isCustom: isCustomEvent,
     canonicalName: canonicalName,
-    dataShape: schema ? schema.dataShape : 'contents',
+    dataShape: expectedDataType,
     findings: findings,
     issues: findings.filter((f) => f.severity === 'error' || f.severity === 'warning'),
     parameterResults: parameterResults,
@@ -407,8 +519,9 @@ export function validateEvent(event) {
     warningsCount: warningsCount,
     infoCount: infoCount,
     humanReadableAmounts: {
-      eventAmount: typeof parameters.amount === 'number' ? formatHumanReadableAmount(parameters.amount, parameters.currency || 'USD') : null,
-      items: Array.isArray(parameters.contents) ? parameters.contents.map(i => typeof i.amount === 'number' ? formatHumanReadableAmount(i.amount, i.currency || parameters.currency || 'USD') : null) : []
+      eventAmount: typeof parameters.amount === 'number' ? decodeMoney(parameters.amount, parameters.currency || 'USD') : null,
+      items: Array.isArray(parameters.contents) ? parameters.contents.map(i => typeof i.amount === 'number' ? decodeMoney(i.amount, i.currency || parameters.currency || 'USD') : null) : []
     }
   };
 }
+

@@ -233,6 +233,7 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
 
         // Parse multi-event batch
         const batch = parseOpenAINetworkBatch(netEntry);
+        netEntry.openAIRequest = batch.openAIRequest;
 
         // Register Pixel ID
         if (batch.parentRequest.pixelId) {
@@ -243,9 +244,9 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           }
         }
 
-        if (batch.parentRequest.obref && !state.attribution.oppref) {
-          state.attribution.oppref = batch.parentRequest.obref;
-          state.attribution.source = 'network_obref';
+        // Store transport obref separately without confusing with advertising oppref
+        if (batch.parentRequest.obref) {
+          state.transportObref = batch.parentRequest.obref;
         }
 
         if (batch.userMatching) {
@@ -264,6 +265,7 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         });
 
         state.events = store.events;
+        state.capturedRequests = store.capturedRequests;
         state.networkSummary = store.getNetworkActivitySummary();
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);

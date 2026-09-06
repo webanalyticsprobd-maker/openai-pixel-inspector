@@ -5,7 +5,7 @@
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
 import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown, formatAuditCsv } from '../core/scanner.js';
-import { getCurrencyDecimalPlaces } from '../validators/schemas.js';
+import { getCurrencyDecimalPlaces, decodeMoney, getFieldExplanation } from '../validators/schemas.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
@@ -136,6 +136,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let activeTab = null;
   let currentTabState = null;
+  let viewMode = 'client'; // 'client' | 'technical'
+  let showSystemEvents = false;
+  let showDiagnostics = false;
   let currentFilter = 'all';
   let currentIssueFilter = 'all';
   let searchQuery = '';
@@ -145,6 +148,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const expandedEventIds = new Set();
   const expandedPayloadEventIds = new Set();
   const expandedNetReqIds = new Set();
+
+  const btnViewClient = document.getElementById('btn-view-client');
+  const btnViewTechnical = document.getElementById('btn-view-technical');
+  const chkShowSystem = document.getElementById('chk-show-system');
+  const chkShowDiagnostics = document.getElementById('chk-show-diagnostics');
 
   // SVG Icon System
   const ICONS = {
@@ -663,8 +671,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const filtered = s.events.filter(evt => {
       if (selectedPixel !== 'all' && evt.pixelId !== selectedPixel) return false;
       const name = (evt.name || '').toLowerCase();
-      const isTech = name.startsWith('openai::') || name.startsWith('oai::') || name === 'sdk_lifecycle' || name === 'diagnostic';
+      const isSystem = name.startsWith('openai::') || name === 'sdk_lifecycle' || name === 'sdk_init';
+      const isDiagnostic = name.startsWith('oai::') || name === 'diagnostic';
+      const isTech = isSystem || isDiagnostic;
       const isCommerce = ['contents_viewed', 'items_added', 'checkout_started', 'order_created'].includes(name);
+
+      // System / Diagnostic visibility toggles
+      if (isSystem && !showSystemEvents && currentFilter !== 'technical') return false;
+      if (isDiagnostic && !showDiagnostics && currentFilter !== 'technical') return false;
 
       if (currentFilter === 'commerce' && !isCommerce) return false;
       if (currentFilter === 'technical' && !isTech) return false;
@@ -903,11 +917,53 @@ document.addEventListener('DOMContentLoaded', async () => {
       '</div>' +
       '</div>';
 
-    // 7. Validation
+    // 7. What OpenAI Received (Plain-language client summary)
+    html += '<div class="org-section">' +
+      '<div class="org-section-header">' +
+      '<span class="org-section-title">7. What OpenAI Received</span>' +
+      '<span class="badge badge-neutral">Client Summary</span>' +
+      '</div>' +
+      '<div class="org-explanation">Clear non-technical translation of the exact data package ingested by OpenAI.</div>' +
+      '<div class="org-grid">' +
+      '<div class="org-row"><span class="org-label">Action Captured</span><span class="org-val font-bold">' + escapeHtml(evt.displayName || evt.name) + '</span></div>' +
+      (params.amount !== undefined ? '<div class="org-row"><span class="org-label">Reported Value</span><span class="org-val text-emerald font-bold">' + (formattedAmount || params.amount) + ' (' + escapeHtml(params.currency || 'USD') + ')</span></div>' : '') +
+      '<div class="org-row"><span class="org-label">Tracking Scope</span><span class="org-val">' + (evt.optOut === true ? 'User Opted Out of Personalization' : 'Tracked for Conversion Attribution') + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Advanced Matching</span><span class="org-val">' + (matchFields.length > 0 ? '✓ Protected with SHA-256 Hashing (' + matchFields.length + ' identifiers)' : 'No identifiers provided') + '</span></div>' +
+      '</div></div>';
+
+    // 8. Why is this data sent? (Deterministic field explanations)
+    const paramKeys = Object.keys(params).filter(k => k !== 'contents');
+    if (paramKeys.length > 0) {
+      html += '<div class="org-section">' +
+        '<div class="org-section-header">' +
+        '<span class="org-section-title">8. Why is this data sent?</span>' +
+        '<span class="badge badge-info">Documentation Reference</span>' +
+        '</div>' +
+        '<div class="org-explanation">Deterministic schema purpose explaining why OpenAI requests each technical field.</div>' +
+        '<div style="padding:4px 0;">';
+
+      paramKeys.forEach(k => {
+        const expl = getFieldExplanation(k);
+        if (expl) {
+          html += '<div style="padding:6px 0; border-bottom:1px solid var(--border-subtle);">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">' +
+            '<strong class="mono" style="font-size:11px; color:var(--accent-brand);">' + escapeHtml(k) + '</strong>' +
+            '<span class="text-muted" style="font-size:10.5px;">' + escapeHtml(expl.label) + '</span>' +
+            '</div>' +
+            '<div style="font-size:11px; color:var(--text-secondary);">' + escapeHtml(expl.meaning) + '</div>' +
+            '<div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Doc note: ' + escapeHtml(expl.docNote) + '</div>' +
+            '</div>';
+        }
+      });
+
+      html += '</div></div>';
+    }
+
+    // 9. Validation
     const findings = val.findings || [];
     html += '<div class="org-section">' +
       '<div class="org-section-header">' +
-      '<span class="org-section-title">6. Validation Diagnostics</span>' +
+      '<span class="org-section-title">9. Validation Diagnostics</span>' +
       '<span class="badge ' + (val.errorsCount > 0 ? 'badge-error' : (val.warningsCount > 0 ? 'badge-warning' : 'badge-success')) + '">' +
       val.errorsCount + ' Errors, ' + val.warningsCount + ' Warnings' +
       '</span>' +
@@ -922,6 +978,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           renderStatusBadge(find.severity, find.severity.toUpperCase()) +
           '</div>' +
           '<div style="font-size:11px; color:var(--text-secondary); margin-bottom:2px;">' + escapeHtml(find.message) + '</div>' +
+          (find.ruleSource ? '<div style="font-size:10px; color:var(--text-muted); margin-bottom:2px;">Rule: <span class="badge badge-neutral" style="font-size:9.5px;">' + escapeHtml(find.ruleSource) + '</span></div>' : '') +
           (find.recommendedFix ? '<div style="font-size:10.5px; color:var(--accent-brand);">Fix: ' + escapeHtml(find.recommendedFix) + '</div>' : '') +
           '</div>';
       });
@@ -943,10 +1000,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // 3. Network Requests Tab
+  // 3. Network Requests Tab
   function renderNetworkRequests() {
     if (!networkRequestsContainer) return;
     const s = currentTabState;
-    const reqs = s?.network || [];
+    const reqs = s?.capturedRequests?.length > 0 ? s.capturedRequests : (s?.network || []);
 
     if (networkRequestsBadge) {
       networkRequestsBadge.textContent = reqs.length + ' Requests';
@@ -960,60 +1018,203 @@ document.addEventListener('DOMContentLoaded', async () => {
     networkRequestsContainer.innerHTML = '';
 
     reqs.forEach((req, idx) => {
+      // Support both normalized OpenAIRequest container and raw netEntry
+      const isNormalized = Boolean(req.sdk && req.request && req.events);
+      const reqId = req.requestId || req.id || `REQ_${idx}`;
+      const isExpanded = expandedNetReqIds.has(reqId);
+
+      const method = isNormalized ? req.request.method : (req.method || 'POST');
+      const fullUrl = isNormalized ? req.request.fullUrl : (req.url || '');
+      const statusCode = isNormalized ? req.request.statusCode : (req.status || 202);
+      const timestamp = isNormalized ? req.capturedAt : (req.timestamp || Date.now());
+      const queryParams = isNormalized ? req.query : (req.queryParams || {});
+      const pixelId = isNormalized ? (req.sdk.pixelId || 'Default') : (queryParams.pid || 'Default');
+      const eventsList = isNormalized ? req.events : (req.payload?.events || []);
+      const userMatching = isNormalized ? req.matching : (req.payload?.user ? { detected: true, fields: [] } : null);
+      const diagnostics = isNormalized ? req.diagnostics : null;
+      const validation = isNormalized ? req.validation : null;
+      const derived = isNormalized ? req.derived : null;
+      const rawPayload = isNormalized ? req.raw.parsedBody : (req.payload || {});
+
+      const statusClass = statusCode >= 200 && statusCode < 300 ? 'badge-success' : (statusCode === 'pending' ? 'badge-neutral' : 'badge-error');
+
       const card = document.createElement('div');
       card.className = 'net-req-card';
-      const isExpanded = expandedNetReqIds.has(req.requestId || idx);
-      const payload = req.payload || {};
-      const events = Array.isArray(payload.events) ? payload.events : [];
-      const user = payload.user || {};
-      const statusClass = req.status >= 200 && req.status < 300 ? 'badge-success' : (req.status === 'pending' ? 'badge-neutral' : 'badge-error');
 
-      card.innerHTML = '<div class="net-req-header" data-reqid="' + (req.requestId || idx) + '">' +
-        '<div style="display:flex; align-items:center; gap:8px;">' +
-        '<span class="net-req-method">' + escapeHtml(req.method || 'POST') + '</span>' +
-        '<span class="net-req-url" title="' + escapeHtml(req.url) + '">' + escapeHtml(req.url) + '</span>' +
+      // Header row
+      card.innerHTML = '<div class="net-req-header" data-reqid="' + escapeHtml(reqId) + '">' +
+        '<div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">' +
+        '<span class="net-req-method">' + escapeHtml(method) + '</span>' +
+        '<span class="net-req-url" title="' + escapeHtml(fullUrl) + '">' + escapeHtml(fullUrl) + '</span>' +
+        '<span class="badge badge-neutral mono" style="font-size:10px;">' + escapeHtml(pixelId) + '</span>' +
         '</div>' +
         '<div style="display:flex; align-items:center; gap:6px;">' +
-        '<span class="badge ' + statusClass + '">' + (req.status || 200) + '</span>' +
-        '<span class="mono text-muted" style="font-size:11px;">' + formatTimestamp(req.timestamp) + '</span>' +
+        '<span class="badge ' + statusClass + '">' + statusCode + '</span>' +
+        '<span class="mono text-muted" style="font-size:11px;">' + formatTimestamp(timestamp) + '</span>' +
+        '<span class="accordion-chevron ' + (isExpanded ? 'rotated' : '') + '">' + ICONS.chevronDown + '</span>' +
         '</div>' +
         '</div>' +
-        '<div class="net-req-body" style="display: ' + (isExpanded ? 'block' : 'none') + ';">' +
-        '<div style="margin-bottom:8px;">' +
-        '<strong style="font-size:11.5px; color:var(--text-secondary);">Batched Events (' + events.length + '):</strong>' +
-        '<div style="margin-top:4px;">' +
-        events.map(e => '<span class="net-event-chip">' + escapeHtml(e.type || 'event') + '</span>').join('') +
-        '</div>' +
-        '</div>' +
-        '<div class="org-grid" style="margin-bottom:8px; padding:6px 0;">' +
-        '<div class="org-row"><span class="org-label">Browser Ref (obref)</span><span class="org-val">' + escapeHtml(payload.obref || 'None') + '</span></div>' +
-        '<div class="org-row"><span class="org-label">User Matching Envelope</span><span class="org-val">' + (Object.keys(user).length > 0 ? '✓ Present' : 'None') + '</span></div>' +
-        '</div>' +
-        '<button class="btn btn-secondary btn-inspect-net-raw" style="width:100%; font-size:11.5px; padding:5px;">Inspect Raw Request Envelope</button>' +
+        '<div class="net-req-body" id="net-body-' + escapeHtml(reqId) + '" style="display: ' + (isExpanded ? 'block' : 'none') + ';">' +
         '</div>';
 
       const header = card.querySelector('.net-req-header');
       header.addEventListener('click', () => {
-        const id = req.requestId || idx;
-        if (expandedNetReqIds.has(id)) {
-          expandedNetReqIds.delete(id);
+        if (expandedNetReqIds.has(reqId)) {
+          expandedNetReqIds.delete(reqId);
         } else {
-          expandedNetReqIds.add(id);
+          expandedNetReqIds.add(reqId);
         }
         renderNetworkRequests();
       });
 
-      const btnInspectRaw = card.querySelector('.btn-inspect-net-raw');
-      if (btnInspectRaw) {
-        btnInspectRaw.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openEventModal({
-            name: 'Network Request Envelope',
-            displayName: 'REQUEST #' + (idx + 1) + ' (' + (req.method || 'POST') + ')',
-            timestamp: req.timestamp,
-            rawEvent: req.payload || req
+      if (isExpanded) {
+        const bodyEl = card.querySelector('#net-body-' + reqId);
+        if (bodyEl) {
+          let bodyHtml = '';
+
+          // 1. Request Metadata Box
+          bodyHtml += '<div class="net-req-section">' +
+            '<div class="net-req-section-title"><span>1. Request Metadata</span><span class="mono" style="font-size:10px;">ID: ' + escapeHtml(reqId) + '</span></div>' +
+            '<div class="org-grid">' +
+            '<div class="org-row"><span class="org-label">Full URL</span><span class="org-val truncate" title="' + escapeHtml(fullUrl) + '">' + escapeHtml(fullUrl) + '</span></div>' +
+            '<div class="org-row"><span class="org-label">Status</span><span class="org-val ' + (statusCode === 202 ? 'text-emerald' : '') + '">HTTP ' + statusCode + ' (' + (statusCode === 202 ? 'Accepted by OpenAI' : 'Response') + ')</span></div>' +
+            '<div class="org-row"><span class="org-label">Captured Timestamp</span><span class="org-val">' + new Date(timestamp).toLocaleString() + '</span></div>' +
+            (derived ? '<div class="org-row"><span class="org-label">Batch Delay</span><span class="org-val">' + escapeHtml(derived.batchDelay) + '<span class="derived-tag">[Derived]</span></span></div>' : '') +
+            (derived?.journeyContext ? '<div class="org-row"><span class="org-label">Journey Context</span><span class="org-val">' + escapeHtml(derived.journeyContext) + '<span class="derived-tag">[Derived]</span></span></div>' : '') +
+            '</div></div>';
+
+          // 2. Query Parameters
+          bodyHtml += '<div class="net-req-section">' +
+            '<div class="net-req-section-title"><span>2. Query Parameters</span></div>' +
+            '<div class="org-grid">' +
+            '<div class="org-row"><span class="org-label">pid (Pixel ID)</span><span class="org-val mono">' + escapeHtml(queryParams.pid || 'Not set') + '</span></div>' +
+            '<div class="org-row"><span class="org-label">st (SDK Transport)</span><span class="org-val mono">' + escapeHtml(queryParams.st || 'oaiq-web') + '</span></div>' +
+            '<div class="org-row"><span class="org-label">sv (SDK Version)</span><span class="org-val mono">' + escapeHtml(queryParams.sv || 'Unknown') + '</span></div>' +
+            '<div class="org-row"><span class="org-label">ec (Event Count)</span><span class="org-val mono">' + (queryParams.ec !== null && queryParams.ec !== undefined ? queryParams.ec : eventsList.length) + '</span></div>' +
+            '<div class="org-row"><span class="org-label">t (Request Time ms)</span><span class="org-val mono">' + (queryParams.t || timestamp) + '</span></div>' +
+            '</div></div>';
+
+          // 3. Transport & Request-Level Data
+          const transportObref = isNormalized ? req.transport?.obref : rawPayload.obref;
+          bodyHtml += '<div class="net-req-section">' +
+            '<div class="net-req-section-title"><span>3. Request-Level Data & Transport</span></div>' +
+            '<div class="org-grid">' +
+            '<div class="org-row"><span class="org-label">Browser Ref (obref)</span><span class="org-val mono">' + escapeHtml(transportObref || 'Not sent') + '</span></div>' +
+            '<div class="org-row"><span class="org-label">Total Batched Events</span><span class="org-val font-bold">' + eventsList.length + ' event(s)</span></div>' +
+            '</div></div>';
+
+          // 4. Batched Events List
+          bodyHtml += '<div class="net-req-section">' +
+            '<div class="net-req-section-title"><span>4. Batched Events (' + eventsList.length + ')</span></div>' +
+            '<div style="display:flex; flex-direction:column; gap:6px;">';
+
+          eventsList.forEach((ev, eIdx) => {
+            const evType = ev.type || 'unknown';
+            const evData = ev.data || {};
+            const evAmount = evData.amount;
+            const evCurrency = evData.currency || 'USD';
+            const formattedMoney = (evAmount !== undefined && Number.isInteger(evAmount)) ? decodeMoney(evAmount, evCurrency) : (evAmount !== undefined ? evAmount : null);
+            const isSystem = evType.startsWith('openai::') || evType.startsWith('oai::');
+
+            bodyHtml += '<div style="background:var(--bg-subtle); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:6px 10px;">' +
+              '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+              '<span class="net-event-chip" style="font-size:11px; font-weight:600;">#' + (eIdx + 1) + ' ' + escapeHtml(evType) + '</span>' +
+              (formattedMoney ? '<span class="text-emerald font-bold" style="font-size:11px;">' + formattedMoney + '</span>' : '') +
+              '</div>' +
+              '<div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Event ID: <code class="mono">' + escapeHtml(ev.id || ev.eventId || 'SDK-generated') + '</code> | Shape: <code class="mono">' + escapeHtml(ev.dataType || evData.type || 'contents') + '</code></div>' +
+              (ev.sourceUrl ? '<div style="font-size:10.5px; color:var(--text-secondary); margin-top:2px;" class="truncate">Source: ' + escapeHtml(ev.sourceUrl) + '</div>' : '') +
+              '</div>';
           });
-        });
+
+          bodyHtml += '</div></div>';
+
+          // 5. Customer Matching (if present)
+          if (userMatching && userMatching.detected) {
+            bodyHtml += '<div class="net-req-section">' +
+              '<div class="net-req-section-title"><span>5. Advanced Customer Matching</span><span class="badge badge-success" style="font-size:10px;">' + userMatching.count + ' Identifiers</span></div>' +
+              '<div class="org-grid">';
+
+            userMatching.fields.forEach(f => {
+              bodyHtml += '<div class="org-row"><span class="org-label">' + escapeHtml(f.label) + '</span><span class="org-val mono text-emerald">' + escapeHtml(f.masked) + '</span></div>';
+            });
+
+            bodyHtml += '</div></div>';
+          }
+
+          // 6. Validation Diagnostics (Level 1 Network QA)
+          if (validation) {
+            bodyHtml += '<div class="net-req-section">' +
+              '<div class="net-req-section-title"><span>6. Network & Batch Validation</span>' +
+              '<span class="badge ' + (validation.errors.length > 0 ? 'badge-error' : (validation.warnings.length > 0 ? 'badge-warning' : 'badge-success')) + '">' +
+              validation.status.toUpperCase() +
+              '</span></div>' +
+              '<div style="font-size:11px; padding:4px 0;">';
+
+            validation.passes.forEach(p => {
+              bodyHtml += '<div style="color:var(--status-success); margin-bottom:2px;">✓ ' + escapeHtml(p) + '</div>';
+            });
+            validation.warnings.forEach(w => {
+              bodyHtml += '<div style="color:var(--status-warning); margin-bottom:2px;">⚠ ' + escapeHtml(w) + '</div>';
+            });
+            validation.errors.forEach(e => {
+              bodyHtml += '<div style="color:var(--status-error); margin-bottom:2px;">✕ ' + escapeHtml(e) + '</div>';
+            });
+
+            bodyHtml += '</div></div>';
+          }
+
+          // 7. Copy Action Bar
+          bodyHtml += '<div class="net-action-bar">' +
+            '<button class="btn-net-copy btn-copy-url" data-url="' + escapeHtml(fullUrl) + '">Copy URL</button>' +
+            '<button class="btn-net-copy btn-copy-params">Copy Params</button>' +
+            '<button class="btn-net-copy btn-copy-payload">Copy Payload</button>' +
+            '<button class="btn-net-copy btn-copy-matching">Copy Matching</button>' +
+            '<button class="btn-net-copy btn-export-json">Export JSON</button>' +
+            '</div>';
+
+          bodyEl.innerHTML = bodyHtml;
+
+          // Wire up copy buttons for this network card
+          const btnCopyUrl = bodyEl.querySelector('.btn-copy-url');
+          if (btnCopyUrl) {
+            btnCopyUrl.addEventListener('click', (e) => {
+              e.stopPropagation();
+              copyToClipboard(fullUrl, btnCopyUrl);
+            });
+          }
+
+          const btnCopyParams = bodyEl.querySelector('.btn-copy-params');
+          if (btnCopyParams) {
+            btnCopyParams.addEventListener('click', (e) => {
+              e.stopPropagation();
+              copyToClipboard(queryParams, btnCopyParams);
+            });
+          }
+
+          const btnCopyPayload = bodyEl.querySelector('.btn-copy-payload');
+          if (btnCopyPayload) {
+            btnCopyPayload.addEventListener('click', (e) => {
+              e.stopPropagation();
+              copyToClipboard(rawPayload, btnCopyPayload);
+            });
+          }
+
+          const btnCopyMatching = bodyEl.querySelector('.btn-copy-matching');
+          if (btnCopyMatching) {
+            btnCopyMatching.addEventListener('click', (e) => {
+              e.stopPropagation();
+              copyToClipboard(userMatching || { note: 'No matching data sent' }, btnCopyMatching);
+            });
+          }
+
+          const btnExportJson = bodyEl.querySelector('.btn-export-json');
+          if (btnExportJson) {
+            btnExportJson.addEventListener('click', (e) => {
+              e.stopPropagation();
+              copyToClipboard(isNormalized ? req : { request: req, payload: rawPayload }, btnExportJson);
+            });
+          }
+        }
       }
 
       networkRequestsContainer.appendChild(card);
@@ -1386,6 +1587,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.storage.local.set({ active_audit_report: fullReport }, () => {
           chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
         });
+      };
+    }
+
+    // View Mode Toggle (Client View vs Technical View)
+    if (btnViewClient && btnViewTechnical) {
+      btnViewClient.onclick = () => {
+        viewMode = 'client';
+        btnViewClient.classList.add('active');
+        btnViewTechnical.classList.remove('active');
+        renderEventsList();
+        renderNetworkRequests();
+      };
+
+      btnViewTechnical.onclick = () => {
+        viewMode = 'technical';
+        btnViewTechnical.classList.add('active');
+        btnViewClient.classList.remove('active');
+        renderEventsList();
+        renderNetworkRequests();
+      };
+    }
+
+    // System Events and Diagnostics Visibility Checkboxes
+    if (chkShowSystem) {
+      chkShowSystem.onchange = () => {
+        showSystemEvents = chkShowSystem.checked;
+        renderEventsList();
+      };
+    }
+
+    if (chkShowDiagnostics) {
+      chkShowDiagnostics.onchange = () => {
+        showDiagnostics = chkShowDiagnostics.checked;
+        renderEventsList();
       };
     }
   }

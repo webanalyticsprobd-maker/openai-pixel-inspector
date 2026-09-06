@@ -54,6 +54,10 @@
           </button>
         </div>
         <div class="workspace-meta">
+          <div class="view-mode-toggle" id="view-mode-toggle" title="Switch between Client-friendly and Technical Debugger view">
+            <button class="view-mode-btn active" id="btn-view-client" data-mode="client">Client View</button>
+            <button class="view-mode-btn" id="btn-view-technical" data-mode="technical">Technical View</button>
+          </div>
           <span id="badge-tab-id" class="workspace-tag">Tab #--</span>
           <span id="pixel-status-badge" class="badge badge-neutral">Ready</span>
         </div>
@@ -285,10 +289,19 @@
             <button class="filter-chip" data-filter="commerce">Commerce</button>
             <button class="filter-chip" data-filter="standard">Standard</button>
             <button class="filter-chip" data-filter="custom">Custom</button>
-            <button class="filter-chip" data-filter="technical">Technical SDK</button>
             <button class="filter-chip" data-filter="errors">Errors</button>
             <button class="filter-chip" data-filter="warnings">Warnings</button>
             <button class="filter-chip" data-filter="duplicates">Duplicates</button>
+          </div>
+          <div class="events-toggles-bar" style="display:flex; gap:12px; align-items:center; margin-top:4px; font-size:11px; color:var(--text-secondary);">
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;">
+              <input type="checkbox" id="chk-show-system" style="cursor:pointer;">
+              <span>Show system events (<code>openai::*</code>)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;">
+              <input type="checkbox" id="chk-show-diagnostics" style="cursor:pointer;">
+              <span>Show diagnostics (<code>oai::*</code>)</span>
+            </label>
           </div>
         </div>
 
