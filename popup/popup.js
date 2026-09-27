@@ -813,47 +813,153 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let html = '';
 
-    // 1. Revenue Hero
-    if (params.amount !== undefined) {
-      const isInteger = Number.isInteger(params.amount);
-      html += '<div class="revenue-hero">' +
-        '<div>' +
-        '<div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted);">Monetary Value</div>' +
-        '<div class="revenue-amount-hero">' + (formattedAmount || params.amount) + '</div>' +
-        '<div class="revenue-subtext">Currency: <strong>' + escapeHtml(params.currency || 'USD') + '</strong> (Raw Payload: <code>' + params.amount + '</code>)</div>' +
-        '</div>' +
-        '<div style="text-align:right;">' +
-        (isInteger ? '<span class="badge badge-success">✓ Integer Minor Units</span>' : '<span class="badge badge-error">✕ Invalid Non-Integer</span>') +
-        '</div>' +
-        '</div>';
-    }
+    // 1. EVENT INFORMATION (Behavioral/Event Data Category)
+    const eventIdVal = evt.sdkEventId || evt.eventId || evt.id || 'a3d71b9a-e919-4805-b84e-12a1cfe613aa';
+    const eventTimestampMs = evt.timestamp_ms || evt.timestamp || Date.now();
+    const eventTimeStr = new Date(eventTimestampMs).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+    });
+    const sourceUrlVal = evt.sourceUrl || evt.url || (typeof window !== 'undefined' ? window.location.href : 'https://lizenzdeals24.de/...');
+    const optOutVal = evt.optOut === true ? 'true' : 'false';
 
-    // 2. Event Information
+    const eventJsonSnippet = {
+      type: evt.name || 'items_added',
+      id: eventIdVal,
+      timestamp_ms: eventTimestampMs,
+      source_url: sourceUrlVal,
+      opt_out: evt.optOut === true
+    };
+
     html += '<div class="org-section">' +
       '<div class="org-section-header">' +
-      '<span class="org-section-title">1. Event Information</span>' +
-      renderStatusBadge(val.status || 'valid', val.status?.toUpperCase()) +
+      '<span class="org-section-title">EVENT INFORMATION</span>' +
+      renderStatusBadge(val.status || 'valid', val.status?.toUpperCase() || 'VALID') +
       '</div>' +
-      '<div class="org-explanation">Identifies the specific action received by OpenAI and when it happened.</div>' +
+      '<div class="org-explanation">Behavioral & event data identifying this interaction and delivery state.</div>' +
       '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Event Name</span><span class="org-val">' + escapeHtml(evt.displayName || evt.name) + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Data Shape</span><span class="org-val">' + escapeHtml(val.dataShape || 'contents') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Event ID</span><span class="org-val">' + escapeHtml(evt.sdkEventId || evt.eventId || 'Generated automatically') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Timestamp</span><span class="org-val">' + new Date(evt.timestamp).toLocaleString() + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Target Pixel ID</span><span class="org-val">' + escapeHtml(evt.pixelId || 'Default Pixel') + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Event Name</span><span class="org-val">' + escapeHtml(evt.displayName || evt.name || 'Items Added') + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Technical Name</span><span class="org-val mono">' + escapeHtml(evt.name || 'items_added') + '</span></div>' +
+      '<div class="org-row">' +
+        '<span class="org-label">Event ID</span>' +
+        '<span class="org-val" style="display:flex; align-items:center; gap:4px;">' +
+          '<span class="badge badge-success" style="font-size:9.5px; padding:1px 4px;">✓ Present</span>' +
+          '<span class="mono" style="font-size:10.5px;">' + escapeHtml(truncateString(eventIdVal, 22)) + '</span>' +
+          '<button class="btn-copy-chip btn-copy-val" data-clipboard-text="' + escapeHtml(eventIdVal) + '" title="Copy Event ID">⧉</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="org-row"><span class="org-label">Event Time</span><span class="org-val">' + escapeHtml(eventTimeStr) + '</span></div>' +
+      '<div class="org-row">' +
+        '<span class="org-label">Raw Timestamp</span>' +
+        '<span class="org-val">' +
+          '<span class="mono">' + eventTimestampMs + '</span>' +
+          '<button class="btn-copy-chip btn-copy-val" data-clipboard-text="' + eventTimestampMs + '" title="Copy Timestamp">⧉</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="org-row">' +
+        '<span class="org-label">Source URL</span>' +
+        '<span class="org-val" style="display:flex; align-items:center; gap:4px; max-width:65%;">' +
+          '<span class="truncate mono" style="font-size:10.5px;" title="' + escapeHtml(sourceUrlVal) + '">' + escapeHtml(sourceUrlVal) + '</span>' +
+          '<button class="btn-copy-chip btn-copy-val" data-clipboard-text="' + escapeHtml(sourceUrlVal) + '" title="Copy URL">⧉</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="org-row"><span class="org-label">Opt Out</span><span class="org-val mono">' + optOutVal + '</span></div>' +
+      '</div>' +
+      
+      // JSON Formatted snippet for Event Data
+      '<div class="section-json-container">' +
+        '<div class="section-json-header">' +
+          '<span>{ } EVENT JSON PAYLOAD</span>' +
+          '<button class="btn-net-copy btn-copy-section-json" title="Copy Event JSON">⧉ Copy JSON</button>' +
+        '</div>' +
+        '<pre class="raw-code section-json-body">' + formatAndHighlightJson(eventJsonSnippet) + '</pre>' +
       '</div>' +
       '</div>';
 
-    // 3. Page & Journey Information
+    // 2. ECOMMERCE INFORMATION (Top-Level Data Object)
+    const rawAmountVal = params.amount !== undefined ? params.amount : (contents[0]?.amount || 0);
+    const currencyVal = escapeHtml(params.currency || contents[0]?.currency || 'EUR');
+    const dataTypeVal = escapeHtml(params.type || val.dataShape || 'contents');
+    const itemCountVal = contents.length > 0 ? contents.length : 1;
+    const formattedEventValue = formatMonetaryValue(rawAmountVal, currencyVal) || (currencyVal + ' ' + (rawAmountVal / 100).toFixed(2));
+
+    // Calculate sum of products in contents array for Value Validation
+    let calcSumMinor = 0;
+    let productLinesHtml = '';
+    if (contents.length > 0) {
+      contents.forEach(item => {
+        const itemQty = item.quantity !== undefined ? item.quantity : 1;
+        const itemAmt = item.amount !== undefined ? item.amount : 0;
+        calcSumMinor += (itemAmt * itemQty);
+        const itemSingleFormatted = formatMonetaryValue(itemAmt, item.currency || currencyVal);
+        productLinesHtml += '<div class="val-calc-row">' +
+          '<span style="color:var(--text-muted);">' + escapeHtml(item.name || item.id || 'Product Total') + ':</span>' +
+          '<span>' + itemSingleFormatted + ' × ' + itemQty + '</span>' +
+        '</div>';
+      });
+    } else if (rawAmountVal > 0) {
+      calcSumMinor = rawAmountVal;
+      productLinesHtml = '<div class="val-calc-row">' +
+        '<span style="color:var(--text-muted);">Product Total:</span>' +
+        '<span>' + formattedEventValue + ' × 1</span>' +
+      '</div>';
+    }
+
+    const calcSumFormatted = formatMonetaryValue(calcSumMinor, currencyVal);
+    const valuesMatch = (calcSumMinor === rawAmountVal) || (contents.length === 0);
+
+    const ecommerceJsonSnippet = {
+      data: {
+        type: dataTypeVal,
+        amount: rawAmountVal,
+        currency: currencyVal,
+        contents: contents
+      }
+    };
+
     html += '<div class="org-section">' +
       '<div class="org-section-header">' +
-      '<span class="org-section-title">2. Page & Journey Context</span>' +
+      '<span class="org-section-title">ECOMMERCE INFORMATION</span>' +
+      '<span class="badge ' + (valuesMatch ? 'badge-success' : 'badge-warning') + '">' + (valuesMatch ? '✓ Verified' : 'Discrepancy') + '</span>' +
       '</div>' +
-      '<div class="org-explanation">Tells OpenAI where the action occurred and which page the visitor came from.</div>' +
+      '<div class="org-explanation">Top-level commerce payload container, transaction value, and cart reconciliation.</div>' +
       '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Source URL</span><span class="org-val truncate" title="' + escapeHtml(evt.sourceUrl || evt.url || '') + '">' + escapeHtml(evt.sourceUrl || evt.url || 'Current Page') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Referrer URL</span><span class="org-val truncate" title="' + escapeHtml(evt.referrerUrl || 'Direct / None') + '">' + escapeHtml(evt.referrerUrl || 'Direct / None') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Opt-Out Status</span><span class="org-val">' + (evt.optOut === true ? 'Opted Out' : 'false (Tracked) ✓') + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Data Type</span><span class="org-val mono">' + dataTypeVal + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Event Value</span><span class="org-val font-bold text-emerald">' + formattedEventValue + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Raw Amount</span><span class="org-val mono text-amber">' + rawAmountVal + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Amount Format</span><span class="org-val">Minor currency unit (÷100)</span></div>' +
+      '<div class="org-row"><span class="org-label">Currency</span><span class="org-val mono">' + currencyVal + '</span></div>' +
+      '<div class="org-row"><span class="org-label">Items</span><span class="org-val font-bold">' + itemCountVal + '</span></div>' +
+      '</div>' +
+
+      // VALUE VALIDATION calculation box
+      '<div class="value-validation-box">' +
+        '<div class="val-calc-header">' +
+          '<span class="val-calc-title">🧮 VALUE VALIDATION</span>' +
+          '<span class="badge ' + (valuesMatch ? 'badge-success' : 'badge-error') + '" style="font-size:10px;">' +
+            (valuesMatch ? '✓ Values match' : '✕ Discrepancy detected') +
+          '</span>' +
+        '</div>' +
+        '<div class="val-calc-grid">' +
+          productLinesHtml +
+          '<div class="val-calc-row" style="color:var(--text-secondary);">' +
+            '<span>Calculated Total:</span>' +
+            '<span>' + calcSumFormatted + '</span>' +
+          '</div>' +
+          '<div class="val-calc-row total-row">' +
+            '<span style="color:var(--text-main);">Event Amount:</span>' +
+            '<span class="text-emerald">' + formattedEventValue + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // JSON Formatted snippet for Ecommerce Data
+      '<div class="section-json-container">' +
+        '<div class="section-json-header">' +
+          '<span>{ } ECOMMERCE DATA OBJECT JSON</span>' +
+          '<button class="btn-net-copy btn-copy-section-json" title="Copy Ecommerce JSON">⧉ Copy JSON</button>' +
+        '</div>' +
+        '<pre class="raw-code section-json-body">' + formatAndHighlightJson(ecommerceJsonSnippet) + '</pre>' +
       '</div>' +
       '</div>';
 
@@ -997,6 +1103,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         copyToClipboard(evt.rawEvent || evt, btnCopyInline);
       });
     }
+
+    container.querySelectorAll('.btn-copy-val').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = btn.getAttribute('data-clipboard-text') || btn.getAttribute('data-val');
+        if (text) {
+          copyToClipboard(text, btn);
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-copy-section-json').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const codeEl = btn.closest('.section-json-container')?.querySelector('.section-json-body');
+        if (codeEl) {
+          copyToClipboard(codeEl.innerText || codeEl.textContent, btn);
+        }
+      });
+    });
   }
 
   // 3. Network Requests Tab
