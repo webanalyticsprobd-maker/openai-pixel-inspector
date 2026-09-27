@@ -93,48 +93,150 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Tab State & Real-Time Sync
-  async function loadState() {
+  // 3. Robust Tab Resolution & Real-Time Sync Engine
+  function isValidInspectableTab(tab) {
+    if (!tab) return false;
+    const url = tab.url || tab.pendingUrl || '';
+    if (!url) return false;
+    if (url.startsWith('chrome-extension://')) return false;
+    if (url.startsWith('chrome://')) return false;
+    if (url.startsWith('devtools://')) return false;
+    return true;
+  }
+
+  async function resolveTargetTab() {
+    // 1. Current active tab in current window
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tabs || tabs.length === 0) return;
-      activeTab = tabs[0];
+      if (tabs && tabs.length > 0 && isValidInspectableTab(tabs[0])) {
+        return tabs[0];
+      }
+    } catch {}
 
-      if (targetHostEl && activeTab.url) {
-        try {
-          const u = new URL(activeTab.url);
-          targetHostEl.textContent = u.hostname;
-          targetHostEl.title = activeTab.url;
-        } catch {
-          targetHostEl.textContent = activeTab.url;
+    // 2. Active tab in last focused window (vital when DevTools or detached popup has focus)
+    try {
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (tabs && tabs.length > 0 && isValidInspectableTab(tabs[0])) {
+        return tabs[0];
+      }
+    } catch {}
+
+    // 3. Any active tab in a normal browser window
+    try {
+      const tabs = await chrome.tabs.query({ active: true, windowType: 'normal' });
+      if (tabs && tabs.length > 0 && isValidInspectableTab(tabs[0])) {
+        return tabs[0];
+      }
+    } catch {}
+
+    // 4. Any tab currently open with an http/https URL
+    try {
+      const allTabs = await chrome.tabs.query({});
+      const httpTabs = allTabs.filter(isValidInspectableTab);
+      if (httpTabs.length > 0) {
+        return httpTabs[httpTabs.length - 1];
+      }
+      if (allTabs.length > 0) {
+        return allTabs[0];
+      }
+    } catch {}
+
+    return null;
+  }
+
+  async function loadState() {
+    try {
+      const resolved = await resolveTargetTab();
+      if (!resolved) {
+        if (targetHostEl) targetHostEl.textContent = 'No active webpage';
+        return;
+      }
+      activeTab = resolved;
+
+      const pageUrl = activeTab.url || activeTab.pendingUrl || '';
+      if (targetHostEl) {
+        if (pageUrl) {
+          try {
+            const u = new URL(pageUrl);
+            targetHostEl.textContent = u.hostname;
+            targetHostEl.title = pageUrl;
+          } catch {
+            targetHostEl.textContent = pageUrl;
+          }
+        } else {
+          targetHostEl.textContent = 'Active Webpage';
         }
       }
 
-      chrome.runtime.sendMessage({ action: 'GET_ACTIVE_TAB_STATE', tabId: activeTab.id }, (res) => {
-        if (res && res.state) {
-          currentTabState = res.state;
-          renderFeed();
-        } else {
-          currentTabState = null;
+      // Check chrome.storage.local immediately for instantaneous cached render
+      if (typeof chrome.storage !== 'undefined' && chrome.storage.local && activeTab.id) {
+        const storageKey = `tab_state_${activeTab.id}`;
+        chrome.storage.local.get([storageKey]).then((stored) => {
+          if (stored && stored[storageKey] && (!currentTabState || (stored[storageKey].events?.length >= (currentTabState.events?.length || 0)))) {
+            currentTabState = stored[storageKey];
+            renderFeed();
+          }
+        }).catch(() => {});
+      }
+
+      // Query Background Service Worker
+      chrome.runtime.sendMessage(
+        { action: 'GET_ACTIVE_TAB_STATE', tabId: activeTab.id, url: pageUrl },
+        async (res) => {
+          if (chrome.runtime.lastError || !res || !res.state) {
+            // Service worker asleep or no response, fall back directly to storage
+            if (typeof chrome.storage !== 'undefined' && chrome.storage.local) {
+              const storageKey = `tab_state_${activeTab.id}`;
+              const stored = await chrome.storage.local.get([storageKey]).catch(() => ({}));
+              if (stored && stored[storageKey]) {
+                currentTabState = stored[storageKey];
+                renderFeed();
+                return;
+              }
+            }
+            if (res && res.state) {
+              currentTabState = res.state;
+            }
+          } else {
+            currentTabState = res.state;
+          }
           renderFeed();
         }
-      });
+      );
+
+      // Trigger fresh page scan from content script
+      if (activeTab.id) {
+        chrome.tabs.sendMessage(activeTab.id, { action: 'REQUEST_SCAN' }).catch(() => {});
+      }
     } catch (err) {
-      console.warn('Tab query error:', err);
+      console.warn('Tab loadState error:', err);
     }
   }
 
   // Real-time notification from service worker
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === 'STATE_UPDATED' || msg.action === 'NEW_BATCH' || msg.action === 'EVENT_CAPTURED') {
-      if (!msg.tabId || (activeTab && msg.tabId === activeTab.id)) {
+      if (!msg.tabId || !activeTab || msg.tabId === activeTab.id) {
         loadState();
       }
     }
   });
 
+  // Real-time notification from Chrome Storage changes
+  if (typeof chrome.storage !== 'undefined' && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' && activeTab) {
+        const key = `tab_state_${activeTab.id}`;
+        if (changes[key] && changes[key].newValue) {
+          currentTabState = changes[key].newValue;
+          renderFeed();
+        }
+      }
+    });
+  }
+
   // Background fallback heartbeat to keep live feed synced
-  setInterval(loadState, 1500);
+  setInterval(loadState, 2000);
   await loadState();
 
   // 4. Semantic Event Profiles

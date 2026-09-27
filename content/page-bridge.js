@@ -580,4 +580,27 @@
     pixelIds: Array.from(activePixelIds),
     isInitialized: isInitialized
   });
+
+  // Listen for active state requests from content script/popup
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || !event.data || event.data.source !== CONTENT_SOURCE) {
+      return;
+    }
+    if (event.data.type === 'REQUEST_PAGE_STATE') {
+      sendToContentScript('BRIDGE_READY', {
+        url: window.location.href,
+        hasOaiqGlobal: typeof window.oaiq !== 'undefined',
+        pixelIds: Array.from(activePixelIds),
+        isInitialized: isInitialized
+      });
+      if (activePixelIds.size > 0) {
+        sendToContentScript('PIXEL_INIT_DETECTED', {
+          pixelId: Array.from(activePixelIds)[0],
+          allPixelIds: Array.from(activePixelIds),
+          isInitialized: true,
+          timestamp: Date.now()
+        });
+      }
+    }
+  });
 })();

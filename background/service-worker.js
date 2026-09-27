@@ -122,6 +122,73 @@ function getOrCreateTabState(tabId, url = '', title = '') {
   return state;
 }
 
+function notifyStateUpdated(tabId) {
+  try {
+    const p = chrome.runtime.sendMessage({ action: 'STATE_UPDATED', tabId: tabId });
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {});
+    }
+  } catch {}
+}
+
+async function persistTabState(tabId, state) {
+  if (!tabId || !state || typeof chrome.storage === 'undefined' || !chrome.storage.local) return;
+  try {
+    const dataToSave = {
+      tabId: state.tabId,
+      sessionId: state.sessionId,
+      url: state.url,
+      title: state.title,
+      visitedPages: state.visitedPages,
+      lastUpdated: state.lastUpdated,
+      pixel: state.pixel,
+      attribution: state.attribution,
+      events: state.events,
+      stats: state.stats,
+      serverHeaders: state.serverHeaders || [],
+      userMatching: state.userMatching || null,
+      diagnostics: state.diagnostics || null,
+      network: (state.network || []).slice(-50)
+    };
+    await chrome.storage.local.set({ [`tab_state_${tabId}`]: dataToSave });
+  } catch {}
+}
+
+async function restoreTabStateFromStorage(tabId) {
+  if (!tabId || typeof chrome.storage === 'undefined' || !chrome.storage.local) return null;
+  try {
+    const res = await chrome.storage.local.get([`tab_state_${tabId}`]);
+    const stored = res[`tab_state_${tabId}`];
+    if (stored) {
+      tabStates.set(tabId, stored);
+      const store = getOrCreateTabStore(tabId);
+      if (Array.isArray(stored.events) && store.events.length === 0) {
+        stored.events.forEach(e => store.events.push(e));
+      }
+      return stored;
+    }
+  } catch {}
+  return null;
+}
+
+// Restore sessions on worker boot
+async function restoreAllSessions() {
+  if (typeof chrome.storage === 'undefined' || !chrome.storage.local) return;
+  try {
+    const all = await chrome.storage.local.get(null);
+    for (const [key, val] of Object.entries(all)) {
+      if (key.startsWith('tab_state_') && val && val.tabId) {
+        tabStates.set(val.tabId, val);
+        const store = getOrCreateTabStore(val.tabId);
+        if (Array.isArray(val.events) && store.events.length === 0) {
+          val.events.forEach(e => store.events.push(e));
+        }
+      }
+    }
+  } catch {}
+}
+restoreAllSessions();
+
 function updateBadge(tabId, state) {
   if (!state || !tabId || tabId < 0 || typeof chrome.action === 'undefined') return;
   const errCount = state.stats ? state.stats.errorEvents : 0;
@@ -190,6 +257,9 @@ async function scanBrowserCookiesForTab(tabId, url) {
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStates.delete(tabId);
   tabStores.delete(tabId);
+  if (typeof chrome.storage !== 'undefined' && chrome.storage.local) {
+    chrome.storage.local.remove([`tab_state_${tabId}`]).catch(() => {});
+  }
   for (const [reqId, reqInfo] of pendingRequests.entries()) {
     if (reqInfo.tabId === tabId) {
       pendingRequests.delete(reqId);
@@ -309,9 +379,8 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
         broadcastToDevTools(tabId, { action: 'NEW_BATCH', batch: batch, openAIRequest: batch.openAIRequest });
-        try {
-          chrome.runtime.sendMessage({ action: 'STATE_UPDATED', tabId: tabId });
-        } catch {}
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
     },
     { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] },
@@ -336,9 +405,8 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           state.events = store.events;
           state.lastUpdated = Date.now();
           updateBadge(tabId, state);
-          try {
-            chrome.runtime.sendMessage({ action: 'STATE_UPDATED', tabId: tabId });
-          } catch {}
+          persistTabState(tabId, state);
+          notifyStateUpdated(tabId);
         }
       }
     },
@@ -433,6 +501,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           state.serverSideSignals = Object.assign({}, state.serverSideSignals, message.data.details.serverSideSignals);
         }
         state.lastUpdated = Date.now();
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -448,6 +518,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
         }
         state.lastUpdated = Date.now();
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -475,6 +547,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         state.lastUpdated = Date.now();
         if (state.url) scanBrowserCookiesForTab(tabId, state.url);
         updateBadge(tabId, state);
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -495,6 +569,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -542,6 +618,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -553,8 +631,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         netReq.payload = parseNetworkPayload(netReq.payload);
         state.network.push(netReq);
         store.correlateNetworkRequest(netReq);
+
+        // If batch payload contains events, parse and add
+        if (netReq.payload && (Array.isArray(netReq.payload.events) || isOpenAINetworkRequest(netReq.url))) {
+          const batch = parseOpenAINetworkBatch(netReq);
+          if (batch && batch.measurementEvents && batch.measurementEvents.length > 0) {
+            store.addNetworkBatch(batch, {
+              url: state.url,
+              pixelId: batch.parentRequest?.pixelId || state.pixel?.pixelIds[0] || null,
+              oppref: state.attribution?.oppref || null
+            });
+          }
+        }
+
         state.events = store.events;
+        state.capturedRequests = store.capturedRequests;
         state.lastUpdated = Date.now();
+        updateBadge(tabId, state);
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -569,6 +664,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         state.lastUpdated = Date.now();
         scanBrowserCookiesForTab(tabId, state.url);
+        persistTabState(tabId, state);
+        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -576,13 +673,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'GET_TAB_STATE':
     case 'GET_ACTIVE_TAB_STATE': {
-      const targetId = message.tabId;
-      const curState = targetId ? getOrCreateTabState(targetId) : null;
-      if (curState && curState.url) {
-        scanBrowserCookiesForTab(targetId, curState.url);
-      }
-      sendResponse({ state: curState });
-      break;
+      const targetId = message.tabId || (sender.tab ? sender.tab.id : null);
+      (async () => {
+        let curState = targetId ? tabStates.get(targetId) : null;
+        if (!curState && targetId) {
+          curState = await restoreTabStateFromStorage(targetId);
+        }
+
+        // If target tab has 0 events or no state, see if any state in memory or storage matches domain or has events
+        if (!curState || !curState.events || curState.events.length === 0) {
+          if (message.url) {
+            try {
+              const reqHost = new URL(message.url).hostname;
+              for (const [id, s] of tabStates.entries()) {
+                if (s && s.url && s.events && s.events.length > 0) {
+                  try {
+                    if (new URL(s.url).hostname === reqHost) {
+                      curState = s;
+                      break;
+                    }
+                  } catch {}
+                }
+              }
+            } catch {}
+          }
+          if (!curState || !curState.events || curState.events.length === 0) {
+            for (const [id, s] of tabStates.entries()) {
+              if (s && s.events && s.events.length > 0) {
+                curState = s;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!curState && targetId) {
+          curState = getOrCreateTabState(targetId, message.url, message.title);
+        }
+
+        if (curState && curState.url && targetId) {
+          scanBrowserCookiesForTab(targetId, curState.url);
+        }
+
+        sendResponse({ state: curState });
+      })();
+      return true;
     }
 
     case 'GET_AUDIT_REPORT': {
@@ -605,6 +740,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const state = createDefaultTabState(targetId, tabStates.get(targetId)?.url || '');
         tabStates.set(targetId, state);
         updateBadge(targetId, state);
+        if (typeof chrome.storage !== 'undefined' && chrome.storage.local) {
+          chrome.storage.local.remove([`tab_state_${targetId}`]).catch(() => {});
+        }
+        notifyStateUpdated(targetId);
       }
       sendResponse({ status: 'cleared' });
       break;
