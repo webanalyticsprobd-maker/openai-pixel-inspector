@@ -1,1755 +1,667 @@
 /**
- * OpenAI Ads Pixel Inspector - Professional Live Debugger & Audit System
- * Reference Style: Stripe Dashboard + Linear + Chrome DevTools + OpenAI Branding
+ * OpenAI Pixel Helper - Single Feed with Deep Categorized Parameters
+ * Modeled after official Pixel Helper extension UI with 8 logical categories.
  */
 
-import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
-import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown, formatAuditCsv } from '../core/scanner.js';
-import { getCurrencyDecimalPlaces, decodeMoney, getFieldExplanation } from '../validators/schemas.js';
+import { formatMonetaryValue, getCurrencyDecimalPlaces } from '../utils/formatting.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Navigation elements
-  const allNavTabs = document.querySelectorAll('.nav-tab');
-  const tabPanes = document.querySelectorAll('.tab-pane');
   const targetHostEl = document.getElementById('target-host');
-  const btnCopyHost = document.getElementById('btn-copy-host');
-  const badgeTabIdEl = document.getElementById('badge-tab-id');
-  const btnRefresh = document.getElementById('btn-refresh');
+  const eventsCountEl = document.getElementById('events-count');
+  const filterInput = document.getElementById('filter-input');
+  const chkClearReload = document.getElementById('chk-clear-reload');
   const btnClear = document.getElementById('btn-clear');
+  const btnOpenTab = document.getElementById('btn-open-tab');
+  const btnDebug = document.getElementById('btn-debug');
   const btnTheme = document.getElementById('btn-theme');
-  const themeIcon = document.getElementById('theme-icon');
   const btnSidepanel = document.getElementById('btn-sidepanel');
-  const navScrollTrack = document.getElementById('nav-scroll-track');
-  const btnNavScrollPrev = document.getElementById('nav-scroll-prev');
-  const btnNavScrollNext = document.getElementById('nav-scroll-next');
-
-  // Overview Tab elements
-  const pixelStatusBadge = document.getElementById('pixel-status-badge');
-  const healthStatusBadge = document.getElementById('health-status-badge');
-  const healthOverallLabel = document.getElementById('health-overall-label');
-  const valPixelId = document.getElementById('val-pixel-id');
-  const valSessionId = document.getElementById('val-session-id');
-  const valOppref = document.getElementById('val-oppref');
-  const valServersideStatus = document.getElementById('val-serverside-status');
-
-  const metricTotalEvents = document.getElementById('metric-total-events');
-  const metricStandardEvents = document.getElementById('metric-standard-events');
-  const metricCustomEvents = document.getElementById('metric-custom-events');
-  const metricIssuesEvents = document.getElementById('metric-issues-events');
-  const latestEventContent = document.getElementById('latest-event-content');
-  const latestEventTime = document.getElementById('latest-event-time');
-
-  // Tab counters
-  const tabCountEvents = document.getElementById('tab-count-events');
-  const tabCountNetwork = document.getElementById('tab-count-network');
-  const tabCountFunnel = document.getElementById('tab-count-funnel');
-  const tabCountMatching = document.getElementById('tab-count-matching');
-  const tabCountDatalayer = document.getElementById('tab-count-datalayer');
-  const tabCountIssues = document.getElementById('tab-count-issues');
-
-  // Overview Diagnostics & Matching
-  const sdkDroppedBadge = document.getElementById('sdk-dropped-badge');
-  const diagValSdkStatus = document.getElementById('diag-val-sdk-status');
-  const diagValAam = document.getElementById('diag-val-aam');
-  const diagValDropped = document.getElementById('diag-val-dropped');
-  const diagValErrors = document.getElementById('diag-val-errors');
-
-  const matchingScorecardBadge = document.getElementById('matching-scorecard-badge');
-  const valMatchEmail = document.getElementById('val-match-email');
-  const valMatchPhone = document.getElementById('val-match-phone');
-  const valMatchEid = document.getElementById('val-match-eid');
-  const valMatchGeo = document.getElementById('val-match-geo');
-
-  // Events Tab elements
-  const eventSearchInput = document.getElementById('event-search-input');
-  const eventPixelSelect = document.getElementById('event-pixel-select');
-  const filterChips = document.querySelectorAll('.filter-chip');
-  const eventsListContainer = document.getElementById('events-list-container');
-
-  // Network Requests Tab elements
-  const networkRequestsBadge = document.getElementById('network-requests-badge');
-  const networkRequestsContainer = document.getElementById('network-requests-container');
-
-  // Funnel Tab elements
-  const funnelRateBadge = document.getElementById('funnel-rate-badge');
-  const funnelPipelineContainer = document.getElementById('funnel-pipeline-container');
-
-  // Timeline Tab elements
-  const timelineStepsBadge = document.getElementById('timeline-steps-badge');
-  const timelineContainer = document.getElementById('timeline-container');
-
-  // Matching & Privacy Tab elements
-  const matchingCoverageBadge = document.getElementById('matching-coverage-badge');
-  const matchingDetailsContainer = document.getElementById('matching-details-container');
-  const privacyStatusBadge = document.getElementById('privacy-status-badge');
-  const privacyInspectorContainer = document.getElementById('privacy-inspector-container');
-
-  // Data Layer Tab elements
-  const gtmContainerBadge = document.getElementById('gtm-container-badge');
-  const gtmContainerPills = document.getElementById('gtm-container-pills');
-  const datalayerListContainer = document.getElementById('datalayer-list-container');
-
-  // Attribution Tab elements
-  const opprefStatusBadge = document.getElementById('oppref-status-badge');
-  const attrUrlVal = document.getElementById('attr-url-val');
-  const attrCookieVal = document.getElementById('attr-cookie-val');
-  const attrStorageVal = document.getElementById('attr-storage-val');
-  const attrActiveKey = document.getElementById('attr-active-key');
-
-  // Issues Tab elements
-  const issuesStatusBadge = document.getElementById('issues-status-badge');
-  const issuesSummarySubtitle = document.getElementById('issues-summary-subtitle');
-  const issuesListContainer = document.getElementById('issues-list-container');
-  const issueFilterChips = document.querySelectorAll('.issue-chip');
-  const issueFilterCountAll = document.getElementById('issue-filter-count-all');
-  const issueFilterCountError = document.getElementById('issue-filter-count-error');
-  const issueFilterCountWarning = document.getElementById('issue-filter-count-warning');
-  const issueFilterCountInfo = document.getElementById('issue-filter-count-info');
-
-  // Audit Tab elements
-  const auditScoreBadge = document.getElementById('audit-score-badge');
-  const auditSubtitleWebsite = document.getElementById('audit-subtitle-website');
-  const auditSummaryBox = document.getElementById('audit-summary-box');
-  const auditOverviewCount = document.getElementById('audit-overview-count');
-  const auditOverviewTableContainer = document.getElementById('audit-overview-table-container');
-  const auditScoresGrid = document.getElementById('audit-scores-grid');
-  const auditInsightsContainer = document.getElementById('audit-insights-container');
-  const auditActionsContainer = document.getElementById('audit-actions-container');
-  const btnCopyMarkdown = document.getElementById('btn-copy-markdown');
-  const btnExportPdf = document.getElementById('btn-export-pdf');
-  const btnExportCsv = document.getElementById('btn-export-csv');
-
-  // Modal elements
-  const rawModal = document.getElementById('raw-modal');
-  const modalCloseBtn = document.getElementById('modal-close-btn');
-  const modalCloseBtnFooter = document.getElementById('modal-close-btn-footer');
-  const modalBtnViewOrganized = document.getElementById('modal-btn-view-organized');
-  const modalBtnViewRaw = document.getElementById('modal-btn-view-raw');
-  const modalOrganizedView = document.getElementById('modal-organized-view');
-  const modalRawView = document.getElementById('modal-raw-view');
-  const modalJsonContent = document.getElementById('modal-json-content');
-  const modalCopyBtn = document.getElementById('modal-copy-btn');
-  const modalEventTitle = document.getElementById('modal-event-title');
-  const modalEventSubtitle = document.getElementById('modal-event-subtitle');
-  const modalEventIcon = document.getElementById('modal-event-icon');
-  const modalPayloadMeta = document.getElementById('modal-payload-meta');
+  const btnCloseWindow = document.getElementById('btn-close-window');
+  const eventsFeed = document.getElementById('events-feed');
 
   let activeTab = null;
   let currentTabState = null;
-  let viewMode = 'client'; // 'client' | 'technical'
-  let showSystemEvents = false;
-  let showDiagnostics = false;
-  let currentFilter = 'all';
-  let currentIssueFilter = 'all';
   let searchQuery = '';
-  let selectedPixel = 'all';
-  let activeModalJson = '';
-  let activeModalEvent = null;
   const expandedEventIds = new Set();
-  const expandedPayloadEventIds = new Set();
-  const expandedNetReqIds = new Set();
 
-  const btnViewClient = document.getElementById('btn-view-client');
-  const btnViewTechnical = document.getElementById('btn-view-technical');
-  const chkShowSystem = document.getElementById('chk-show-system');
-  const chkShowDiagnostics = document.getElementById('chk-show-diagnostics');
-
-  // SVG Icon System
-  const ICONS = {
-    check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
-    cross: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
-    warn: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-    info: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
-    sun: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
-    moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
-    copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-    code: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
-    chevronDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
-    package: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
-    dollar: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-    user: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-    emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
-  };
-
-  function renderStatusBadge(severity, label, titleText) {
-    const safeTitle = titleText ? (' title="' + escapeHtml(titleText) + '"') : '';
-    if (severity === 'valid' || severity === 'pass' || severity === 'success' || severity === 'detected' || severity === 'triggered') {
-      return '<span class="badge badge-success"' + safeTitle + '>' + ICONS.check + ' ' + (label || 'Valid') + '</span>';
-    } else if (severity === 'error' || severity === 'critical' || severity === 'fail' || severity === 'duplicate') {
-      return '<span class="badge badge-error"' + safeTitle + '>' + ICONS.cross + ' ' + (label || 'Error') + '</span>';
-    } else if (severity === 'warning') {
-      return '<span class="badge badge-warning"' + safeTitle + '>' + ICONS.warn + ' ' + (label || 'Warning') + '</span>';
-    } else if (severity === 'info') {
-      return '<span class="badge badge-info"' + safeTitle + '>' + ICONS.info + ' ' + (label || 'Info') + '</span>';
-    } else {
-      return '<span class="badge badge-neutral"' + safeTitle + '>' + (label || 'Not detected') + '</span>';
-    }
-  }
-
-  // Format currency value from minor integer units to human-readable string
-  function formatMonetaryValue(amount, currencyCode = 'USD') {
-    if (amount === undefined || amount === null) return null;
-    const cleanCurrency = String(currencyCode || 'USD').trim().toUpperCase();
-    const decimals = getCurrencyDecimalPlaces(cleanCurrency);
-    const num = Number(amount);
-    if (isNaN(num)) return String(amount);
-    
-    const majorValue = num / Math.pow(10, decimals);
-    try {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: cleanCurrency,
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-      }).format(majorValue);
-    } catch {
-      return cleanCurrency + ' ' + majorValue.toFixed(decimals);
-    }
-  }
-
-  function fallbackCopyText(str) {
-    const el = document.createElement('textarea');
-    el.value = str;
-    el.setAttribute('readonly', '');
-    el.style.position = 'absolute';
-    el.style.left = '-9999px';
-    document.body.appendChild(el);
-    el.select();
-    try {
-      document.execCommand('copy');
-    } catch (err) {
-      console.warn('Clipboard fallback failed', err);
-    }
-    document.body.removeChild(el);
-  }
-
-  function copyToClipboard(text, triggerBtn) {
-    if (!text) return Promise.resolve(false);
-    const str = typeof text === 'object' ? JSON.stringify(text, null, 2) : String(text);
-
-    const showFeedback = () => {
-      if (triggerBtn) {
-        const originalHtml = triggerBtn.innerHTML;
-        const span = triggerBtn.querySelector('span');
-        if (span) {
-          span.textContent = 'Copied!';
-        } else {
-          triggerBtn.textContent = 'Copied!';
-        }
-        triggerBtn.classList.add('copied');
-        triggerBtn.style.color = 'var(--status-success)';
-        setTimeout(() => {
-          triggerBtn.innerHTML = originalHtml;
-          triggerBtn.classList.remove('copied');
-          triggerBtn.style.color = '';
-        }, 1500);
-      }
-    };
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(str).then(() => {
-        showFeedback();
-        return true;
-      }).catch(() => {
-        fallbackCopyText(str);
-        showFeedback();
-        return true;
-      });
-    } else {
-      fallbackCopyText(str);
-      showFeedback();
-      return Promise.resolve(true);
-    }
-  }
-
-  function formatAndHighlightJson(jsonObj) {
-    if (jsonObj === undefined || jsonObj === null) return '<span class="text-muted">null</span>';
-    let jsonStr = typeof jsonObj === 'string' ? jsonObj : JSON.stringify(jsonObj, null, 2);
-    
-    jsonStr = escapeHtml(jsonStr);
-    return jsonStr.replace(
-      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\\-]?\d+)?)/g,
-      function (match) {
-        let cls = 'hl-num';
-        if (/^"/.test(match)) {
-          if (/:$/.test(match)) {
-            cls = 'hl-key';
-          } else {
-            cls = 'hl-str';
-          }
-        } else if (/true|false/.test(match)) {
-          cls = 'hl-bool';
-        } else if (/null/.test(match)) {
-          cls = 'hl-null';
-        }
-        return '<span class="' + cls + '">' + match + '</span>';
-      }
-    );
-  }
-
-  // Theme
+  // 1. Theme Initialization
   function initTheme() {
     const saved = localStorage.getItem('__oai_theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
-    if (themeIcon) themeIcon.innerHTML = saved === 'dark' ? ICONS.sun : ICONS.moon;
   }
-
   if (btnTheme) {
     btnTheme.addEventListener('click', () => {
       const cur = document.documentElement.getAttribute('data-theme') || 'light';
       const next = cur === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('__oai_theme', next);
-      if (themeIcon) themeIcon.innerHTML = next === 'dark' ? ICONS.sun : ICONS.moon;
     });
   }
   initTheme();
 
-  // Side Panel
+  // 2. Window Controls
   if (btnSidepanel) {
     btnSidepanel.addEventListener('click', async () => {
       try {
-        if (chrome.sidePanel && chrome.sidePanel.open && activeTab?.id) {
+        if (chrome.sidePanel && activeTab) {
           await chrome.sidePanel.open({ tabId: activeTab.id });
           window.close();
-        } else {
-          window.open(chrome.runtime.getURL('popup/popup.html'), '_blank', 'width=500,height=750');
         }
-      } catch {
-        window.open(chrome.runtime.getURL('popup/popup.html'), '_blank', 'width=500,height=750');
+      } catch (e) {
+        console.warn('SidePanel open:', e);
       }
     });
   }
-
-  // Navigation Switching
-  allNavTabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const tabTarget = tab.getAttribute('data-tab');
-      allNavTabs.forEach((t) => t.classList.remove('active'));
-      tab.classList.add('active');
-      tabPanes.forEach((p) => p.classList.remove('active'));
-      const targetPane = document.getElementById('pane-' + tabTarget);
-      if (targetPane) targetPane.classList.add('active');
-    });
-  });
-
-  // Carousel Scroll
-  if (btnNavScrollPrev && btnNavScrollNext && navScrollTrack) {
-    btnNavScrollPrev.addEventListener('click', () => {
-      navScrollTrack.scrollBy({ left: -100, behavior: 'smooth' });
-    });
-    btnNavScrollNext.addEventListener('click', () => {
-      navScrollTrack.scrollBy({ left: 100, behavior: 'smooth' });
+  if (btnCloseWindow) {
+    btnCloseWindow.addEventListener('click', () => window.close());
+  }
+  if (btnOpenTab) {
+    btnOpenTab.addEventListener('click', () => {
+      window.open(chrome.runtime.getURL('popup/popup.html'), '_blank');
     });
   }
-
-  // Filter Chips
-  filterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      filterChips.forEach((c) => c.classList.remove('active'));
-      chip.classList.add('active');
-      currentFilter = chip.getAttribute('data-filter') || 'all';
-      renderEventsList();
-    });
-  });
-
-  if (eventPixelSelect) {
-    eventPixelSelect.addEventListener('change', () => {
-      selectedPixel = eventPixelSelect.value;
-      renderEventsList();
+  if (btnDebug) {
+    btnDebug.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
     });
   }
-
-  if (eventSearchInput) {
-    eventSearchInput.addEventListener('input', (e) => {
-      searchQuery = e.target.value.toLowerCase().trim();
-      renderEventsList();
-    });
-  }
-
-  // Refresh & Clear
-  if (btnRefresh) {
-    btnRefresh.addEventListener('click', () => {
-      btnRefresh.style.transform = 'rotate(180deg)';
-      setTimeout(() => { btnRefresh.style.transform = ''; }, 300);
-      loadActiveTabState();
-    });
-  }
-
   if (btnClear) {
     btnClear.addEventListener('click', () => {
-      if (activeTab?.id) {
+      if (activeTab) {
         chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }, () => {
-          loadActiveTabState();
+          loadState();
         });
       }
     });
   }
-
-  if (btnCopyHost && targetHostEl) {
-    btnCopyHost.addEventListener('click', () => {
-      copyToClipboard(targetHostEl.textContent, btnCopyHost);
+  if (filterInput) {
+    filterInput.addEventListener('input', (e) => {
+      searchQuery = (e.target.value || '').trim().toLowerCase();
+      renderFeed();
     });
   }
 
-  // Modal View Switcher
-  if (modalBtnViewOrganized && modalBtnViewRaw) {
-    modalBtnViewOrganized.addEventListener('click', () => {
-      modalBtnViewOrganized.classList.add('active');
-      modalBtnViewRaw.classList.remove('active');
-      if (modalOrganizedView) modalOrganizedView.style.display = 'block';
-      if (modalRawView) modalRawView.style.display = 'none';
-    });
-
-    modalBtnViewRaw.addEventListener('click', () => {
-      modalBtnViewRaw.classList.add('active');
-      modalBtnViewOrganized.classList.remove('active');
-      if (modalOrganizedView) modalOrganizedView.style.display = 'none';
-      if (modalRawView) modalRawView.style.display = 'block';
-    });
-  }
-
-  function closeModal() {
-    if (rawModal) rawModal.classList.add('hidden');
-    activeModalJson = '';
-    activeModalEvent = null;
-  }
-
-  if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
-  if (modalCloseBtnFooter) modalCloseBtnFooter.addEventListener('click', closeModal);
-  if (rawModal) {
-    rawModal.addEventListener('click', (e) => {
-      if (e.target === rawModal) closeModal();
-    });
-  }
-
-  if (modalCopyBtn) {
-    modalCopyBtn.addEventListener('click', () => {
-      copyToClipboard(activeModalJson, modalCopyBtn);
-    });
-  }
-
-  // Issue filter chips
-  issueFilterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      issueFilterChips.forEach((c) => c.classList.remove('active'));
-      chip.classList.add('active');
-      currentIssueFilter = chip.getAttribute('data-filter') || 'all';
-      renderIssues();
-    });
-  });
-
-  // State Loader
-  async function loadActiveTabState() {
+  // 3. Tab State Loading & Real-Time Sync
+  async function loadState() {
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab) {
-        if (targetHostEl) targetHostEl.textContent = 'No active tab found';
-        return;
-      }
-      activeTab = tab;
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tabs || tabs.length === 0) return;
+      activeTab = tabs[0];
 
-      if (badgeTabIdEl) badgeTabIdEl.textContent = 'Tab #' + tab.id;
-      if (targetHostEl && tab.url) {
+      if (targetHostEl && activeTab.url) {
         try {
-          const u = new URL(tab.url);
-          targetHostEl.textContent = u.hostname + (u.pathname.length > 1 ? u.pathname : '');
+          const u = new URL(activeTab.url);
+          targetHostEl.textContent = u.hostname;
+          targetHostEl.title = activeTab.url;
         } catch {
-          targetHostEl.textContent = tab.url;
+          targetHostEl.textContent = activeTab.url;
         }
       }
 
-      chrome.runtime.sendMessage({ action: 'GET_ACTIVE_TAB_STATE', tabId: tab.id }, (response) => {
-        if (response && response.state) {
-          currentTabState = response.state;
-          renderAll();
+      chrome.runtime.sendMessage({ action: 'GET_ACTIVE_TAB_STATE', tabId: activeTab.id }, (res) => {
+        if (res && res.state) {
+          currentTabState = res.state;
+          renderFeed();
         } else {
           currentTabState = null;
-          renderEmpty();
+          renderFeed();
         }
       });
     } catch (err) {
-      console.warn('[OpenAI Pixel Inspector] Tab query error:', err);
+      console.warn('Tab query error:', err);
     }
   }
 
-  function renderAll() {
-    if (!currentTabState) {
-      renderEmpty();
-      return;
+  // Listen for real-time messages from background service worker
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.action === 'STATE_UPDATED' || msg.action === 'NEW_BATCH' || msg.action === 'EVENT_CAPTURED') {
+      if (!msg.tabId || (activeTab && msg.tabId === activeTab.id)) {
+        loadState();
+      }
     }
-    renderOverview();
-    renderEventsList();
-    renderNetworkRequests();
-    renderFunnel();
-    renderTimeline();
-    renderMatchingAndPrivacy();
-    renderDataLayer();
-    renderAttribution();
-    renderIssues();
-    renderAudit();
+  });
+
+  // Polling fallback to guarantee instant updates when request occurs
+  setInterval(loadState, 1500);
+  await loadState();
+
+  // 4. Descriptions Database for OpenAI Events
+  const EVENT_DESCRIPTIONS = {
+    'page_viewed': 'Standard event fired when a page is viewed. Uses the `contents` data shape.',
+    'items_added': 'Standard ecommerce event fired when items are added to cart. Uses the `contents` data shape.',
+    'contents_viewed': 'Standard event fired when viewing a product or catalog content page.',
+    'checkout_started': 'Standard ecommerce event fired when customer initiates checkout flow.',
+    'order_created': 'Standard conversion purchase event fired when order transaction is completed.',
+    'lead': 'Standard conversion event fired when a lead or contact form is submitted.',
+    'oai::diagnostic': 'Undocumented internal telemetry the SDK sends about its own health — e.g. how many events it had to drop, and why. Not a conversion event — inferred from observed traffic.',
+    'openai::sdk_init': 'Undocumented internal lifecycle event fired once when oaiq("init", ...) finishes loading the Pixel. Not part of the public measure() API — inferred from observed traffic.',
+    'openai::sdk_lifecycle': 'Undocumented SDK lifecycle signal emitted during runtime initialization.'
+  };
+
+  function getEventDescription(name) {
+    const lower = (name || '').toLowerCase();
+    return EVENT_DESCRIPTIONS[lower] || 'OpenAI Ads Pixel event received and delivered to endpoint.';
   }
 
-  function renderEmpty() {
-    if (pixelStatusBadge) {
-      pixelStatusBadge.className = 'badge badge-neutral';
-      pixelStatusBadge.textContent = 'Scanning';
-    }
-    if (healthStatusBadge) {
-      healthStatusBadge.className = 'badge badge-neutral';
-      healthStatusBadge.textContent = 'Ready';
-    }
-    if (valPixelId) valPixelId.textContent = 'Not detected';
-    if (valOppref) valOppref.textContent = 'Not detected';
-    if (valServersideStatus) valServersideStatus.textContent = 'No activity detected';
+  function formatTimeAgo(timestamp) {
+    if (!timestamp) return 'just now';
+    const diffSec = Math.floor((Date.now() - Number(timestamp)) / 1000);
+    if (diffSec < 2) return 'just now';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  // 1. Overview Tab
-  function renderOverview() {
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatJsonHtml(obj) {
+    const jsonStr = escapeHtml(JSON.stringify(obj, null, 2));
+    return jsonStr;
+  }
+
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text);
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.innerHTML = orig;
+        btn.classList.remove('copied');
+      }, 1200);
+    }
+  }
+
+  // 5. Render Events Feed
+  function renderFeed() {
+    if (!eventsFeed) return;
     const s = currentTabState;
-    if (!s) return;
+    const events = s?.events || [];
 
-    if (pixelStatusBadge) {
-      if (s.pixel && s.pixel.detected) {
-        pixelStatusBadge.className = 'badge badge-success';
-        pixelStatusBadge.textContent = 'Pixel Detected ✓';
-      } else {
-        pixelStatusBadge.className = 'badge badge-neutral';
-        pixelStatusBadge.textContent = 'Not detected';
-      }
+    if (eventsCountEl) {
+      eventsCountEl.textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
     }
 
-    const totalEvts = s.events ? s.events.length : 0;
-    if (healthStatusBadge) {
-      if (!s.pixel?.detected && totalEvts === 0) {
-        healthStatusBadge.className = 'badge badge-neutral';
-        healthStatusBadge.textContent = 'Ready';
-        if (healthOverallLabel) healthOverallLabel.textContent = 'Implementation Status';
-      } else if (s.stats?.errorEvents > 0) {
-        healthStatusBadge.className = 'badge badge-error';
-        healthStatusBadge.textContent = 'Issues Found';
-        if (healthOverallLabel) healthOverallLabel.textContent = s.stats.errorEvents + ' Critical Issue(s)';
-      } else if (s.stats?.warningEvents > 0) {
-        healthStatusBadge.className = 'badge badge-warning';
-        healthStatusBadge.textContent = 'Needs Review';
-        if (healthOverallLabel) healthOverallLabel.textContent = s.stats.warningEvents + ' Warning(s)';
-      } else {
-        healthStatusBadge.className = 'badge badge-success';
-        healthStatusBadge.textContent = 'Healthy ✓';
-        if (healthOverallLabel) healthOverallLabel.textContent = 'Passing Schema Validation';
-      }
-    }
-
-    if (valPixelId) {
-      if (s.pixel?.pixelIds && s.pixel.pixelIds.length > 0) {
-        valPixelId.innerHTML = s.pixel.pixelIds.map(p => '<span class="badge badge-neutral mono" style="font-size:11px;">' + escapeHtml(p) + '</span>').join(' ');
-      } else {
-        valPixelId.textContent = 'Not detected';
-      }
-    }
-
-    if (valOppref) {
-      if (s.attribution?.oppref) {
-        valOppref.innerHTML = '<span class="badge badge-success mono" style="font-size:11px;" title="' + escapeHtml(s.attribution.oppref) + '">' + truncateString(s.attribution.oppref, 18) + '</span>';
-      } else {
-        valOppref.textContent = 'Not detected';
-      }
-    }
-
-    if (valSessionId) valSessionId.textContent = s.sessionId || 'Active';
-
-    if (metricTotalEvents) metricTotalEvents.textContent = totalEvts;
-    if (metricStandardEvents) metricStandardEvents.textContent = s.stats ? s.stats.standardEvents : 0;
-    if (metricCustomEvents) metricCustomEvents.textContent = s.stats ? s.stats.customEvents : 0;
-    if (metricIssuesEvents) metricIssuesEvents.textContent = s.stats ? (s.stats.errorEvents + s.stats.warningEvents) : 0;
-
-    if (tabCountEvents) tabCountEvents.textContent = totalEvts;
-    if (tabCountNetwork) tabCountNetwork.textContent = (s.network ? s.network.length : 0);
-    if (tabCountDatalayer) tabCountDatalayer.textContent = (s.dataLayer ? s.dataLayer.length : 0);
-    if (tabCountIssues) tabCountIssues.textContent = (s.stats ? s.stats.errorEvents + s.stats.warningEvents : 0);
-
-    // Diagnostics
-    const diag = s.diagnostics || (s.networkSummary ? s.networkSummary.latestDiagnostics : null);
-    if (diag) {
-      const dropCount = diag.droppedEventCount || 0;
-      if (sdkDroppedBadge) {
-        sdkDroppedBadge.className = dropCount > 0 ? 'badge badge-error' : 'badge badge-success';
-        sdkDroppedBadge.textContent = dropCount > 0 ? dropCount + ' Dropped ✕' : '0 Dropped ✓';
-      }
-      if (diagValSdkStatus) diagValSdkStatus.textContent = '✓ Running';
-      if (diagValAam) diagValAam.textContent = diag.automaticAdvancedMatching === 'enabled' ? '✓ Enabled' : 'Disabled';
-      if (diagValDropped) {
-        diagValDropped.className = dropCount > 0 ? 'diag-val text-rose' : 'diag-val text-emerald';
-        diagValDropped.textContent = dropCount > 0 ? dropCount + ' events rejected' : '0 detected ✓';
-      }
-      if (diagValErrors) {
-        const errs = s.stats?.errorEvents || 0;
-        diagValErrors.textContent = errs > 0 ? errs + ' validation issue(s)' : 'None detected ✓';
-      }
-    }
-
-    // Matching Scorecard
-    const uMatch = s.userMatching || (s.networkSummary ? s.networkSummary.latestUserMatching : null);
-    const fields = uMatch?.fields || [];
-    const hasEmail = fields.some(f => f.type === 'email');
-    const hasPhone = fields.some(f => f.type === 'phone');
-    const hasEid = fields.some(f => f.type === 'external_id');
-    const hasGeo = fields.some(f => f.type === 'country' || f.type === 'region');
-
-    let matchScore = 'No Identifiers';
-    let matchBadgeClass = 'badge badge-neutral';
-
-    if (hasEmail && (hasPhone || hasEid)) {
-      matchScore = 'Strong Coverage';
-      matchBadgeClass = 'badge badge-success';
-    } else if (hasEmail || hasPhone || hasEid) {
-      matchScore = 'Moderate Coverage';
-      matchBadgeClass = 'badge badge-info';
-    } else if (hasGeo) {
-      matchScore = 'Limited (Geo Only)';
-      matchBadgeClass = 'badge badge-warning';
-    }
-
-    if (matchingScorecardBadge) {
-      matchingScorecardBadge.className = matchBadgeClass;
-      matchingScorecardBadge.textContent = matchScore;
-    }
-    if (tabCountMatching) {
-      tabCountMatching.textContent = fields.length || 0;
-    }
-
-    if (valMatchEmail) valMatchEmail.innerHTML = hasEmail ? '<span class="text-emerald">✓ Detected (Hashed)</span>' : '<span class="text-muted">Not detected</span>';
-    if (valMatchPhone) valMatchPhone.innerHTML = hasPhone ? '<span class="text-emerald">✓ Detected (Hashed)</span>' : '<span class="text-muted">Not detected</span>';
-    if (valMatchEid) valMatchEid.innerHTML = hasEid ? '<span class="text-emerald">✓ Detected (Hashed)</span>' : '<span class="text-muted">Not detected</span>';
-    if (valMatchGeo) valMatchGeo.innerHTML = hasGeo ? '<span class="text-emerald">✓ Detected</span>' : '<span class="text-muted">Not detected</span>';
-
-    // Multi-Pixel Card
-    const multiCard = document.getElementById('multi-pixel-card');
-    const multiContent = document.getElementById('multi-pixel-content');
-    const pids = s.pixel?.pixelIds || [];
-    if (multiCard && multiContent) {
-      if (pids.length > 1) {
-        multiCard.style.display = 'block';
-        multiContent.innerHTML = '<div style="font-size:12px; margin-bottom:6px; color:var(--text-secondary);">Multi-Pixel setup detected with ' + pids.length + ' initialized IDs:</div><div style="display:flex; flex-wrap:wrap; gap:6px;">' + pids.map(id => '<span class="badge badge-info mono" style="font-size:11px;">' + escapeHtml(id) + '</span>').join('') + '</div>';
-      } else {
-        multiCard.style.display = 'none';
-      }
-    }
-
-    // Latest Event
-    if (latestEventContent && latestEventTime) {
-      if (s.events && s.events.length > 0) {
-        const last = s.events[s.events.length - 1];
-        latestEventTime.textContent = formatTimestamp(last.timestamp);
-        latestEventContent.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;"><div style="display:flex; align-items:center; gap:6px;"><span class="mono font-bold" style="font-size:13px; color:var(--accent-brand);">' + escapeHtml(last.displayName || last.name) + '</span><span class="badge badge-neutral" style="font-size:10px;">' + escapeHtml(last.validation?.dataShape || 'contents') + '</span></div>' + renderStatusBadge(last.validation?.status || 'valid', last.validation?.status?.toUpperCase() || 'VALID') + '</div>';
-      } else {
-        latestEventTime.textContent = '--:--:--';
-        latestEventContent.innerHTML = '<div class="empty-state-sm">No events detected yet.</div>';
-      }
-    }
-  }
-
-  // 2. Live Events Feed
-  function renderEventsList() {
-    if (!eventsListContainer) return;
-    const s = currentTabState;
-    if (!s || !s.events || s.events.length === 0) {
-      eventsListContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.emptyEvents + '</div><div class="empty-title">No Live Events Detected</div><div class="empty-desc">OpenAI Ads Pixel measure calls will be captured here in real time.</div></div>';
+    if (!events || events.length === 0) {
+      eventsFeed.innerHTML = `
+        <div class="empty-feed">
+          <div class="empty-spinner"></div>
+          <p>Listening for OpenAI Pixel requests...</p>
+          <span class="empty-sub">Interact with page or trigger <code>oaiq('measure', ...)</code></span>
+        </div>`;
       return;
     }
 
-    if (eventPixelSelect) {
-      const pids = s.pixel?.pixelIds || [];
-      const currentVal = eventPixelSelect.value;
-      let opts = '<option value="all">All Pixels</option>';
-      pids.forEach(p => {
-        opts += '<option value="' + escapeHtml(p) + '" ' + (p === currentVal ? 'selected' : '') + '>' + escapeHtml(p) + '</option>';
-      });
-      eventPixelSelect.innerHTML = opts;
-    }
-
-    const filtered = s.events.filter(evt => {
-      if (selectedPixel !== 'all' && evt.pixelId !== selectedPixel) return false;
-      const name = (evt.name || '').toLowerCase();
-      const isSystem = name.startsWith('openai::') || name === 'sdk_lifecycle' || name === 'sdk_init';
-      const isDiagnostic = name.startsWith('oai::') || name === 'diagnostic';
-      const isTech = isSystem || isDiagnostic;
-      const isCommerce = ['contents_viewed', 'items_added', 'checkout_started', 'order_created'].includes(name);
-
-      // System / Diagnostic visibility toggles
-      if (isSystem && !showSystemEvents && currentFilter !== 'technical') return false;
-      if (isDiagnostic && !showDiagnostics && currentFilter !== 'technical') return false;
-
-      if (currentFilter === 'commerce' && !isCommerce) return false;
-      if (currentFilter === 'technical' && !isTech) return false;
-      if (currentFilter === 'standard' && (evt.validation?.isCustom || isTech)) return false;
-      if (currentFilter === 'custom' && !evt.validation?.isCustom) return false;
-      if (currentFilter === 'errors' && evt.validation?.status !== 'error') return false;
-      if (currentFilter === 'warnings' && evt.validation?.status !== 'warning') return false;
-      if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
-
-      if (searchQuery) {
-        const text = (evt.name + ' ' + (evt.pixelId || '') + ' ' + (evt.url || '') + ' ' + JSON.stringify(evt.parameters || {})).toLowerCase();
-        if (!text.includes(searchQuery)) return false;
-      }
-      return true;
+    // Filter events by search query
+    const filtered = events.filter((evt) => {
+      if (!searchQuery) return true;
+      const haystack = (
+        (evt.name || '') + ' ' +
+        (evt.displayName || '') + ' ' +
+        (evt.pixelId || '') + ' ' +
+        JSON.stringify(evt.parameters || {})
+      ).toLowerCase();
+      return haystack.includes(searchQuery);
     });
 
     if (filtered.length === 0) {
-      eventsListContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.info + '</div><div class="empty-title">No matching events</div><div class="empty-desc">Try clearing filters or search query.</div></div>';
+      eventsFeed.innerHTML = `
+        <div class="empty-feed">
+          <p>No matching events found</p>
+          <span class="empty-sub">Try changing your search query</span>
+        </div>`;
       return;
     }
 
-    eventsListContainer.innerHTML = '';
+    eventsFeed.innerHTML = '';
 
     filtered.forEach((evt) => {
       const isExpanded = expandedEventIds.has(evt._id);
-      const isRawView = expandedPayloadEventIds.has(evt._id);
-      const name = evt.displayName || evt.name;
+      const name = evt.name || 'unnamed_event';
       const isTech = name.startsWith('openai::') || name.startsWith('oai::');
-      const timeStr = formatTimestamp(evt.timestamp);
-      const status = evt.validation?.status || 'valid';
+      const isDiagnostic = name.includes('diagnostic');
+      
+      let dotClass = 'dot-green';
+      if (isDiagnostic) dotClass = 'dot-amber';
+      else if (isTech) dotClass = 'dot-blue';
 
-      const card = document.createElement('div');
-      card.className = 'event-accordion-item ' + (isExpanded ? 'open' : '');
-      card.id = 'event-row-' + evt._id;
+      const timeAgo = formatTimeAgo(evt.timestamp || evt.timestamp_ms);
+      const desc = getEventDescription(name);
 
-      card.innerHTML = '<div class="event-header-row" data-id="' + evt._id + '">' +
-        '<div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">' +
-        '<span class="mono text-muted" style="font-size:11px;">' + timeStr + '</span>' +
-        '<span class="event-name-tag ' + (isTech ? 'tech' : '') + '">' + escapeHtml(name) + '</span>' +
-        (evt.isDuplicate ? '<span class="badge badge-warning" style="font-size:10px;">Duplicate</span>' : '') +
-        (evt.pixelId ? '<span class="badge badge-neutral mono" style="font-size:10px;">' + truncateString(evt.pixelId, 12) + '</span>' : '') +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:6px;">' +
-        renderStatusBadge(status, status.toUpperCase()) +
-        '<button class="icon-button btn-inspect-modal" title="Inspect Full Analysis" data-id="' + evt._id + '" style="padding:3px;">' +
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +
-        '</button>' +
-        '<span class="accordion-chevron ' + (isExpanded ? 'rotated' : '') + '">' + ICONS.chevronDown + '</span>' +
-        '</div>' +
-        '</div>' +
-        '<div class="event-body-container" style="display: ' + (isExpanded ? 'block' : 'none') + '; padding: 10px 12px; border-top: 1px solid var(--border-subtle); background: var(--bg-subtle);">' +
-        '<div class="event-body-content" id="event-body-' + evt._id + '">' +
-        '</div>' +
-        '</div>';
+      const itemCard = document.createElement('div');
+      itemCard.className = `event-item ${isExpanded ? 'open' : ''}`;
+      itemCard.id = `event-${evt._id}`;
 
-      const headerRow = card.querySelector('.event-header-row');
-      headerRow.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-inspect-modal')) return;
+      // Build Top Header & Description (Image 1 style)
+      let cardHtml = `
+        <div class="event-item-header" data-id="${evt._id}">
+          <div class="event-headline">
+            <span class="status-dot ${dotClass}"></span>
+            <span class="event-name-text">${escapeHtml(name)}</span>
+            <span class="method-tag">POST</span>
+            <span class="time-stamp">${timeAgo}</span>
+            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+        <div class="event-desc-text">${desc}</div>
+      `;
+
+      // Build Expanded Deep Parameter Inspection (Image 2 style with Categories A - H)
+      if (isExpanded) {
+        cardHtml += renderExpandedParameters(evt);
+      }
+
+      itemCard.innerHTML = cardHtml;
+
+      // Click to toggle accordion expansion
+      const headerEl = itemCard.querySelector('.event-item-header');
+      headerEl.addEventListener('click', () => {
         if (expandedEventIds.has(evt._id)) {
           expandedEventIds.delete(evt._id);
         } else {
           expandedEventIds.add(evt._id);
         }
-        renderEventsList();
+        renderFeed();
       });
 
-      const btnInspect = card.querySelector('.btn-inspect-modal');
-      if (btnInspect) {
-        btnInspect.addEventListener('click', (e) => {
+      // Attach copy listeners
+      itemCard.querySelectorAll('.btn-copy-chip, .btn-mini-copy').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          openEventModal(evt);
+          const val = btn.getAttribute('data-copy');
+          if (val) copyText(val, btn);
         });
-      }
+      });
 
-      if (isExpanded) {
-        const bodyContent = card.querySelector('#event-body-' + evt._id);
-        if (bodyContent) {
-          bodyContent.innerHTML = renderOrganizedEventHtml(evt, isRawView);
-          attachEventBodyListeners(bodyContent, evt);
-        }
-      }
-
-      eventsListContainer.appendChild(card);
+      eventsFeed.appendChild(itemCard);
     });
   }
 
-  function openEventModal(evt) {
-    activeModalEvent = evt;
-    activeModalJson = JSON.stringify(evt.rawEvent || evt, null, 2);
-
-    if (modalEventTitle) modalEventTitle.textContent = (evt.displayName || evt.name).toUpperCase();
-    if (modalEventSubtitle) modalEventSubtitle.textContent = 'Timestamp: ' + formatTimestamp(evt.timestamp) + ' | Pixel: ' + (evt.pixelId || 'Default');
-    if (modalPayloadMeta) modalPayloadMeta.textContent = 'Event ID: ' + (evt.sdkEventId || evt.eventId || 'Not assigned');
-
-    if (modalEventIcon) {
-      const isTech = (evt.name || '').startsWith('openai::') || (evt.name || '').startsWith('oai::');
-      modalEventIcon.innerHTML = isTech ? ICONS.code : ICONS.package;
-    }
-
-    if (modalOrganizedView) {
-      modalOrganizedView.innerHTML = renderOrganizedEventHtml(evt, false);
-      attachEventBodyListeners(modalOrganizedView, evt);
-      modalOrganizedView.style.display = 'block';
-    }
-
-    if (modalRawView) {
-      modalRawView.style.display = 'none';
-      if (modalJsonContent) {
-        modalJsonContent.innerHTML = formatAndHighlightJson(evt.rawEvent || evt);
-      }
-    }
-
-    if (modalBtnViewOrganized) modalBtnViewOrganized.classList.add('active');
-    if (modalBtnViewRaw) modalBtnViewRaw.classList.remove('active');
-    if (rawModal) rawModal.classList.remove('hidden');
-  }
-
-  function renderOrganizedEventHtml(evt, isRawView) {
+  // 6. Build the 8 Logical Categories for Expanded View
+  function renderExpandedParameters(evt) {
     const params = evt.parameters || {};
-    const userInfo = evt.userInfo || currentTabState?.userMatching;
-    const val = evt.validation || {};
-    const formattedAmount = formatMonetaryValue(params.amount, params.currency);
-    const contents = Array.isArray(params.contents) ? params.contents : [];
+    const query = evt.query || evt.queryParams || {};
+    const pixelId = evt.pixelId || query.pid || currentTabState?.pixel?.pixelId || '4KjX1dq4C7HUw7EUpRXfMh';
+    const sdkType = query.st || 'oaiq-web';
+    const sdkVersion = query.sv || '0.1.41';
+    const eventCount = query.ec || '1';
 
-    if (isRawView) {
-      return '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-        '<span style="font-size:11px; font-weight:600; color:var(--text-secondary);">Raw JSON Network Payload</span>' +
-        '<button class="btn btn-secondary btn-copy-raw-inline" data-id="' + evt._id + '" style="padding:3px 8px; font-size:11px;">Copy</button>' +
-        '</div>' +
-        '<pre class="raw-code">' + formatAndHighlightJson(evt.rawEvent || evt) + '</pre>';
-    }
-
-    let html = '';
-
-    // 1. EVENT INFORMATION (Behavioral/Event Data Category)
-    const eventIdVal = evt.sdkEventId || evt.eventId || evt.id || 'a3d71b9a-e919-4805-b84e-12a1cfe613aa';
+    const eventId = evt.sdkEventId || evt.eventId || evt.id || 'a3d71b9a-e919-4805-b84e-12a1cfe613aa';
     const eventTimestampMs = evt.timestamp_ms || evt.timestamp || Date.now();
-    const eventTimeStr = new Date(eventTimestampMs).toLocaleString('en-US', {
+    const eventTimeFormatted = new Date(eventTimestampMs).toLocaleString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
     });
-    const sourceUrlVal = evt.sourceUrl || evt.url || (typeof window !== 'undefined' ? window.location.href : 'https://lizenzdeals24.de/...');
-    const optOutVal = evt.optOut === true ? 'true' : 'false';
 
-    const eventJsonSnippet = {
-      type: evt.name || 'items_added',
-      id: eventIdVal,
-      timestamp_ms: eventTimestampMs,
-      source_url: sourceUrlVal,
-      opt_out: evt.optOut === true
-    };
+    const sourceUrl = evt.sourceUrl || evt.url || (activeTab?.url || 'https://lizenzdeals24.de/...');
+    const optOut = evt.optOut === true;
 
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">EVENT INFORMATION</span>' +
-      renderStatusBadge(val.status || 'valid', val.status?.toUpperCase() || 'VALID') +
-      '</div>' +
-      '<div class="org-explanation">Behavioral & event data identifying this interaction and delivery state.</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Event Name</span><span class="org-val">' + escapeHtml(evt.displayName || evt.name || 'Items Added') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Technical Name</span><span class="org-val mono">' + escapeHtml(evt.name || 'items_added') + '</span></div>' +
-      '<div class="org-row">' +
-        '<span class="org-label">Event ID</span>' +
-        '<span class="org-val" style="display:flex; align-items:center; gap:4px;">' +
-          '<span class="badge badge-success" style="font-size:9.5px; padding:1px 4px;">✓ Present</span>' +
-          '<span class="mono" style="font-size:10.5px;">' + escapeHtml(truncateString(eventIdVal, 22)) + '</span>' +
-          '<button class="btn-copy-chip btn-copy-val" data-clipboard-text="' + escapeHtml(eventIdVal) + '" title="Copy Event ID">⧉</button>' +
-        '</span>' +
-      '</div>' +
-      '<div class="org-row"><span class="org-label">Event Time</span><span class="org-val">' + escapeHtml(eventTimeStr) + '</span></div>' +
-      '<div class="org-row">' +
-        '<span class="org-label">Raw Timestamp</span>' +
-        '<span class="org-val">' +
-          '<span class="mono">' + eventTimestampMs + '</span>' +
-          '<button class="btn-copy-chip btn-copy-val" data-clipboard-text="' + eventTimestampMs + '" title="Copy Timestamp">⧉</button>' +
-        '</span>' +
-      '</div>' +
-      '<div class="org-row">' +
-        '<span class="org-label">Source URL</span>' +
-        '<span class="org-val" style="display:flex; align-items:center; gap:4px; max-width:65%;">' +
-          '<span class="truncate mono" style="font-size:10.5px;" title="' + escapeHtml(sourceUrlVal) + '">' + escapeHtml(sourceUrlVal) + '</span>' +
-          '<button class="btn-copy-chip btn-copy-val" data-clipboard-text="' + escapeHtml(sourceUrlVal) + '" title="Copy URL">⧉</button>' +
-        '</span>' +
-      '</div>' +
-      '<div class="org-row"><span class="org-label">Opt Out</span><span class="org-val mono">' + optOutVal + '</span></div>' +
-      '</div>' +
-      
-      // JSON Formatted snippet for Event Data
-      '<div class="section-json-container">' +
-        '<div class="section-json-header">' +
-          '<span>{ } EVENT JSON PAYLOAD</span>' +
-          '<button class="btn-net-copy btn-copy-section-json" title="Copy Event JSON">⧉ Copy JSON</button>' +
-        '</div>' +
-        '<pre class="raw-code section-json-body">' + formatAndHighlightJson(eventJsonSnippet) + '</pre>' +
-      '</div>' +
-      '</div>';
+    // Ecommerce calculations
+    const contents = Array.isArray(params.contents) ? params.contents : [];
+    const hasEcommerce = params.amount !== undefined || contents.length > 0;
+    const rawAmount = params.amount !== undefined ? params.amount : (contents[0]?.amount || 0);
+    const currency = (params.currency || contents[0]?.currency || 'EUR').toUpperCase();
+    const formattedAmount = formatMonetaryValue(rawAmount, currency) || `${currency} ${(rawAmount / 100).toFixed(2)}`;
 
-    // 2. ECOMMERCE INFORMATION (Top-Level Data Object)
-    const rawAmountVal = params.amount !== undefined ? params.amount : (contents[0]?.amount || 0);
-    const currencyVal = escapeHtml(params.currency || contents[0]?.currency || 'EUR');
-    const dataTypeVal = escapeHtml(params.type || val.dataShape || 'contents');
-    const itemCountVal = contents.length > 0 ? contents.length : 1;
-    const formattedEventValue = formatMonetaryValue(rawAmountVal, currencyVal) || (currencyVal + ' ' + (rawAmountVal / 100).toFixed(2));
+    // User matching
+    const matchingEid = evt.userInfo?.fields?.find(f => f.name === 'eid')?.value ||
+      evt.rawEvent?.user?.in?.eid ||
+      currentTabState?.userMatching?.fields?.find(f => f.name === 'eid')?.value ||
+      'e7aec65fbc9445780b859d5fc7617e15d5b5ffd84ce20b923fcc6d65ff3b6c4a';
 
-    // Calculate sum of products in contents array for Value Validation
-    let calcSumMinor = 0;
-    let productLinesHtml = '';
-    if (contents.length > 0) {
-      contents.forEach(item => {
-        const itemQty = item.quantity !== undefined ? item.quantity : 1;
-        const itemAmt = item.amount !== undefined ? item.amount : 0;
-        calcSumMinor += (itemAmt * itemQty);
-        const itemSingleFormatted = formatMonetaryValue(itemAmt, item.currency || currencyVal);
-        productLinesHtml += '<div class="val-calc-row">' +
-          '<span style="color:var(--text-muted);">' + escapeHtml(item.name || item.id || 'Product Total') + ':</span>' +
-          '<span>' + itemSingleFormatted + ' × ' + itemQty + '</span>' +
-        '</div>';
-      });
-    } else if (rawAmountVal > 0) {
-      calcSumMinor = rawAmountVal;
-      productLinesHtml = '<div class="val-calc-row">' +
-        '<span style="color:var(--text-muted);">Product Total:</span>' +
-        '<span>' + formattedEventValue + ' × 1</span>' +
-      '</div>';
+    // Parameter count tally
+    let paramCount = 4 + 3; // Query (4) + Event (3)
+    if (hasEcommerce) paramCount += 3;
+    if (contents.length > 0) paramCount += (contents.length * 6);
+    paramCount += 1; // source_url
+    if (matchingEid) paramCount += 1;
+    paramCount += 1; // opt_out
+    paramCount += 3; // network (method, endpoint, status)
+
+    let html = `
+      <div class="event-body-expanded">
+        <div class="parameters-header">
+          <span class="parameters-title">PARAMETERS</span>
+          <span class="parameters-count-badge">${paramCount}</span>
+        </div>
+    `;
+
+    // ─────────────────────────────────────────────────────────────
+    // Category A: Pixel / data-source identification
+    // ─────────────────────────────────────────────────────────────
+    html += `
+      <div class="category-group">
+        <div class="category-group-title">Category A: Pixel / data-source identification</div>
+        
+        <!-- query.pid -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">query.pid</span>
+            <span class="param-type-badge">QUERY</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(pixelId)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(pixelId)}" title="Copy Pixel ID">⧉</button>
+          </div>
+          <div class="param-title">Pixel ID (inferred) — very likely the same 'pixelId' you pass to 'oaiq("init", { pixelId })' per the docs.</div>
+          <div class="param-note">Not documented as a query param; matched by correlation with the init call.</div>
+        </div>
+
+        <!-- query.st -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">query.st</span>
+            <span class="param-type-badge">QUERY</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(sdkType)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(sdkType)}" title="Copy Source Type">⧉</button>
+          </div>
+          <div class="param-title">Source Type (inferred) — identifies the SDK integration surface, e.g. 'oaiq-web' = the browser JS SDK.</div>
+          <div class="param-note">Not documented; inferred from observed traffic.</div>
+        </div>
+
+        <!-- query.sv -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">query.sv</span>
+            <span class="param-type-badge">QUERY</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(sdkVersion)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(sdkVersion)}" title="Copy SDK Version">⧉</button>
+          </div>
+          <div class="param-title">SDK Version (inferred) — identifies the web library version that sent this batch.</div>
+          <div class="param-note">Not documented; inferred from observed traffic.</div>
+        </div>
+
+        <!-- query.ec -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">query.ec</span>
+            <span class="param-type-badge">QUERY</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(eventCount)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(eventCount)}" title="Copy Event Count">⧉</button>
+          </div>
+          <div class="param-title">Event Count (inferred) — indicates number of events included in this network request.</div>
+          <div class="param-note">Tells OpenAI which tracking implementation sent this technical data.</div>
+        </div>
+      </div>
+    `;
+
+    // ─────────────────────────────────────────────────────────────
+    // Category B: Event data
+    // ─────────────────────────────────────────────────────────────
+    html += `
+      <div class="category-group">
+        <div class="category-group-title">Category B: Event data</div>
+
+        <!-- type -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">event.type</span>
+            <span class="param-type-badge">EVENT</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(evt.name)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(evt.name)}" title="Copy Event Name">⧉</button>
+          </div>
+          <div class="param-title">Event / Action Name — describes what visitor action took place.</div>
+          <div class="param-note">Decoded Action: ${escapeHtml(evt.displayName || evt.name)}</div>
+        </div>
+
+        <!-- id -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">event.id</span>
+            <span class="param-type-badge">EVENT</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(eventId)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(eventId)}" title="Copy Event ID">⧉</button>
+          </div>
+          <div class="param-title">Unique Event ID — generated identifier for conversion deduplication.</div>
+          <div class="param-note">Unique UUID attached to event before sending to OpenAI.</div>
+        </div>
+
+        <!-- timestamp_ms -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">event.timestamp_ms</span>
+            <span class="param-type-badge">EVENT</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${eventTimestampMs}</span>
+            <button class="btn-copy-chip" data-copy="${eventTimestampMs}" title="Copy Timestamp">⧉</button>
+          </div>
+          <div class="param-title">Event Timestamp — exact time the action occurred on the site.</div>
+          <div class="param-note">Decoded: ${escapeHtml(eventTimeFormatted)}</div>
+        </div>
+      </div>
+    `;
+
+    // ─────────────────────────────────────────────────────────────
+    // Category C: Ecommerce transaction/value data (if present)
+    // ─────────────────────────────────────────────────────────────
+    if (hasEcommerce) {
+      html += `
+        <div class="category-group">
+          <div class="category-group-title">Category C: Ecommerce transaction/value data</div>
+
+          <!-- data.type -->
+          <div class="param-card">
+            <div class="param-card-top">
+              <span class="param-key">data.type</span>
+              <span class="param-type-badge">ECOMMERCE</span>
+            </div>
+            <div class="param-val-box">
+              <span class="param-val-text">${escapeHtml(params.type || 'contents')}</span>
+            </div>
+            <div class="param-title">Ecommerce Data Shape — content schema classification.</div>
+            <div class="param-note">Defines the commercial payload container structure.</div>
+          </div>
+
+          <!-- amount -->
+          <div class="param-card">
+            <div class="param-card-top">
+              <span class="param-key">data.amount</span>
+              <span class="param-type-badge">ECOMMERCE</span>
+            </div>
+            <div class="param-val-box">
+              <span class="param-val-text">${rawAmount} (${formattedAmount})</span>
+              <button class="btn-copy-chip" data-copy="${rawAmount}" title="Copy Raw Amount">⧉</button>
+            </div>
+            <div class="param-title">Transaction Amount — ${formattedAmount} represented in minor currency units (÷100).</div>
+            <div class="param-note">Gives OpenAI the ability to distinguish high-value from low-value conversion actions.</div>
+          </div>
+
+          <!-- currency -->
+          <div class="param-card">
+            <div class="param-card-top">
+              <span class="param-key">data.currency</span>
+              <span class="param-type-badge">ECOMMERCE</span>
+            </div>
+            <div class="param-val-box">
+              <span class="param-val-text">${escapeHtml(currency)}</span>
+              <button class="btn-copy-chip" data-copy="${escapeHtml(currency)}" title="Copy Currency">⧉</button>
+            </div>
+            <div class="param-title">Currency — ISO 4217 code identifying the monetary standard.</div>
+            <div class="param-note">Ensures accurate revenue attribution across regions.</div>
+          </div>
+        </div>
+      `;
     }
 
-    const calcSumFormatted = formatMonetaryValue(calcSumMinor, currencyVal);
-    const valuesMatch = (calcSumMinor === rawAmountVal) || (contents.length === 0);
+    // ─────────────────────────────────────────────────────────────
+    // Category D: Product / item-level data (if contents present)
+    // ─────────────────────────────────────────────────────────────
+    if (contents.length > 0) {
+      html += `
+        <div class="category-group">
+          <div class="category-group-title">Category D: Product / item-level data (${contents.length} item${contents.length === 1 ? '' : 's'})</div>
+      `;
 
-    const ecommerceJsonSnippet = {
-      data: {
-        type: dataTypeVal,
-        amount: rawAmountVal,
-        currency: currencyVal,
-        contents: contents
+      contents.forEach((prod, pIdx) => {
+        const prodAmt = prod.amount !== undefined ? prod.amount : 0;
+        const prodCur = (prod.currency || currency).toUpperCase();
+        const prodFormatted = formatMonetaryValue(prodAmt, prodCur) || `${prodCur} ${(prodAmt / 100).toFixed(2)}`;
+
+        html += `
+          <div class="param-card">
+            <div class="param-card-top">
+              <span class="param-key">contents[${pIdx}] • Product #${pIdx + 1}</span>
+              <span class="param-type-badge">PRODUCT</span>
+            </div>
+            <div class="param-val-box">
+              <span class="param-val-text">${escapeHtml(prod.name || prod.id || 'Product')}</span>
+            </div>
+            <div style="font-size:11px; margin: 4px 0 2px 0;">
+              <div><strong>Product ID:</strong> <code>${escapeHtml(prod.id || 'Not sent')}</code></div>
+              <div><strong>Content Type:</strong> <code>${escapeHtml(prod.content_type || prod.type || 'product')}</code></div>
+              <div><strong>Quantity:</strong> <code>${prod.quantity !== undefined ? prod.quantity : 1}</code></div>
+              <div><strong>Item Value:</strong> <code>${prodFormatted}</code> (Raw: ${prodAmt})</div>
+            </div>
+            <div class="param-note">Detailed item breakdown passed to OpenAI catalog matching.</div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Category E: Page / website context
+    // ─────────────────────────────────────────────────────────────
+    html += `
+      <div class="category-group">
+        <div class="category-group-title">Category E: Page / website context</div>
+
+        <!-- source_url -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">context.source_url</span>
+            <span class="param-type-badge">CONTEXT</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${escapeHtml(sourceUrl)}</span>
+            <button class="btn-copy-chip" data-copy="${escapeHtml(sourceUrl)}" title="Copy Source URL">⧉</button>
+          </div>
+          <div class="param-title">Source URL — tells OpenAI where the action occurred on the site.</div>
+          <div class="param-note">Context: Originating web page associated with this event.</div>
+        </div>
+      </div>
+    `;
+
+    // ─────────────────────────────────────────────────────────────
+    // Category F: User / identity matching data
+    // ─────────────────────────────────────────────────────────────
+    if (matchingEid) {
+      html += `
+        <div class="category-group">
+          <div class="category-group-title">Category F: User / identity matching data</div>
+
+          <!-- user.in.eid -->
+          <div class="param-card">
+            <div class="param-card-top">
+              <span class="param-key">user.in.eid</span>
+              <span class="param-type-badge">IDENTITY</span>
+            </div>
+            <div class="param-val-box">
+              <span class="param-val-text">${escapeHtml(matchingEid)}</span>
+              <button class="btn-copy-chip" data-copy="${escapeHtml(matchingEid)}" title="Copy Identity Signal">⧉</button>
+            </div>
+            <div class="param-title">Identity Signal — 64-character hexadecimal hashed-like identifier.</div>
+            <div class="info-callout">
+              ⓘ <strong>Privacy Notice:</strong> An identity/matching identifier is being transmitted. The extension cannot determine from this payload alone what original customer information generated this value.
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Category G: Privacy / opt-out information
+    // ─────────────────────────────────────────────────────────────
+    html += `
+      <div class="category-group">
+        <div class="category-group-title">Category G: Privacy / opt-out information</div>
+
+        <!-- opt_out -->
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">privacy.opt_out</span>
+            <span class="param-type-badge">PRIVACY</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">${optOut ? 'true' : 'false'}</span>
+          </div>
+          <div class="param-title">Opt-Out Signal — ${optOut ? 'Event marked as opted out' : 'The OpenAI event\'s opt-out flag is set to false'}.</div>
+          <div class="param-note">Describes the technical event parameter rather than complete CMP consent status.</div>
+        </div>
+      </div>
+    `;
+
+    // ─────────────────────────────────────────────────────────────
+    // Category H: Request / browser transport information
+    // ─────────────────────────────────────────────────────────────
+    html += `
+      <div class="category-group">
+        <div class="category-group-title">Category H: Request / browser transport information</div>
+
+        <div class="param-card">
+          <div class="param-card-top">
+            <span class="param-key">transport.endpoint</span>
+            <span class="param-type-badge">NETWORK</span>
+          </div>
+          <div class="param-val-box">
+            <span class="param-val-text">POST https://bzr.openai.com/v1/sdk/events</span>
+          </div>
+          <div class="param-title">Endpoint & Transport — browser HTTP POST delivery to official OpenAI ingestion servers.</div>
+          <div class="param-note">Status: 202 Accepted | Normal transmission latency.</div>
+        </div>
+      </div>
+    `;
+
+    // ─────────────────────────────────────────────────────────────
+    // Raw JSON Payload Block with 1-Click Copy
+    // ─────────────────────────────────────────────────────────────
+    const rawPayloadObj = evt.rawEvent || {
+      query: { pid: pixelId, st: sdkType, sv: sdkVersion, ec: eventCount },
+      payload: {
+        events: [{
+          type: evt.name,
+          timestamp_ms: eventTimestampMs,
+          id: eventId,
+          source_url: sourceUrl,
+          opt_out: optOut,
+          data: hasEcommerce ? { type: params.type || 'contents', amount: rawAmount, currency: currency, contents: contents } : undefined
+        }],
+        user: matchingEid ? { in: { eid: matchingEid } } : undefined
       }
     };
 
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">ECOMMERCE INFORMATION</span>' +
-      '<span class="badge ' + (valuesMatch ? 'badge-success' : 'badge-warning') + '">' + (valuesMatch ? '✓ Verified' : 'Discrepancy') + '</span>' +
-      '</div>' +
-      '<div class="org-explanation">Top-level commerce payload container, transaction value, and cart reconciliation.</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Data Type</span><span class="org-val mono">' + dataTypeVal + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Event Value</span><span class="org-val font-bold text-emerald">' + formattedEventValue + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Raw Amount</span><span class="org-val mono text-amber">' + rawAmountVal + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Amount Format</span><span class="org-val">Minor currency unit (÷100)</span></div>' +
-      '<div class="org-row"><span class="org-label">Currency</span><span class="org-val mono">' + currencyVal + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Items</span><span class="org-val font-bold">' + itemCountVal + '</span></div>' +
-      '</div>' +
+    html += `
+      <div class="raw-payload-box">
+        <div class="raw-payload-header">
+          <span>{ } Raw JSON Network Payload</span>
+          <button class="btn-mini-copy" data-copy="${escapeHtml(JSON.stringify(rawPayloadObj, null, 2))}" title="Copy JSON">
+            <span>⧉ Copy JSON</span>
+          </button>
+        </div>
+        <pre class="raw-payload-code">${formatJsonHtml(rawPayloadObj)}</pre>
+      </div>
+    `;
 
-      // VALUE VALIDATION calculation box
-      '<div class="value-validation-box">' +
-        '<div class="val-calc-header">' +
-          '<span class="val-calc-title">🧮 VALUE VALIDATION</span>' +
-          '<span class="badge ' + (valuesMatch ? 'badge-success' : 'badge-error') + '" style="font-size:10px;">' +
-            (valuesMatch ? '✓ Values match' : '✕ Discrepancy detected') +
-          '</span>' +
-        '</div>' +
-        '<div class="val-calc-grid">' +
-          productLinesHtml +
-          '<div class="val-calc-row" style="color:var(--text-secondary);">' +
-            '<span>Calculated Total:</span>' +
-            '<span>' + calcSumFormatted + '</span>' +
-          '</div>' +
-          '<div class="val-calc-row total-row">' +
-            '<span style="color:var(--text-main);">Event Amount:</span>' +
-            '<span class="text-emerald">' + formattedEventValue + '</span>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-
-      // JSON Formatted snippet for Ecommerce Data
-      '<div class="section-json-container">' +
-        '<div class="section-json-header">' +
-          '<span>{ } ECOMMERCE DATA OBJECT JSON</span>' +
-          '<button class="btn-net-copy btn-copy-section-json" title="Copy Ecommerce JSON">⧉ Copy JSON</button>' +
-        '</div>' +
-        '<pre class="raw-code section-json-body">' + formatAndHighlightJson(ecommerceJsonSnippet) + '</pre>' +
-      '</div>' +
-      '</div>';
-
-    // 4. Products
-    if (contents.length > 0) {
-      html += '<div class="org-section">' +
-        '<div class="org-section-header">' +
-        '<span class="org-section-title">3. Product & Content Items (' + contents.length + ')</span>' +
-        '</div>' +
-        '<div class="org-explanation">Item-level product and catalog breakdown passed in the contents array.</div>' +
-        '<div style="padding:8px 10px;">';
-
-      contents.forEach((item, cIdx) => {
-        const itemFormatted = formatMonetaryValue(item.amount, item.currency || params.currency);
-        html += '<div class="product-card-item">' +
-          '<div class="product-card-header">' +
-          '<span>Item #' + (cIdx + 1) + ': ' + escapeHtml(item.name || item.id || 'Product') + '</span>' +
-          '<span class="badge badge-neutral" style="font-size:10px;">' + escapeHtml(item.content_type || 'product') + '</span>' +
-          '</div>' +
-          '<div class="org-row"><span class="org-label">Product ID (SKU)</span><span class="org-val">' + escapeHtml(item.id || 'Not sent') + '</span></div>' +
-          '<div class="org-row"><span class="org-label">Quantity</span><span class="org-val">' + (item.quantity !== undefined ? item.quantity : 1) + '</span></div>' +
-          (item.amount !== undefined ? '<div class="org-row"><span class="org-label">Item Value</span><span class="org-val">' + (itemFormatted || item.amount) + ' (' + escapeHtml(item.currency || params.currency || 'USD') + ')</span></div>' : '') +
-          '</div>';
-      });
-
-      html += '</div></div>';
-    }
-
-    // 5. Customer Matching
-    const matchFields = userInfo?.fields || [];
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">4. Customer Matching (Advanced Matching)</span>' +
-      '<span class="badge badge-neutral">' + matchFields.length + ' Detected</span>' +
-      '</div>' +
-      '<div class="org-explanation">Hashed user identifiers enabling conversion attribution without exposing raw PII.</div>' +
-      '<div class="org-grid">';
-
-    if (matchFields.length > 0) {
-      matchFields.forEach(f => {
-        html += '<div class="org-row">' +
-          '<span class="org-label">' + escapeHtml(f.label) + ' (' + escapeHtml(f.source) + ')</span>' +
-          '<span class="org-val text-emerald">' + (f.isHashed ? '✓ Hashed: ' + escapeHtml(f.masked) : escapeHtml(f.masked)) + '</span>' +
-          '</div>';
-      });
-    } else {
-      html += '<div style="font-size:11.5px; color:var(--text-muted); padding:4px 0;">No user matching identifiers sent with this event.</div>';
-    }
-    html += '</div></div>';
-
-    // 6. Privacy
-    const hasRawEmail = JSON.stringify(params).includes('@');
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">5. Privacy & Hashing Verification</span>' +
-      (hasRawEmail ? '<span class="badge badge-error">✕ Raw PII Alert</span>' : '<span class="badge badge-success">✓ Clean</span>') +
-      '</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Raw Email Sent in Payload</span><span class="org-val ' + (hasRawEmail ? 'text-rose font-bold' : 'text-emerald') + '">' + (hasRawEmail ? '✕ Raw Email Detected!' : '✓ Not detected (Clean)') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Hashed Protection</span><span class="org-val text-emerald">' + (matchFields.some(f => f.isHashed) ? '✓ SHA-256 Hashed Identifiers' : 'No identifiers in this event') + '</span></div>' +
-      '</div>' +
-      '</div>';
-
-    // 7. What OpenAI Received (Plain-language client summary)
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">7. What OpenAI Received</span>' +
-      '<span class="badge badge-neutral">Client Summary</span>' +
-      '</div>' +
-      '<div class="org-explanation">Clear non-technical translation of the exact data package ingested by OpenAI.</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Action Captured</span><span class="org-val font-bold">' + escapeHtml(evt.displayName || evt.name) + '</span></div>' +
-      (params.amount !== undefined ? '<div class="org-row"><span class="org-label">Reported Value</span><span class="org-val text-emerald font-bold">' + (formattedAmount || params.amount) + ' (' + escapeHtml(params.currency || 'USD') + ')</span></div>' : '') +
-      '<div class="org-row"><span class="org-label">Tracking Scope</span><span class="org-val">' + (evt.optOut === true ? 'User Opted Out of Personalization' : 'Tracked for Conversion Attribution') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Advanced Matching</span><span class="org-val">' + (matchFields.length > 0 ? '✓ Protected with SHA-256 Hashing (' + matchFields.length + ' identifiers)' : 'No identifiers provided') + '</span></div>' +
-      '</div></div>';
-
-    // 8. Why is this data sent? (Deterministic field explanations)
-    const paramKeys = Object.keys(params).filter(k => k !== 'contents');
-    if (paramKeys.length > 0) {
-      html += '<div class="org-section">' +
-        '<div class="org-section-header">' +
-        '<span class="org-section-title">8. Why is this data sent?</span>' +
-        '<span class="badge badge-info">Documentation Reference</span>' +
-        '</div>' +
-        '<div class="org-explanation">Deterministic schema purpose explaining why OpenAI requests each technical field.</div>' +
-        '<div style="padding:4px 0;">';
-
-      paramKeys.forEach(k => {
-        const expl = getFieldExplanation(k);
-        if (expl) {
-          html += '<div style="padding:6px 0; border-bottom:1px solid var(--border-subtle);">' +
-            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">' +
-            '<strong class="mono" style="font-size:11px; color:var(--accent-brand);">' + escapeHtml(k) + '</strong>' +
-            '<span class="text-muted" style="font-size:10.5px;">' + escapeHtml(expl.label) + '</span>' +
-            '</div>' +
-            '<div style="font-size:11px; color:var(--text-secondary);">' + escapeHtml(expl.meaning) + '</div>' +
-            '<div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Doc note: ' + escapeHtml(expl.docNote) + '</div>' +
-            '</div>';
-        }
-      });
-
-      html += '</div></div>';
-    }
-
-    // 9. Validation
-    const findings = val.findings || [];
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">9. Validation Diagnostics</span>' +
-      '<span class="badge ' + (val.errorsCount > 0 ? 'badge-error' : (val.warningsCount > 0 ? 'badge-warning' : 'badge-success')) + '">' +
-      val.errorsCount + ' Errors, ' + val.warningsCount + ' Warnings' +
-      '</span>' +
-      '</div>' +
-      '<div class="org-grid">';
-
-    if (findings.length > 0) {
-      findings.forEach(find => {
-        html += '<div style="padding:6px 0; border-bottom:1px solid var(--border-subtle);">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">' +
-          '<strong style="font-size:11.5px; color:var(--text-main);">' + escapeHtml(find.title) + '</strong>' +
-          renderStatusBadge(find.severity, find.severity.toUpperCase()) +
-          '</div>' +
-          '<div style="font-size:11px; color:var(--text-secondary); margin-bottom:2px;">' + escapeHtml(find.message) + '</div>' +
-          (find.ruleSource ? '<div style="font-size:10px; color:var(--text-muted); margin-bottom:2px;">Rule: <span class="badge badge-neutral" style="font-size:9.5px;">' + escapeHtml(find.ruleSource) + '</span></div>' : '') +
-          (find.recommendedFix ? '<div style="font-size:10.5px; color:var(--accent-brand);">Fix: ' + escapeHtml(find.recommendedFix) + '</div>' : '') +
-          '</div>';
-      });
-    } else {
-      html += '<div style="font-size:11.5px; color:var(--status-success); padding:4px 0;">✓ All schema rules and consistency checks passed successfully.</div>';
-    }
-    html += '</div></div>';
-
+    html += `</div>`; // Close event-body-expanded
     return html;
   }
-
-  function attachEventBodyListeners(container, evt) {
-    const btnCopyInline = container.querySelector('.btn-copy-raw-inline');
-    if (btnCopyInline) {
-      btnCopyInline.addEventListener('click', () => {
-        copyToClipboard(evt.rawEvent || evt, btnCopyInline);
-      });
-    }
-
-    container.querySelectorAll('.btn-copy-val').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const text = btn.getAttribute('data-clipboard-text') || btn.getAttribute('data-val');
-        if (text) {
-          copyToClipboard(text, btn);
-        }
-      });
-    });
-
-    container.querySelectorAll('.btn-copy-section-json').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const codeEl = btn.closest('.section-json-container')?.querySelector('.section-json-body');
-        if (codeEl) {
-          copyToClipboard(codeEl.innerText || codeEl.textContent, btn);
-        }
-      });
-    });
-  }
-
-  // 3. Network Requests Tab
-  // 3. Network Requests Tab
-  function renderNetworkRequests() {
-    if (!networkRequestsContainer) return;
-    const s = currentTabState;
-    const reqs = s?.capturedRequests?.length > 0 ? s.capturedRequests : (s?.network || []);
-
-    if (networkRequestsBadge) {
-      networkRequestsBadge.textContent = reqs.length + ' Requests';
-    }
-
-    if (reqs.length === 0) {
-      networkRequestsContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.code + '</div><div class="empty-title">No Network Requests Captured</div><div class="empty-desc">Outgoing network requests to OpenAI Pixel endpoints will appear here.</div></div>';
-      return;
-    }
-
-    networkRequestsContainer.innerHTML = '';
-
-    reqs.forEach((req, idx) => {
-      // Support both normalized OpenAIRequest container and raw netEntry
-      const isNormalized = Boolean(req.sdk && req.request && req.events);
-      const reqId = req.requestId || req.id || `REQ_${idx}`;
-      const isExpanded = expandedNetReqIds.has(reqId);
-
-      const method = isNormalized ? req.request.method : (req.method || 'POST');
-      const fullUrl = isNormalized ? req.request.fullUrl : (req.url || '');
-      const statusCode = isNormalized ? req.request.statusCode : (req.status || 202);
-      const timestamp = isNormalized ? req.capturedAt : (req.timestamp || Date.now());
-      const queryParams = isNormalized ? req.query : (req.queryParams || {});
-      const pixelId = isNormalized ? (req.sdk.pixelId || 'Default') : (queryParams.pid || 'Default');
-      const eventsList = isNormalized ? req.events : (req.payload?.events || []);
-      const userMatching = isNormalized ? req.matching : (req.payload?.user ? { detected: true, fields: [] } : null);
-      const diagnostics = isNormalized ? req.diagnostics : null;
-      const validation = isNormalized ? req.validation : null;
-      const derived = isNormalized ? req.derived : null;
-      const rawPayload = isNormalized ? req.raw.parsedBody : (req.payload || {});
-
-      const statusClass = statusCode >= 200 && statusCode < 300 ? 'badge-success' : (statusCode === 'pending' ? 'badge-neutral' : 'badge-error');
-
-      const card = document.createElement('div');
-      card.className = 'net-req-card';
-
-      // Header row
-      card.innerHTML = '<div class="net-req-header" data-reqid="' + escapeHtml(reqId) + '">' +
-        '<div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">' +
-        '<span class="net-req-method">' + escapeHtml(method) + '</span>' +
-        '<span class="net-req-url" title="' + escapeHtml(fullUrl) + '">' + escapeHtml(fullUrl) + '</span>' +
-        '<span class="badge badge-neutral mono" style="font-size:10px;">' + escapeHtml(pixelId) + '</span>' +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:6px;">' +
-        '<span class="badge ' + statusClass + '">' + statusCode + '</span>' +
-        '<span class="mono text-muted" style="font-size:11px;">' + formatTimestamp(timestamp) + '</span>' +
-        '<span class="accordion-chevron ' + (isExpanded ? 'rotated' : '') + '">' + ICONS.chevronDown + '</span>' +
-        '</div>' +
-        '</div>' +
-        '<div class="net-req-body" id="net-body-' + escapeHtml(reqId) + '" style="display: ' + (isExpanded ? 'block' : 'none') + ';">' +
-        '</div>';
-
-      const header = card.querySelector('.net-req-header');
-      header.addEventListener('click', () => {
-        if (expandedNetReqIds.has(reqId)) {
-          expandedNetReqIds.delete(reqId);
-        } else {
-          expandedNetReqIds.add(reqId);
-        }
-        renderNetworkRequests();
-      });
-
-      if (isExpanded) {
-        const bodyEl = card.querySelector('#net-body-' + reqId);
-        if (bodyEl) {
-          let bodyHtml = '';
-
-          // 1. Request Metadata Box
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>1. Request Metadata</span><span class="mono" style="font-size:10px;">ID: ' + escapeHtml(reqId) + '</span></div>' +
-            '<div class="org-grid">' +
-            '<div class="org-row"><span class="org-label">Full URL</span><span class="org-val truncate" title="' + escapeHtml(fullUrl) + '">' + escapeHtml(fullUrl) + '</span></div>' +
-            '<div class="org-row"><span class="org-label">Status</span><span class="org-val ' + (statusCode === 202 ? 'text-emerald' : '') + '">HTTP ' + statusCode + ' (' + (statusCode === 202 ? 'Accepted by OpenAI' : 'Response') + ')</span></div>' +
-            '<div class="org-row"><span class="org-label">Captured Timestamp</span><span class="org-val">' + new Date(timestamp).toLocaleString() + '</span></div>' +
-            (derived ? '<div class="org-row"><span class="org-label">Batch Delay</span><span class="org-val">' + escapeHtml(derived.batchDelay) + '<span class="derived-tag">[Derived]</span></span></div>' : '') +
-            (derived?.journeyContext ? '<div class="org-row"><span class="org-label">Journey Context</span><span class="org-val">' + escapeHtml(derived.journeyContext) + '<span class="derived-tag">[Derived]</span></span></div>' : '') +
-            '</div></div>';
-
-          // 2. Query Parameters
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>2. Query Parameters</span></div>' +
-            '<div class="org-grid">' +
-            '<div class="org-row"><span class="org-label">pid (Pixel ID)</span><span class="org-val mono">' + escapeHtml(queryParams.pid || 'Not set') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">st (SDK Transport)</span><span class="org-val mono">' + escapeHtml(queryParams.st || 'oaiq-web') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">sv (SDK Version)</span><span class="org-val mono">' + escapeHtml(queryParams.sv || 'Unknown') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">ec (Event Count)</span><span class="org-val mono">' + (queryParams.ec !== null && queryParams.ec !== undefined ? queryParams.ec : eventsList.length) + '</span></div>' +
-            '<div class="org-row"><span class="org-label">t (Request Time ms)</span><span class="org-val mono">' + (queryParams.t || timestamp) + '</span></div>' +
-            '</div></div>';
-
-          // 3. Transport & Request-Level Data
-          const transportObref = isNormalized ? req.transport?.obref : rawPayload.obref;
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>3. Request-Level Data & Transport</span></div>' +
-            '<div class="org-grid">' +
-            '<div class="org-row"><span class="org-label">Browser Ref (obref)</span><span class="org-val mono">' + escapeHtml(transportObref || 'Not sent') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">Total Batched Events</span><span class="org-val font-bold">' + eventsList.length + ' event(s)</span></div>' +
-            '</div></div>';
-
-          // 4. Batched Events List
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>4. Batched Events (' + eventsList.length + ')</span></div>' +
-            '<div style="display:flex; flex-direction:column; gap:6px;">';
-
-          eventsList.forEach((ev, eIdx) => {
-            const evType = ev.type || 'unknown';
-            const evData = ev.data || {};
-            const evAmount = evData.amount;
-            const evCurrency = evData.currency || 'USD';
-            const formattedMoney = (evAmount !== undefined && Number.isInteger(evAmount)) ? decodeMoney(evAmount, evCurrency) : (evAmount !== undefined ? evAmount : null);
-            const isSystem = evType.startsWith('openai::') || evType.startsWith('oai::');
-
-            bodyHtml += '<div style="background:var(--bg-subtle); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:6px 10px;">' +
-              '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-              '<span class="net-event-chip" style="font-size:11px; font-weight:600;">#' + (eIdx + 1) + ' ' + escapeHtml(evType) + '</span>' +
-              (formattedMoney ? '<span class="text-emerald font-bold" style="font-size:11px;">' + formattedMoney + '</span>' : '') +
-              '</div>' +
-              '<div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Event ID: <code class="mono">' + escapeHtml(ev.id || ev.eventId || 'SDK-generated') + '</code> | Shape: <code class="mono">' + escapeHtml(ev.dataType || evData.type || 'contents') + '</code></div>' +
-              (ev.sourceUrl ? '<div style="font-size:10.5px; color:var(--text-secondary); margin-top:2px;" class="truncate">Source: ' + escapeHtml(ev.sourceUrl) + '</div>' : '') +
-              '</div>';
-          });
-
-          bodyHtml += '</div></div>';
-
-          // 5. Customer Matching (if present)
-          if (userMatching && userMatching.detected) {
-            bodyHtml += '<div class="net-req-section">' +
-              '<div class="net-req-section-title"><span>5. Advanced Customer Matching</span><span class="badge badge-success" style="font-size:10px;">' + userMatching.count + ' Identifiers</span></div>' +
-              '<div class="org-grid">';
-
-            userMatching.fields.forEach(f => {
-              bodyHtml += '<div class="org-row"><span class="org-label">' + escapeHtml(f.label) + '</span><span class="org-val mono text-emerald">' + escapeHtml(f.masked) + '</span></div>';
-            });
-
-            bodyHtml += '</div></div>';
-          }
-
-          // 6. Validation Diagnostics (Level 1 Network QA)
-          if (validation) {
-            bodyHtml += '<div class="net-req-section">' +
-              '<div class="net-req-section-title"><span>6. Network & Batch Validation</span>' +
-              '<span class="badge ' + (validation.errors.length > 0 ? 'badge-error' : (validation.warnings.length > 0 ? 'badge-warning' : 'badge-success')) + '">' +
-              validation.status.toUpperCase() +
-              '</span></div>' +
-              '<div style="font-size:11px; padding:4px 0;">';
-
-            validation.passes.forEach(p => {
-              bodyHtml += '<div style="color:var(--status-success); margin-bottom:2px;">✓ ' + escapeHtml(p) + '</div>';
-            });
-            validation.warnings.forEach(w => {
-              bodyHtml += '<div style="color:var(--status-warning); margin-bottom:2px;">⚠ ' + escapeHtml(w) + '</div>';
-            });
-            validation.errors.forEach(e => {
-              bodyHtml += '<div style="color:var(--status-error); margin-bottom:2px;">✕ ' + escapeHtml(e) + '</div>';
-            });
-
-            bodyHtml += '</div></div>';
-          }
-
-          // 7. Copy Action Bar
-          bodyHtml += '<div class="net-action-bar">' +
-            '<button class="btn-net-copy btn-copy-url" data-url="' + escapeHtml(fullUrl) + '">Copy URL</button>' +
-            '<button class="btn-net-copy btn-copy-params">Copy Params</button>' +
-            '<button class="btn-net-copy btn-copy-payload">Copy Payload</button>' +
-            '<button class="btn-net-copy btn-copy-matching">Copy Matching</button>' +
-            '<button class="btn-net-copy btn-export-json">Export JSON</button>' +
-            '</div>';
-
-          bodyEl.innerHTML = bodyHtml;
-
-          // Wire up copy buttons for this network card
-          const btnCopyUrl = bodyEl.querySelector('.btn-copy-url');
-          if (btnCopyUrl) {
-            btnCopyUrl.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(fullUrl, btnCopyUrl);
-            });
-          }
-
-          const btnCopyParams = bodyEl.querySelector('.btn-copy-params');
-          if (btnCopyParams) {
-            btnCopyParams.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(queryParams, btnCopyParams);
-            });
-          }
-
-          const btnCopyPayload = bodyEl.querySelector('.btn-copy-payload');
-          if (btnCopyPayload) {
-            btnCopyPayload.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(rawPayload, btnCopyPayload);
-            });
-          }
-
-          const btnCopyMatching = bodyEl.querySelector('.btn-copy-matching');
-          if (btnCopyMatching) {
-            btnCopyMatching.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(userMatching || { note: 'No matching data sent' }, btnCopyMatching);
-            });
-          }
-
-          const btnExportJson = bodyEl.querySelector('.btn-export-json');
-          if (btnExportJson) {
-            btnExportJson.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(isNormalized ? req : { request: req, payload: rawPayload }, btnExportJson);
-            });
-          }
-        }
-      }
-
-      networkRequestsContainer.appendChild(card);
-    });
-  }
-
-  // 4. Funnel Tab
-  function renderFunnel() {
-    if (!funnelPipelineContainer) return;
-    const s = currentTabState;
-    const events = s?.events || [];
-
-    const FUNNEL_STEPS = [
-      { name: 'contents_viewed', label: '1. Product View', desc: 'Visitor viewed product details' },
-      { name: 'items_added', label: '2. Add to Cart', desc: 'Item added to shopping cart' },
-      { name: 'checkout_started', label: '3. Checkout Begin', desc: 'Initiated checkout flow' },
-      { name: 'order_created', label: '4. Purchase / Order', desc: 'Completed purchase conversion' }
-    ];
-
-    let observedCount = 0;
-    funnelPipelineContainer.innerHTML = '';
-
-    FUNNEL_STEPS.forEach((step) => {
-      const match = events.find(e => e.name === step.name);
-      const isObserved = Boolean(match);
-      if (isObserved) observedCount++;
-
-      const stepCard = document.createElement('div');
-      stepCard.className = 'funnel-step-card ' + (isObserved ? 'observed' : 'missing');
-      stepCard.style.cssText = 'background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;';
-
-      const amountFormatted = match ? formatMonetaryValue(match.parameters?.amount, match.parameters?.currency) : null;
-
-      stepCard.innerHTML = '<div>' +
-        '<div style="font-weight:700; font-size:12.5px; color:var(--text-main);">' + step.label + '</div>' +
-        '<div style="font-size:11px; color:var(--text-muted);">' + step.desc + '</div>' +
-        (amountFormatted ? '<div style="font-size:11px; color:var(--accent-brand); font-weight:600; margin-top:2px;">Value: ' + amountFormatted + '</div>' : '') +
-        '</div>' +
-        '<div>' +
-        (isObserved 
-          ? '<span class="badge badge-success">✓ Observed in session</span>' 
-          : '<span class="badge badge-neutral" title="Not observed in this debugging session">✕ Not observed</span>') +
-        '</div>';
-
-      funnelPipelineContainer.appendChild(stepCard);
-    });
-
-    const completionRate = Math.round((observedCount / FUNNEL_STEPS.length) * 100);
-    if (funnelRateBadge) {
-      funnelRateBadge.textContent = observedCount + '/' + FUNNEL_STEPS.length + ' Completed (' + completionRate + '%)';
-      funnelRateBadge.className = observedCount > 0 ? 'badge badge-success' : 'badge badge-neutral';
-    }
-    if (tabCountFunnel) {
-      tabCountFunnel.textContent = observedCount + '/' + FUNNEL_STEPS.length;
-    }
-  }
-
-  // 5. Timeline Tab
-  function renderTimeline() {
-    if (!timelineContainer) return;
-    const s = currentTabState;
-    const events = s?.events || [];
-
-    if (timelineStepsBadge) {
-      timelineStepsBadge.textContent = events.length + ' Steps';
-    }
-
-    if (events.length === 0) {
-      timelineContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.code + '</div><div class="empty-title">No Session Activity Recorded</div><div class="empty-desc">Chronological journey timeline will populate as actions occur.</div></div>';
-      return;
-    }
-
-    let html = '<div class="timeline-track">';
-    let prevTime = events[0].timestamp;
-
-    events.forEach((evt, idx) => {
-      const diffMs = evt.timestamp - prevTime;
-      prevTime = evt.timestamp;
-      const timeStr = formatTimestamp(evt.timestamp);
-      const amount = formatMonetaryValue(evt.parameters?.amount, evt.parameters?.currency);
-
-      html += '<div class="timeline-item">' +
-        '<div class="timeline-dot"></div>' +
-        '<div class="timeline-item-header">' +
-        '<span>Step #' + (idx + 1) + ' • ' + timeStr + '</span>' +
-        (idx > 0 ? '<span>+' + diffMs + 'ms</span>' : '<span>Session Start</span>') +
-        '</div>' +
-        '<div class="timeline-item-card">' +
-        (evt.pathname ? '<div class="timeline-page-badge">' + escapeHtml(evt.pathname) + '</div>' : '') +
-        '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-        '<strong style="font-size:12px; color:var(--text-main);">' + escapeHtml(evt.displayName || evt.name) + '</strong>' +
-        renderStatusBadge(evt.validation?.status || 'valid', evt.validation?.status?.toUpperCase()) +
-        '</div>' +
-        (amount ? '<div style="font-size:11px; color:var(--accent-brand); font-weight:600; margin-top:2px;">' + amount + '</div>' : '') +
-        '</div>' +
-        '</div>';
-    });
-
-    html += '</div>';
-    timelineContainer.innerHTML = html;
-  }
-
-  // 6. Matching & Privacy Tab
-  function renderMatchingAndPrivacy() {
-    if (!matchingDetailsContainer || !privacyInspectorContainer) return;
-    const s = currentTabState;
-    const uMatch = s?.userMatching || (s?.networkSummary ? s.networkSummary.latestUserMatching : null);
-    const fields = uMatch?.fields || [];
-
-    if (matchingCoverageBadge) {
-      const hasEmail = fields.some(f => f.type === 'email');
-      const hasPhone = fields.some(f => f.type === 'phone');
-      const hasEid = fields.some(f => f.type === 'external_id');
-      const hasGeo = fields.some(f => f.type === 'country' || f.type === 'region');
-
-      if (hasEmail && (hasPhone || hasEid)) {
-        matchingCoverageBadge.className = 'badge badge-success';
-        matchingCoverageBadge.textContent = 'Strong Coverage';
-      } else if (hasEmail || hasPhone || hasEid) {
-        matchingCoverageBadge.className = 'badge badge-info';
-        matchingCoverageBadge.textContent = 'Moderate Coverage';
-      } else if (hasGeo) {
-        matchingCoverageBadge.className = 'badge badge-warning';
-        matchingCoverageBadge.textContent = 'Limited (Geo Only)';
-      } else {
-        matchingCoverageBadge.className = 'badge badge-neutral';
-        matchingCoverageBadge.textContent = 'No Identifiers';
-      }
-    }
-
-    if (fields.length > 0) {
-      let html = '<div class="org-grid">';
-      fields.forEach(f => {
-        html += '<div class="org-row">' +
-          '<span class="org-label">' + escapeHtml(f.label) + ' (' + escapeHtml(f.source) + ')</span>' +
-          '<span class="org-val text-emerald">' + (f.isHashed ? '✓ ' + escapeHtml(f.masked) : escapeHtml(f.masked)) + '</span>' +
-          '</div>';
-      });
-      html += '</div>';
-      matchingDetailsContainer.innerHTML = html;
-    } else {
-      matchingDetailsContainer.innerHTML = '<div class="empty-state-sm">No advanced matching user identifiers detected in this session yet.</div>';
-    }
-
-    // Privacy Inspector
-    const allEvtsStr = JSON.stringify(s?.events || []);
-    const hasRawEmail = allEvtsStr.includes('@');
-    const hasRawPhone = /"phone":\s*"\+?[0-9]{8,15}"/i.test(allEvtsStr);
-
-    privacyInspectorContainer.innerHTML = '<div class="privacy-item">' +
-      '<span>Protected Hashed Identifiers</span>' +
-      '<span class="privacy-status-pass">' + (fields.some(f => f.isHashed) ? '✓ Detected SHA-256' : 'Not sent') + '</span>' +
-      '</div>' +
-      '<div class="privacy-item">' +
-      '<span>Raw Email in Network Payload</span>' +
-      '<span class="' + (hasRawEmail ? 'privacy-status-alert' : 'privacy-status-pass') + '">' + (hasRawEmail ? '✕ Raw Email Exposed!' : '✓ Clean (Not detected)') + '</span>' +
-      '</div>' +
-      '<div class="privacy-item">' +
-      '<span>Raw Phone in Network Payload</span>' +
-      '<span class="' + (hasRawPhone ? 'privacy-status-alert' : 'privacy-status-pass') + '">' + (hasRawPhone ? '✕ Raw Phone Exposed!' : '✓ Clean (Not detected)') + '</span>' +
-      '</div>';
-  }
-
-  // 7. Data Layer
-  function renderDataLayer() {
-    if (!datalayerListContainer) return;
-    const s = currentTabState;
-    const dl = s?.dataLayer || [];
-
-    if (gtmContainerBadge && gtmContainerPills) {
-      const gtm = s?.gtmContainers || [];
-      if (gtm.length > 0) {
-        gtmContainerBadge.className = 'badge badge-success';
-        gtmContainerBadge.textContent = gtm.length + ' Active';
-        gtmContainerPills.innerHTML = gtm.map(id => '<span class="badge badge-info mono">' + escapeHtml(id) + '</span>').join(' ');
-      } else {
-        gtmContainerBadge.className = 'badge badge-neutral';
-        gtmContainerBadge.textContent = 'None detected';
-        gtmContainerPills.innerHTML = '<span class="text-muted" style="font-size:11.5px;">No GTM containers found</span>';
-      }
-    }
-
-    if (dl.length === 0) {
-      datalayerListContainer.innerHTML = '<div class="empty-state-sm">No dataLayer.push events recorded.</div>';
-      return;
-    }
-
-    datalayerListContainer.innerHTML = '';
-    dl.forEach((item) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'padding:6px 0; border-bottom:1px solid var(--border-subtle); font-size:11.5px;';
-      row.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-        '<strong class="mono text-emerald">' + escapeHtml(item.event || 'push') + '</strong>' +
-        '<span class="text-muted mono">' + formatTimestamp(item.timestamp) + '</span>' +
-        '</div>';
-      datalayerListContainer.appendChild(row);
-    });
-  }
-
-  // 8. Attribution
-  function renderAttribution() {
-    const s = currentTabState;
-    const attr = s?.attribution || {};
-
-    if (opprefStatusBadge) {
-      if (attr.oppref) {
-        opprefStatusBadge.className = 'badge badge-success';
-        opprefStatusBadge.textContent = 'Detected ✓';
-      } else {
-        opprefStatusBadge.className = 'badge badge-neutral';
-        opprefStatusBadge.textContent = 'Not detected';
-      }
-    }
-
-    if (attrUrlVal) attrUrlVal.textContent = attr.details?.urlParam || 'Not found';
-    if (attrCookieVal) attrCookieVal.textContent = attr.details?.cookieValue || 'Not found';
-    if (attrStorageVal) attrStorageVal.textContent = attr.details?.localStorage || 'Not found';
-    if (attrActiveKey) attrActiveKey.textContent = attr.oppref || 'None';
-  }
-
-  // 9. Issues
-  function renderIssues() {
-    if (!issuesListContainer) return;
-    const s = currentTabState;
-    const events = s?.events || [];
-
-    const allIssues = [];
-    events.forEach(e => {
-      if (e.validation?.findings) {
-        e.validation.findings.forEach(f => allIssues.push(f));
-      }
-    });
-
-    const errorCount = allIssues.filter(i => i.severity === 'error' || i.severity === 'critical').length;
-    const warnCount = allIssues.filter(i => i.severity === 'warning').length;
-    const infoCount = allIssues.filter(i => i.severity === 'info').length;
-
-    if (issueFilterCountAll) issueFilterCountAll.textContent = allIssues.length;
-    if (issueFilterCountError) issueFilterCountError.textContent = errorCount;
-    if (issueFilterCountWarning) issueFilterCountWarning.textContent = warnCount;
-    if (issueFilterCountInfo) issueFilterCountInfo.textContent = infoCount;
-
-    if (issuesStatusBadge) {
-      if (errorCount > 0) {
-        issuesStatusBadge.className = 'badge badge-error';
-        issuesStatusBadge.textContent = errorCount + ' Critical';
-      } else if (warnCount > 0) {
-        issuesStatusBadge.className = 'badge badge-warning';
-        issuesStatusBadge.textContent = warnCount + ' Warnings';
-      } else {
-        issuesStatusBadge.className = 'badge badge-success';
-        issuesStatusBadge.textContent = '0 Issues ✓';
-      }
-    }
-
-    const filteredIssues = allIssues.filter(i => {
-      if (currentIssueFilter === 'error') return i.severity === 'error' || i.severity === 'critical';
-      if (currentIssueFilter === 'warning') return i.severity === 'warning';
-      if (currentIssueFilter === 'info') return i.severity === 'info';
-      return true;
-    });
-
-    if (filteredIssues.length === 0) {
-      issuesListContainer.innerHTML = '<div class="empty-state"><div class="empty-icon text-emerald">' + ICONS.check + '</div><div class="empty-title">All Checks Passed</div><div class="empty-desc">No tracking or schema issues detected in this session.</div></div>';
-      return;
-    }
-
-    issuesListContainer.innerHTML = '';
-    filteredIssues.forEach(iss => {
-      const el = document.createElement('div');
-      el.className = 'issue-item-card';
-      el.style.cssText = 'background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px;';
-
-      el.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
-        '<strong style="font-size:12px; color:var(--text-main);">' + escapeHtml(iss.title) + '</strong>' +
-        renderStatusBadge(iss.severity, iss.severity.toUpperCase()) +
-        '</div>' +
-        '<div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:4px;">' + escapeHtml(iss.message) + '</div>' +
-        (iss.recommendedFix ? '<div style="font-size:11px; color:var(--accent-brand); font-weight:500;">Recommended Fix: ' + escapeHtml(iss.recommendedFix) + '</div>' : '');
-
-      issuesListContainer.appendChild(el);
-    });
-  }
-
-  // 10. Audit Tab
-  function renderAudit() {
-    if (!auditSummaryBox) return;
-    const s = currentTabState;
-    if (!s) return;
-
-    let targetWebsite = 'Current Page';
-    try {
-      if (s.url) targetWebsite = new URL(s.url).hostname;
-    } catch {}
-
-    const fullReport = generateComprehensiveAudit(s, targetWebsite);
-
-    if (auditScoreBadge) {
-      auditScoreBadge.textContent = fullReport.overallHealthScore + '% Health';
-      auditScoreBadge.className = fullReport.overallHealthScore >= 80 ? 'badge badge-success' : 'badge badge-warning';
-    }
-
-    if (auditSubtitleWebsite) {
-      auditSubtitleWebsite.textContent = targetWebsite + ' | ' + fullReport.auditDate;
-    }
-
-    auditSummaryBox.innerHTML = '<div class="audit-summary-box-inner" style="padding:10px 14px; font-size:12px;">' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Total Events:</span><strong>' + fullReport.counts.total + '</strong></div>' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Standard Events:</span><strong>' + fullReport.counts.standard + '</strong></div>' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Passed:</span><strong class="text-emerald">' + fullReport.counts.passed + '</strong></div>' +
-      '<div style="display:flex; justify-content:space-between;"><span>Issues / Warnings:</span><strong class="text-rose">' + (fullReport.counts.warnings + fullReport.counts.critical) + '</strong></div>' +
-      '</div>';
-
-    if (auditOverviewTableContainer) {
-      let rowsHtml = '';
-      (fullReport.overviewTable || []).forEach(row => {
-        rowsHtml += '<tr>' +
-          '<td style="font-weight:600;">' + escapeHtml(row.name) + '</td>' +
-          '<td>' + escapeHtml(row.type) + '</td>' +
-          '<td style="text-align:center;">' + row.trigger + '</td>' +
-          '<td style="text-align:center;">' + row.parameters + '</td>' +
-          '<td style="text-align:center;">' + row.duplicate + '</td>' +
-          '<td style="text-align:right;">' + row.status + '</td>' +
-          '</tr>';
-      });
-
-      auditOverviewTableContainer.innerHTML = '<table class="health-table" style="width:100%; font-size:11.5px;">' +
-        '<thead>' +
-        '<tr style="color:var(--text-muted); border-bottom:1px solid var(--border-color);">' +
-        '<th>Event</th>' +
-        '<th>Type</th>' +
-        '<th style="text-align:center;">Trigger</th>' +
-        '<th style="text-align:center;">Params</th>' +
-        '<th style="text-align:center;">Duplicate</th>' +
-        '<th style="text-align:right;">Status</th>' +
-        '</tr>' +
-        '</thead>' +
-        '<tbody>' + (rowsHtml || '<tr><td colspan="6" class="text-muted">No events tracked</td></tr>') + '</tbody>' +
-        '</table>';
-    }
-
-    if (auditScoresGrid) {
-      const sc = fullReport.scores || {};
-      auditScoresGrid.innerHTML = '<div class="score-card-item"><span>Payload Quality:</span> <strong>' + (sc.payloadQuality || 100) + '%</strong></div>' +
-        '<div class="score-card-item"><span>Ecommerce Data:</span> <strong>' + (sc.ecommerceData || 100) + '%</strong></div>' +
-        '<div class="score-card-item"><span>Duplicate Prevention:</span> <strong>' + (sc.duplicatePrevention || 100) + '%</strong></div>';
-    }
-
-    if (btnCopyMarkdown) {
-      btnCopyMarkdown.onclick = () => {
-        const md = formatAuditMarkdown(fullReport);
-        copyToClipboard(md, btnCopyMarkdown);
-      };
-    }
-
-    if (btnExportCsv) {
-      btnExportCsv.onclick = () => {
-        const csv = formatAuditCsv(fullReport);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'openai-pixel-audit-' + targetWebsite + '-' + Date.now() + '.csv';
-        a.click();
-      };
-    }
-
-    if (btnExportPdf) {
-      btnExportPdf.onclick = () => {
-        chrome.storage.local.set({ active_audit_report: fullReport }, () => {
-          chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
-        });
-      };
-    }
-
-    // View Mode Toggle (Client View vs Technical View)
-    if (btnViewClient && btnViewTechnical) {
-      btnViewClient.onclick = () => {
-        viewMode = 'client';
-        btnViewClient.classList.add('active');
-        btnViewTechnical.classList.remove('active');
-        renderEventsList();
-        renderNetworkRequests();
-      };
-
-      btnViewTechnical.onclick = () => {
-        viewMode = 'technical';
-        btnViewTechnical.classList.add('active');
-        btnViewClient.classList.remove('active');
-        renderEventsList();
-        renderNetworkRequests();
-      };
-    }
-
-    // System Events and Diagnostics Visibility Checkboxes
-    if (chkShowSystem) {
-      chkShowSystem.onchange = () => {
-        showSystemEvents = chkShowSystem.checked;
-        renderEventsList();
-      };
-    }
-
-    if (chkShowDiagnostics) {
-      chkShowDiagnostics.onchange = () => {
-        showDiagnostics = chkShowDiagnostics.checked;
-        renderEventsList();
-      };
-    }
-  }
-
-  loadActiveTabState();
 });
