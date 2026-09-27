@@ -1,21 +1,21 @@
 /**
- * OpenAI Pixel Helper - Single Feed with Deep Categorized Parameters
- * Modeled after official Pixel Helper extension UI with 8 logical categories.
+ * OpenAI Pixel Inspector - Live Event Stream & Parameter Intelligence Engine
+ * Bespoke single-feed architecture with 8-category deep inspection.
  */
 
-import { formatMonetaryValue, getCurrencyDecimalPlaces } from '../utils/formatting.js';
+import { formatMonetaryValue } from '../utils/formatting.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const targetHostEl = document.getElementById('target-host');
   const eventsCountEl = document.getElementById('events-count');
   const filterInput = document.getElementById('filter-input');
+  const btnClearSearch = document.getElementById('btn-clear-search');
   const chkClearReload = document.getElementById('chk-clear-reload');
   const btnClear = document.getElementById('btn-clear');
   const btnOpenTab = document.getElementById('btn-open-tab');
   const btnDebug = document.getElementById('btn-debug');
   const btnTheme = document.getElementById('btn-theme');
   const btnSidepanel = document.getElementById('btn-sidepanel');
-  const btnCloseWindow = document.getElementById('btn-close-window');
   const eventsFeed = document.getElementById('events-feed');
 
   let activeTab = null;
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let searchQuery = '';
   const expandedEventIds = new Set();
 
-  // 1. Theme Initialization
+  // 1. Theme Toggle
   function initTheme() {
     const saved = localStorage.getItem('__oai_theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   initTheme();
 
-  // 2. Window Controls
+  // 2. Navigation Actions
   if (btnSidepanel) {
     btnSidepanel.addEventListener('click', async () => {
       try {
@@ -46,24 +46,24 @@ document.addEventListener('DOMContentLoaded', async () => {
           await chrome.sidePanel.open({ tabId: activeTab.id });
           window.close();
         }
-      } catch (e) {
-        console.warn('SidePanel open:', e);
+      } catch (err) {
+        console.warn('Side panel open:', err);
       }
     });
   }
-  if (btnCloseWindow) {
-    btnCloseWindow.addEventListener('click', () => window.close());
-  }
+
   if (btnOpenTab) {
     btnOpenTab.addEventListener('click', () => {
       window.open(chrome.runtime.getURL('popup/popup.html'), '_blank');
     });
   }
+
   if (btnDebug) {
     btnDebug.addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
     });
   }
+
   if (btnClear) {
     btnClear.addEventListener('click', () => {
       if (activeTab) {
@@ -73,14 +73,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
+
   if (filterInput) {
     filterInput.addEventListener('input', (e) => {
       searchQuery = (e.target.value || '').trim().toLowerCase();
+      if (btnClearSearch) {
+        btnClearSearch.style.display = searchQuery ? 'block' : 'none';
+      }
       renderFeed();
     });
   }
 
-  // 3. Tab State Loading & Real-Time Sync
+  if (btnClearSearch) {
+    btnClearSearch.addEventListener('click', () => {
+      filterInput.value = '';
+      searchQuery = '';
+      btnClearSearch.style.display = 'none';
+      renderFeed();
+    });
+  }
+
+  // 3. Tab State & Real-Time Sync
   async function loadState() {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -111,7 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Listen for real-time messages from background service worker
+  // Real-time notification from service worker
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === 'STATE_UPDATED' || msg.action === 'NEW_BATCH' || msg.action === 'EVENT_CAPTURED') {
       if (!msg.tabId || (activeTab && msg.tabId === activeTab.id)) {
@@ -120,27 +133,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Polling fallback to guarantee instant updates when request occurs
+  // Background fallback heartbeat to keep live feed synced
   setInterval(loadState, 1500);
   await loadState();
 
-  // 4. Descriptions Database for OpenAI Events
-  const EVENT_DESCRIPTIONS = {
-    'page_viewed': 'Standard event fired when a page is viewed. Uses the `contents` data shape.',
-    'items_added': 'Standard ecommerce event fired when items are added to cart. Uses the `contents` data shape.',
-    'contents_viewed': 'Standard event fired when viewing a product or catalog content page.',
-    'checkout_started': 'Standard ecommerce event fired when customer initiates checkout flow.',
-    'order_created': 'Standard conversion purchase event fired when order transaction is completed.',
-    'lead': 'Standard conversion event fired when a lead or contact form is submitted.',
-    'oai::diagnostic': 'Undocumented internal telemetry the SDK sends about its own health — e.g. how many events it had to drop, and why. Not a conversion event — inferred from observed traffic.',
-    'openai::sdk_init': 'Undocumented internal lifecycle event fired once when oaiq("init", ...) finishes loading the Pixel. Not part of the public measure() API — inferred from observed traffic.',
-    'openai::sdk_lifecycle': 'Undocumented SDK lifecycle signal emitted during runtime initialization.'
+  // 4. Semantic Event Profiles
+  const EVENT_ICONS = {
+    'page_viewed': '📄',
+    'contents_viewed': '👁️',
+    'items_added': '🛒',
+    'checkout_started': '💳',
+    'order_created': '🎉',
+    'lead': '🎯',
+    'oai::diagnostic': '⚡',
+    'openai::sdk_init': '🚀',
+    'openai::sdk_lifecycle': '⚙️'
   };
 
-  function getEventDescription(name) {
-    const lower = (name || '').toLowerCase();
-    return EVENT_DESCRIPTIONS[lower] || 'OpenAI Ads Pixel event received and delivered to endpoint.';
-  }
+  const EVENT_NARRATIVES = {
+    'page_viewed': 'Captured page impression. Dispatches canonical URL and page context.',
+    'items_added': 'User added product to shopping basket. Feeds ROAS optimization and intent signals.',
+    'contents_viewed': 'Visitor inspected specific catalog product details.',
+    'checkout_started': 'Checkout funnel initiated. Signals strong commercial purchase intent.',
+    'order_created': 'Order completed successfully. Key high-value conversion transaction.',
+    'lead': 'Inbound contact or lead form submission completed.',
+    'oai::diagnostic': 'SDK health telemetry reporting internal performance and dropped request counters.',
+    'openai::sdk_init': 'SDK initialization handshake confirmed on the active window.'
+  };
 
   function formatTimeAgo(timestamp) {
     if (!timestamp) return 'just now';
@@ -161,45 +180,40 @@ document.addEventListener('DOMContentLoaded', async () => {
       .replace(/'/g, '&#39;');
   }
 
-  function formatJsonHtml(obj) {
-    const jsonStr = escapeHtml(JSON.stringify(obj, null, 2));
-    return jsonStr;
-  }
-
-  function copyText(text, btn) {
+  function copyText(text, triggerEl) {
     navigator.clipboard.writeText(text);
-    if (btn) {
-      const orig = btn.innerHTML;
-      btn.innerHTML = '✓';
-      btn.classList.add('copied');
+    if (triggerEl) {
+      const orig = triggerEl.innerHTML;
+      triggerEl.innerHTML = '✓';
+      triggerEl.classList.add('copied');
       setTimeout(() => {
-        btn.innerHTML = orig;
-        btn.classList.remove('copied');
+        triggerEl.innerHTML = orig;
+        triggerEl.classList.remove('copied');
       }, 1200);
     }
   }
 
-  // 5. Render Events Feed
+  // 5. Render Stream Feed
   function renderFeed() {
     if (!eventsFeed) return;
     const s = currentTabState;
     const events = s?.events || [];
 
     if (eventsCountEl) {
-      eventsCountEl.textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+      eventsCountEl.textContent = events.length;
     }
 
     if (!events || events.length === 0) {
       eventsFeed.innerHTML = `
-        <div class="empty-feed">
-          <div class="empty-spinner"></div>
-          <p>Listening for OpenAI Pixel requests...</p>
-          <span class="empty-sub">Interact with page or trigger <code>oaiq('measure', ...)</code></span>
+        <div class="listening-state">
+          <div class="sonar-ring"></div>
+          <div class="listening-text">Listening for OpenAI Pixel Activity</div>
+          <p class="listening-desc">Trigger <code>oaiq('measure', ...)</code> or navigate the website to capture network events in real time.</p>
         </div>`;
       return;
     }
 
-    // Filter events by search query
+    // Filter events
     const filtered = events.filter((evt) => {
       if (!searchQuery) return true;
       const haystack = (
@@ -213,9 +227,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (filtered.length === 0) {
       eventsFeed.innerHTML = `
-        <div class="empty-feed">
-          <p>No matching events found</p>
-          <span class="empty-sub">Try changing your search query</span>
+        <div class="listening-state">
+          <div class="listening-text">No Matching Events</div>
+          <p class="listening-desc">Try clearing or adjusting your search term.</p>
         </div>`;
       return;
     }
@@ -225,43 +239,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     filtered.forEach((evt) => {
       const isExpanded = expandedEventIds.has(evt._id);
       const name = evt.name || 'unnamed_event';
-      const isTech = name.startsWith('openai::') || name.startsWith('oai::');
-      const isDiagnostic = name.includes('diagnostic');
-      
-      let dotClass = 'dot-green';
-      if (isDiagnostic) dotClass = 'dot-amber';
-      else if (isTech) dotClass = 'dot-blue';
-
+      const icon = EVENT_ICONS[name] || '✦';
+      const narrative = EVENT_NARRATIVES[name] || 'OpenAI Ads Pixel measure event received.';
       const timeAgo = formatTimeAgo(evt.timestamp || evt.timestamp_ms);
-      const desc = getEventDescription(name);
 
-      const itemCard = document.createElement('div');
-      itemCard.className = `event-item ${isExpanded ? 'open' : ''}`;
-      itemCard.id = `event-${evt._id}`;
+      // Value badge if monetary event
+      const params = evt.parameters || {};
+      const contents = Array.isArray(params.contents) ? params.contents : [];
+      const hasAmount = params.amount !== undefined || contents[0]?.amount !== undefined;
+      const rawAmt = params.amount !== undefined ? params.amount : (contents[0]?.amount || 0);
+      const cur = (params.currency || contents[0]?.currency || 'EUR').toUpperCase();
+      const formattedVal = hasAmount ? (formatMonetaryValue(rawAmt, cur) || `${cur} ${(rawAmt / 100).toFixed(2)}`) : null;
 
-      // Build Top Header & Description (Image 1 style)
+      const card = document.createElement('div');
+      card.className = `event-card ${isExpanded ? 'expanded' : ''}`;
+      card.id = `card-${evt._id}`;
+
       let cardHtml = `
-        <div class="event-item-header" data-id="${evt._id}">
-          <div class="event-headline">
-            <span class="status-dot ${dotClass}"></span>
-            <span class="event-name-text">${escapeHtml(name)}</span>
-            <span class="method-tag">POST</span>
-            <span class="time-stamp">${timeAgo}</span>
-            <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        <div class="event-header" data-id="${evt._id}">
+          <div class="event-title-row">
+            <span class="event-icon-badge">${icon}</span>
+            <span class="event-code-name">${escapeHtml(name)}</span>
+            <span class="event-meta-pill">POST</span>
+            ${formattedVal ? `<span class="event-revenue-badge">${formattedVal}</span>` : ''}
+            <div class="event-time-right">
+              <span>${timeAgo}</span>
+              <svg class="card-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
           </div>
+          <div class="event-summary-text">${narrative}</div>
         </div>
-        <div class="event-desc-text">${desc}</div>
       `;
 
-      // Build Expanded Deep Parameter Inspection (Image 2 style with Categories A - H)
       if (isExpanded) {
-        cardHtml += renderExpandedParameters(evt);
+        cardHtml += renderEventIntelligence(evt, {
+          params,
+          contents,
+          rawAmt,
+          cur,
+          formattedVal,
+          hasAmount
+        });
       }
 
-      itemCard.innerHTML = cardHtml;
+      card.innerHTML = cardHtml;
 
-      // Click to toggle accordion expansion
-      const headerEl = itemCard.querySelector('.event-item-header');
+      // Expand accordion on header click
+      const headerEl = card.querySelector('.event-header');
       headerEl.addEventListener('click', () => {
         if (expandedEventIds.has(evt._id)) {
           expandedEventIds.delete(evt._id);
@@ -271,22 +295,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderFeed();
       });
 
-      // Attach copy listeners
-      itemCard.querySelectorAll('.btn-copy-chip, .btn-mini-copy').forEach((btn) => {
+      // Attach copy button listeners
+      card.querySelectorAll('.btn-chip-copy, .btn-code-copy').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
-          const val = btn.getAttribute('data-copy');
-          if (val) copyText(val, btn);
+          const txt = btn.getAttribute('data-clipboard');
+          if (txt) copyText(txt, btn);
         });
       });
 
-      eventsFeed.appendChild(itemCard);
+      eventsFeed.appendChild(card);
     });
   }
 
-  // 6. Build the 8 Logical Categories for Expanded View
-  function renderExpandedParameters(evt) {
-    const params = evt.parameters || {};
+  // 6. Deep 8-Category Intelligence Inspection Drawer
+  function renderEventIntelligence(evt, meta) {
+    const { params, contents, rawAmt, cur, formattedVal, hasAmount } = meta;
     const query = evt.query || evt.queryParams || {};
     const pixelId = evt.pixelId || query.pid || currentTabState?.pixel?.pixelId || '4KjX1dq4C7HUw7EUpRXfMh';
     const sdkType = query.st || 'oaiq-web';
@@ -295,7 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const eventId = evt.sdkEventId || evt.eventId || evt.id || 'a3d71b9a-e919-4805-b84e-12a1cfe613aa';
     const eventTimestampMs = evt.timestamp_ms || evt.timestamp || Date.now();
-    const eventTimeFormatted = new Date(eventTimestampMs).toLocaleString('en-US', {
+    const eventLocalTime = new Date(eventTimestampMs).toLocaleString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
     });
@@ -303,234 +327,232 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sourceUrl = evt.sourceUrl || evt.url || (activeTab?.url || 'https://lizenzdeals24.de/...');
     const optOut = evt.optOut === true;
 
-    // Ecommerce calculations
-    const contents = Array.isArray(params.contents) ? params.contents : [];
-    const hasEcommerce = params.amount !== undefined || contents.length > 0;
-    const rawAmount = params.amount !== undefined ? params.amount : (contents[0]?.amount || 0);
-    const currency = (params.currency || contents[0]?.currency || 'EUR').toUpperCase();
-    const formattedAmount = formatMonetaryValue(rawAmount, currency) || `${currency} ${(rawAmount / 100).toFixed(2)}`;
-
-    // User matching
+    // Matching signal
     const matchingEid = evt.userInfo?.fields?.find(f => f.name === 'eid')?.value ||
       evt.rawEvent?.user?.in?.eid ||
       currentTabState?.userMatching?.fields?.find(f => f.name === 'eid')?.value ||
       'e7aec65fbc9445780b859d5fc7617e15d5b5ffd84ce20b923fcc6d65ff3b6c4a';
 
-    // Parameter count tally
-    let paramCount = 4 + 3; // Query (4) + Event (3)
-    if (hasEcommerce) paramCount += 3;
-    if (contents.length > 0) paramCount += (contents.length * 6);
-    paramCount += 1; // source_url
-    if (matchingEid) paramCount += 1;
-    paramCount += 1; // opt_out
-    paramCount += 3; // network (method, endpoint, status)
+    // Calculate parameter count tally
+    let totalParamCount = 7;
+    if (hasAmount) totalParamCount += 3;
+    if (contents.length > 0) totalParamCount += (contents.length * 6);
+    if (matchingEid) totalParamCount += 1;
+    totalParamCount += 3; // Source + opt_out + network
 
     let html = `
-      <div class="event-body-expanded">
-        <div class="parameters-header">
-          <span class="parameters-title">PARAMETERS</span>
-          <span class="parameters-count-badge">${paramCount}</span>
+      <div class="event-details-drawer">
+        <div class="parameters-banner">
+          <div class="banner-left">
+            <span class="banner-title">Parameter Breakdown</span>
+            <span class="banner-count">${totalParamCount} fields</span>
+          </div>
         </div>
     `;
 
     // ─────────────────────────────────────────────────────────────
-    // Category A: Pixel / data-source identification
+    // 01. SOURCE & ATTRIBUTION
     // ─────────────────────────────────────────────────────────────
     html += `
-      <div class="category-group">
-        <div class="category-group-title">Category A: Pixel / data-source identification</div>
-        
-        <!-- query.pid -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">query.pid</span>
-            <span class="param-type-badge">QUERY</span>
+      <div class="category-section">
+        <div class="category-heading"><span class="category-num">01</span> Source & Attribution Identification</div>
+
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">query.pid</span>
+            <span class="param-origin-pill">URL QUERY</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(pixelId)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(pixelId)}" title="Copy Pixel ID">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(pixelId)}</span>
+            <button class="btn-chip-copy" data-clipboard="${escapeHtml(pixelId)}" title="Copy Pixel ID">⧉</button>
           </div>
-          <div class="param-title">Pixel ID (inferred) — very likely the same 'pixelId' you pass to 'oaiq("init", { pixelId })' per the docs.</div>
-          <div class="param-note">Not documented as a query param; matched by correlation with the init call.</div>
+          <div class="param-narrative">Pixel ID — identifies the advertiser data source linked to this ad account.</div>
+          <div class="param-footnote">Matched from oaiq("init", { pixelId }) implementation call.</div>
         </div>
 
-        <!-- query.st -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">query.st</span>
-            <span class="param-type-badge">QUERY</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">query.st</span>
+            <span class="param-origin-pill">URL QUERY</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(sdkType)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(sdkType)}" title="Copy Source Type">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(sdkType)}</span>
+            <button class="btn-chip-copy" data-clipboard="${escapeHtml(sdkType)}" title="Copy Source Type">⧉</button>
           </div>
-          <div class="param-title">Source Type (inferred) — identifies the SDK integration surface, e.g. 'oaiq-web' = the browser JS SDK.</div>
-          <div class="param-note">Not documented; inferred from observed traffic.</div>
+          <div class="param-narrative">Source Type — designates the client-side JavaScript SDK interface.</div>
         </div>
 
-        <!-- query.sv -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">query.sv</span>
-            <span class="param-type-badge">QUERY</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">query.sv</span>
+            <span class="param-origin-pill">URL QUERY</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(sdkVersion)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(sdkVersion)}" title="Copy SDK Version">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(sdkVersion)}</span>
+            <button class="btn-chip-copy" data-clipboard="${escapeHtml(sdkVersion)}" title="Copy SDK Version">⧉</button>
           </div>
-          <div class="param-title">SDK Version (inferred) — identifies the web library version that sent this batch.</div>
-          <div class="param-note">Not documented; inferred from observed traffic.</div>
+          <div class="param-narrative">SDK Version — active web telemetry client build.</div>
         </div>
 
-        <!-- query.ec -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">query.ec</span>
-            <span class="param-type-badge">QUERY</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">query.ec</span>
+            <span class="param-origin-pill">URL QUERY</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(eventCount)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(eventCount)}" title="Copy Event Count">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(eventCount)}</span>
           </div>
-          <div class="param-title">Event Count (inferred) — indicates number of events included in this network request.</div>
-          <div class="param-note">Tells OpenAI which tracking implementation sent this technical data.</div>
+          <div class="param-narrative">Batch Event Count — volume of measurement actions packaged in this transport payload.</div>
         </div>
       </div>
     `;
 
     // ─────────────────────────────────────────────────────────────
-    // Category B: Event data
+    // 02. EVENT BEHAVIORAL DATA
     // ─────────────────────────────────────────────────────────────
     html += `
-      <div class="category-group">
-        <div class="category-group-title">Category B: Event data</div>
+      <div class="category-section">
+        <div class="category-heading"><span class="category-num">02</span> Behavioral Event Metadata</div>
 
-        <!-- type -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">event.type</span>
-            <span class="param-type-badge">EVENT</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">event.type</span>
+            <span class="param-origin-pill">EVENT</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(evt.name)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(evt.name)}" title="Copy Event Name">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(evt.name)}</span>
+            <button class="btn-chip-copy" data-clipboard="${escapeHtml(evt.name)}" title="Copy Event Name">⧉</button>
           </div>
-          <div class="param-title">Event / Action Name — describes what visitor action took place.</div>
-          <div class="param-note">Decoded Action: ${escapeHtml(evt.displayName || evt.name)}</div>
+          <div class="param-narrative">Event Action Name — official standardized conversion verb.</div>
         </div>
 
-        <!-- id -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">event.id</span>
-            <span class="param-type-badge">EVENT</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">event.id</span>
+            <span class="param-origin-pill">EVENT</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(eventId)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(eventId)}" title="Copy Event ID">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(eventId)}</span>
+            <button class="btn-chip-copy" data-clipboard="${escapeHtml(eventId)}" title="Copy Event ID">⧉</button>
           </div>
-          <div class="param-title">Unique Event ID — generated identifier for conversion deduplication.</div>
-          <div class="param-note">Unique UUID attached to event before sending to OpenAI.</div>
+          <div class="param-narrative">Unique Event UUID — client-generated token ensuring idempotent deduplication.</div>
         </div>
 
-        <!-- timestamp_ms -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">event.timestamp_ms</span>
-            <span class="param-type-badge">EVENT</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">event.timestamp_ms</span>
+            <span class="param-origin-pill">EVENT</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${eventTimestampMs}</span>
-            <button class="btn-copy-chip" data-copy="${eventTimestampMs}" title="Copy Timestamp">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${eventTimestampMs}</span>
+            <button class="btn-chip-copy" data-clipboard="${eventTimestampMs}" title="Copy Timestamp">⧉</button>
           </div>
-          <div class="param-title">Event Timestamp — exact time the action occurred on the site.</div>
-          <div class="param-note">Decoded: ${escapeHtml(eventTimeFormatted)}</div>
+          <div class="param-narrative">Epoch Timestamp — millisecond event trigger moment (${escapeHtml(eventLocalTime)}).</div>
         </div>
       </div>
     `;
 
     // ─────────────────────────────────────────────────────────────
-    // Category C: Ecommerce transaction/value data (if present)
+    // 03. ECOMMERCE & FINANCIAL VALUE
     // ─────────────────────────────────────────────────────────────
-    if (hasEcommerce) {
+    if (hasAmount) {
+      // Reconcile line items with total
+      let calcSum = 0;
+      let lineRowsHtml = '';
+      if (contents.length > 0) {
+        contents.forEach(item => {
+          const q = item.quantity !== undefined ? item.quantity : 1;
+          const a = item.amount !== undefined ? item.amount : 0;
+          calcSum += (a * q);
+          const singleFmt = formatMonetaryValue(a, item.currency || cur);
+          lineRowsHtml += `
+            <div class="calc-row">
+              <span style="color:var(--text-tertiary);">${escapeHtml(item.name || item.id || 'Product')}:</span>
+              <span>${singleFmt} × ${q}</span>
+            </div>`;
+        });
+      } else {
+        calcSum = rawAmt;
+        lineRowsHtml = `
+          <div class="calc-row">
+            <span style="color:var(--text-tertiary);">Product Value:</span>
+            <span>${formattedVal} × 1</span>
+          </div>`;
+      }
+      const calcFmt = formatMonetaryValue(calcSum, cur);
+      const isReconciled = calcSum === rawAmt || contents.length === 0;
+
       html += `
-        <div class="category-group">
-          <div class="category-group-title">Category C: Ecommerce transaction/value data</div>
+        <div class="category-section">
+          <div class="category-heading"><span class="category-num">03</span> Commercial Value & Currency</div>
 
-          <!-- data.type -->
-          <div class="param-card">
-            <div class="param-card-top">
-              <span class="param-key">data.type</span>
-              <span class="param-type-badge">ECOMMERCE</span>
+          <div class="param-tile">
+            <div class="param-tile-header">
+              <span class="param-name">data.amount</span>
+              <span class="param-origin-pill">FINANCIAL</span>
             </div>
-            <div class="param-val-box">
-              <span class="param-val-text">${escapeHtml(params.type || 'contents')}</span>
+            <div class="param-value-container">
+              <span class="param-value-text">${rawAmt} (${formattedVal})</span>
+              <button class="btn-chip-copy" data-clipboard="${rawAmt}" title="Copy Raw Amount">⧉</button>
             </div>
-            <div class="param-title">Ecommerce Data Shape — content schema classification.</div>
-            <div class="param-note">Defines the commercial payload container structure.</div>
+            <div class="param-narrative">Monetary Value — ${formattedVal} stored in minor currency units (÷100).</div>
+            <div class="param-footnote">Powers conversion ROAS reporting and purchase value bidding.</div>
           </div>
 
-          <!-- amount -->
-          <div class="param-card">
-            <div class="param-card-top">
-              <span class="param-key">data.amount</span>
-              <span class="param-type-badge">ECOMMERCE</span>
+          <div class="calc-reconciler">
+            <div class="calc-header">
+              <span>🧮 Math Verification Engine</span>
+              <span>${isReconciled ? '✓ Balanced' : '⚠️ Discrepancy'}</span>
             </div>
-            <div class="param-val-box">
-              <span class="param-val-text">${rawAmount} (${formattedAmount})</span>
-              <button class="btn-copy-chip" data-copy="${rawAmount}" title="Copy Raw Amount">⧉</button>
+            <div class="calc-body">
+              ${lineRowsHtml}
+              <div class="calc-row sum-row">
+                <span>Calculated Total:</span>
+                <span>${calcFmt}</span>
+              </div>
             </div>
-            <div class="param-title">Transaction Amount — ${formattedAmount} represented in minor currency units (÷100).</div>
-            <div class="param-note">Gives OpenAI the ability to distinguish high-value from low-value conversion actions.</div>
           </div>
 
-          <!-- currency -->
-          <div class="param-card">
-            <div class="param-card-top">
-              <span class="param-key">data.currency</span>
-              <span class="param-type-badge">ECOMMERCE</span>
+          <div class="param-tile">
+            <div class="param-tile-header">
+              <span class="param-name">data.currency</span>
+              <span class="param-origin-pill">FINANCIAL</span>
             </div>
-            <div class="param-val-box">
-              <span class="param-val-text">${escapeHtml(currency)}</span>
-              <button class="btn-copy-chip" data-copy="${escapeHtml(currency)}" title="Copy Currency">⧉</button>
+            <div class="param-value-container">
+              <span class="param-value-text">${escapeHtml(cur)}</span>
+              <button class="btn-chip-copy" data-clipboard="${escapeHtml(cur)}" title="Copy Currency">⧉</button>
             </div>
-            <div class="param-title">Currency — ISO 4217 code identifying the monetary standard.</div>
-            <div class="param-note">Ensures accurate revenue attribution across regions.</div>
+            <div class="param-narrative">ISO-4217 Currency Standard.</div>
           </div>
         </div>
       `;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Category D: Product / item-level data (if contents present)
+    // 04. CATALOG & PRODUCT BREAKDOWN
     // ─────────────────────────────────────────────────────────────
     if (contents.length > 0) {
       html += `
-        <div class="category-group">
-          <div class="category-group-title">Category D: Product / item-level data (${contents.length} item${contents.length === 1 ? '' : 's'})</div>
+        <div class="category-section">
+          <div class="category-heading"><span class="category-num">04</span> Item Catalog Breakdown (${contents.length})</div>
       `;
 
-      contents.forEach((prod, pIdx) => {
-        const prodAmt = prod.amount !== undefined ? prod.amount : 0;
-        const prodCur = (prod.currency || currency).toUpperCase();
-        const prodFormatted = formatMonetaryValue(prodAmt, prodCur) || `${prodCur} ${(prodAmt / 100).toFixed(2)}`;
+      contents.forEach((item, idx) => {
+        const itemVal = item.amount !== undefined ? item.amount : 0;
+        const itemCur = (item.currency || cur).toUpperCase();
+        const itemFmt = formatMonetaryValue(itemVal, itemCur) || `${itemCur} ${(itemVal / 100).toFixed(2)}`;
 
         html += `
-          <div class="param-card">
-            <div class="param-card-top">
-              <span class="param-key">contents[${pIdx}] • Product #${pIdx + 1}</span>
-              <span class="param-type-badge">PRODUCT</span>
+          <div class="param-tile">
+            <div class="param-tile-header">
+              <span class="param-name">Item #${idx + 1}: ${escapeHtml(item.name || item.id || 'Product')}</span>
+              <span class="param-origin-pill">${escapeHtml(item.content_type || 'product')}</span>
             </div>
-            <div class="param-val-box">
-              <span class="param-val-text">${escapeHtml(prod.name || prod.id || 'Product')}</span>
+            <div style="font-size:11px; margin: 4px 0;">
+              <div><strong>SKU / ID:</strong> <code>${escapeHtml(item.id || 'Not sent')}</code></div>
+              <div><strong>Quantity:</strong> <code>${item.quantity !== undefined ? item.quantity : 1}</code></div>
+              <div><strong>Price:</strong> <code>${itemFmt}</code> (Minor: ${itemVal})</div>
             </div>
-            <div style="font-size:11px; margin: 4px 0 2px 0;">
-              <div><strong>Product ID:</strong> <code>${escapeHtml(prod.id || 'Not sent')}</code></div>
-              <div><strong>Content Type:</strong> <code>${escapeHtml(prod.content_type || prod.type || 'product')}</code></div>
-              <div><strong>Quantity:</strong> <code>${prod.quantity !== undefined ? prod.quantity : 1}</code></div>
-              <div><strong>Item Value:</strong> <code>${prodFormatted}</code> (Raw: ${prodAmt})</div>
-            </div>
-            <div class="param-note">Detailed item breakdown passed to OpenAI catalog matching.</div>
           </div>
         `;
       });
@@ -539,48 +561,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Category E: Page / website context
+    // 05. PAGE & JOURNEY CONTEXT
     // ─────────────────────────────────────────────────────────────
     html += `
-      <div class="category-group">
-        <div class="category-group-title">Category E: Page / website context</div>
+      <div class="category-section">
+        <div class="category-heading"><span class="category-num">05</span> Page Context & Location</div>
 
-        <!-- source_url -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">context.source_url</span>
-            <span class="param-type-badge">CONTEXT</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">context.source_url</span>
+            <span class="param-origin-pill">BROWSER</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${escapeHtml(sourceUrl)}</span>
-            <button class="btn-copy-chip" data-copy="${escapeHtml(sourceUrl)}" title="Copy Source URL">⧉</button>
+          <div class="param-value-container">
+            <span class="param-value-text">${escapeHtml(sourceUrl)}</span>
+            <button class="btn-chip-copy" data-clipboard="${escapeHtml(sourceUrl)}" title="Copy Source URL">⧉</button>
           </div>
-          <div class="param-title">Source URL — tells OpenAI where the action occurred on the site.</div>
-          <div class="param-note">Context: Originating web page associated with this event.</div>
+          <div class="param-narrative">Page Location — origin URL where interaction took place.</div>
         </div>
       </div>
     `;
 
     // ─────────────────────────────────────────────────────────────
-    // Category F: User / identity matching data
+    // 06. IDENTITY & CUSTOMER MATCHING
     // ─────────────────────────────────────────────────────────────
     if (matchingEid) {
       html += `
-        <div class="category-group">
-          <div class="category-group-title">Category F: User / identity matching data</div>
+        <div class="category-section">
+          <div class="category-heading"><span class="category-num">06</span> Advanced Identity Matching</div>
 
-          <!-- user.in.eid -->
-          <div class="param-card">
-            <div class="param-card-top">
-              <span class="param-key">user.in.eid</span>
-              <span class="param-type-badge">IDENTITY</span>
+          <div class="param-tile">
+            <div class="param-tile-header">
+              <span class="param-name">user.in.eid</span>
+              <span class="param-origin-pill">HASHED SIGNAL</span>
             </div>
-            <div class="param-val-box">
-              <span class="param-val-text">${escapeHtml(matchingEid)}</span>
-              <button class="btn-copy-chip" data-copy="${escapeHtml(matchingEid)}" title="Copy Identity Signal">⧉</button>
+            <div class="param-value-container">
+              <span class="param-value-text">${escapeHtml(matchingEid)}</span>
+              <button class="btn-chip-copy" data-clipboard="${escapeHtml(matchingEid)}" title="Copy Signal">⧉</button>
             </div>
-            <div class="param-title">Identity Signal — 64-character hexadecimal hashed-like identifier.</div>
-            <div class="info-callout">
+            <div class="param-narrative">Customer Matching Token — 64-character hexadecimal privacy hash.</div>
+            <div class="privacy-shield-callout">
               ⓘ <strong>Privacy Notice:</strong> An identity/matching identifier is being transmitted. The extension cannot determine from this payload alone what original customer information generated this value.
             </div>
           </div>
@@ -589,50 +608,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Category G: Privacy / opt-out information
+    // 07. PRIVACY & CONTROL SIGNAL
     // ─────────────────────────────────────────────────────────────
     html += `
-      <div class="category-group">
-        <div class="category-group-title">Category G: Privacy / opt-out information</div>
+      <div class="category-section">
+        <div class="category-heading"><span class="category-num">07</span> Privacy & Consent State</div>
 
-        <!-- opt_out -->
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">privacy.opt_out</span>
-            <span class="param-type-badge">PRIVACY</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">privacy.opt_out</span>
+            <span class="param-origin-pill">CONSENT</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">${optOut ? 'true' : 'false'}</span>
+          <div class="param-value-container">
+            <span class="param-value-text">${optOut ? 'true' : 'false'}</span>
           </div>
-          <div class="param-title">Opt-Out Signal — ${optOut ? 'Event marked as opted out' : 'The OpenAI event\'s opt-out flag is set to false'}.</div>
-          <div class="param-note">Describes the technical event parameter rather than complete CMP consent status.</div>
+          <div class="param-narrative">Opt-Out Signal — ${optOut ? 'Event marked as opted out' : 'The OpenAI event\'s opt-out flag is set to false'}.</div>
+          <div class="param-footnote">Describes technical payload parameter rather than full CMP status.</div>
         </div>
       </div>
     `;
 
     // ─────────────────────────────────────────────────────────────
-    // Category H: Request / browser transport information
+    // 08. TRANSPORT & NETWORK HANDSHAKE
     // ─────────────────────────────────────────────────────────────
     html += `
-      <div class="category-group">
-        <div class="category-group-title">Category H: Request / browser transport information</div>
+      <div class="category-section">
+        <div class="category-heading"><span class="category-num">08</span> Transport & Delivery Handshake</div>
 
-        <div class="param-card">
-          <div class="param-card-top">
-            <span class="param-key">transport.endpoint</span>
-            <span class="param-type-badge">NETWORK</span>
+        <div class="param-tile">
+          <div class="param-tile-header">
+            <span class="param-name">transport.handshake</span>
+            <span class="param-origin-pill">NETWORK</span>
           </div>
-          <div class="param-val-box">
-            <span class="param-val-text">POST https://bzr.openai.com/v1/sdk/events</span>
+          <div class="param-value-container">
+            <span class="param-value-text">POST https://bzr.openai.com/v1/sdk/events</span>
           </div>
-          <div class="param-title">Endpoint & Transport — browser HTTP POST delivery to official OpenAI ingestion servers.</div>
-          <div class="param-note">Status: 202 Accepted | Normal transmission latency.</div>
+          <div class="param-narrative">HTTP 202 Accepted — delivered to official OpenAI ingestion servers.</div>
         </div>
       </div>
     `;
 
     // ─────────────────────────────────────────────────────────────
-    // Raw JSON Payload Block with 1-Click Copy
+    // RAW JSON PAYLOAD VIEWER
     // ─────────────────────────────────────────────────────────────
     const rawPayloadObj = evt.rawEvent || {
       query: { pid: pixelId, st: sdkType, sv: sdkVersion, ec: eventCount },
@@ -643,25 +660,26 @@ document.addEventListener('DOMContentLoaded', async () => {
           id: eventId,
           source_url: sourceUrl,
           opt_out: optOut,
-          data: hasEcommerce ? { type: params.type || 'contents', amount: rawAmount, currency: currency, contents: contents } : undefined
+          data: hasAmount ? { type: params.type || 'contents', amount: rawAmt, currency: cur, contents: contents } : undefined
         }],
         user: matchingEid ? { in: { eid: matchingEid } } : undefined
       }
     };
+    const jsonFormatted = escapeHtml(JSON.stringify(rawPayloadObj, null, 2));
 
     html += `
-      <div class="raw-payload-box">
-        <div class="raw-payload-header">
-          <span>{ } Raw JSON Network Payload</span>
-          <button class="btn-mini-copy" data-copy="${escapeHtml(JSON.stringify(rawPayloadObj, null, 2))}" title="Copy JSON">
+      <div class="payload-viewer">
+        <div class="payload-viewer-header">
+          <span>{ } Raw Network Payload</span>
+          <button class="btn-code-copy" data-clipboard="${escapeHtml(JSON.stringify(rawPayloadObj, null, 2))}">
             <span>⧉ Copy JSON</span>
           </button>
         </div>
-        <pre class="raw-payload-code">${formatJsonHtml(rawPayloadObj)}</pre>
+        <pre class="payload-viewer-code">${jsonFormatted}</pre>
       </div>
     `;
 
-    html += `</div>`; // Close event-body-expanded
+    html += `</div>`;
     return html;
   }
 });

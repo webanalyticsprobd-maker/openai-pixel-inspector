@@ -3,70 +3,92 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenAI Pixel Helper</title>
+  <title>OpenAI Pixel Inspector</title>
   <link rel="stylesheet" href="popup.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="app-wrap">
+  <div class="shell">
     
-    <!-- Top Header -->
-    <header class="top-nav">
+    <!-- Top Brand Header -->
+    <header class="app-header">
       <div class="brand">
-        <!-- OpenAI Spiral Logo -->
-        <svg class="brand-logo" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/>
-          <path d="M12 6a6 6 0 0 1 6 6c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6z"/>
-          <circle cx="12" cy="12" r="2"/>
-        </svg>
-        <span class="brand-title">OpenAI Pixel Helper</span>
+        <div class="brand-symbol">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <div class="brand-title-wrap">
+            <span class="brand-title">OpenAI Pixel</span>
+            <span class="brand-tag">INSPECTOR</span>
+          </div>
+          <span class="brand-desc">Live Request & Attribution Engine</span>
+        </div>
       </div>
-      <div class="top-actions">
-        <button class="icon-btn" id="btn-theme" title="Toggle Light/Dark Theme">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <div class="header-actions">
+        <button class="nav-action-btn" id="btn-theme" title="Toggle Theme">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         </button>
-        <button class="icon-btn" id="btn-sidepanel" title="Open in Side Panel">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+        <button class="nav-action-btn" id="btn-sidepanel" title="Dock to Side Panel">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
         </button>
-        <button class="icon-btn" id="btn-close-window" title="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <button class="nav-action-btn" id="btn-open-tab" title="Open in New Tab">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </button>
       </div>
     </header>
 
-    <!-- Context & Control Bar (Image 1) -->
-    <section class="context-bar">
-      <div class="context-host-row">
-        <h2 class="host-name" id="target-host">scanning...</h2>
-        <span class="events-count" id="events-count">0 events</span>
+    <!-- Active Domain & Session Radar -->
+    <section class="session-card">
+      <div class="session-header">
+        <div class="host-pill" id="target-host-box" title="Current domain">
+          <span class="radar-dot"></span>
+          <span class="host-text" id="target-host">scanning page...</span>
+        </div>
+        <div class="session-stat-pill">
+          <span class="stat-count" id="events-count">0</span>
+          <span class="stat-label">Events</span>
+        </div>
       </div>
 
-      <div class="filter-row">
-        <input type="text" id="filter-input" class="filter-input" placeholder="Filter by event name or value..." autocomplete="off" />
+      <!-- Quick Search & Filter Controls -->
+      <div class="search-wrap">
+        <div class="search-input-box">
+          <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="filter-input" placeholder="Search events, SKUs, or parameters..." autocomplete="off" />
+          <button id="btn-clear-search" class="search-clear-btn" style="display:none;">&times;</button>
+        </div>
       </div>
 
-      <div class="controls-row">
-        <label class="toggle-label">
+      <!-- Session Actions Bar -->
+      <div class="actions-strip">
+        <label class="auto-clean-toggle" title="Reset captured event list on page refresh">
           <input type="checkbox" id="chk-clear-reload" checked />
-          <span class="toggle-slider"></span>
-          <span class="toggle-caption">Clear on reload</span>
+          <span class="toggle-pill"></span>
+          <span class="toggle-title">Clear on reload</span>
         </label>
-        <div class="control-links">
-          <button class="link-btn" id="btn-clear">Clear</button>
-          <button class="link-btn" id="btn-open-tab">Open in tab</button>
-          <button class="link-btn" id="btn-debug">Debug</button>
+        <div class="quick-links">
+          <button class="action-chip" id="btn-clear">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Clear</span>
+          </button>
+          <button class="action-chip" id="btn-debug">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>Audit</span>
+          </button>
         </div>
       </div>
     </section>
 
-    <!-- Main Live Events List (Image 1 & Image 2) -->
-    <main class="events-feed" id="events-feed">
-      <div class="empty-feed">
-        <div class="empty-spinner"></div>
-        <p>Listening for OpenAI Pixel requests...</p>
-        <span class="empty-sub">Interact with page or trigger <code>oaiq('measure', ...)</code></span>
+    <!-- Main Live Event Stream Feed -->
+    <main class="stream-container" id="events-feed">
+      <div class="listening-state">
+        <div class="sonar-ring"></div>
+        <div class="listening-text">Listening for OpenAI Pixel Activity</div>
+        <p class="listening-desc">Trigger <code>oaiq('measure', ...)</code> or navigate the website to capture network events in real time.</p>
       </div>
     </main>
 
