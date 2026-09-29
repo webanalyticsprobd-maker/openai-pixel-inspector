@@ -729,7 +729,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const filtered = events.filter((evt) => {
       if (currentFilter === 'standard' && evt.validation && evt.validation.isCustom) return false;
       if (currentFilter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
-      if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
+      if (currentFilter === 'duplicates' && !evt.isDuplicate && (!evt.requestCount || evt.requestCount <= 1)) return false;
       if (currentFilter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
       if (currentFilter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
 
@@ -956,6 +956,15 @@ document.addEventListener('DOMContentLoaded', async () => {
           <span class="val-check-text">Request dispatched successfully to OpenAI</span>
         </div>
       `;
+
+      if (evt.isDuplicate || (evt.requestCount && evt.requestCount > 1)) {
+        checklistHtml += `
+          <div class="val-check-item">
+            <span class="val-check-icon" style="color:var(--status-warning);">${ICONS.warn}</span>
+            <span class="val-check-text text-warning"><strong>Double Firing Detected:</strong> ${escapeHtml(evt.duplicateReason || ('Event fired ' + (evt.requestCount || 2) + ' times on the same trigger.'))}</span>
+          </div>
+        `;
+      }
 
       if (errorFindings.length > 0) {
         checklistHtml += errorFindings.map(f => `

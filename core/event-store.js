@@ -28,13 +28,15 @@ export class EventStore {
     
     if (matched) {
       normalizedEvent.isDuplicate = true;
-      normalizedEvent.duplicateOf = matched._id;
+      normalizedEvent.duplicateOf = matched.event._id;
       normalizedEvent.duplicateReason = matched.reason;
       normalizedEvent.duplicateStatus = '❌ Double Fired / Duplicate';
       
       // Increment request count on matched primary event
       matched.event.requestCount = (matched.event.requestCount || 1) + 1;
       matched.event.duplicateStatus = `❌ Double Fired (${matched.event.requestCount}x)`;
+      matched.event.isDuplicate = false; // Primary instance
+      matched.event.hasDuplicates = true;
       
       this.duplicates.push({
         event: normalizedEvent,
@@ -43,8 +45,17 @@ export class EventStore {
         timestamp: Date.now()
       });
 
-      // Add audit issue
+      // Add audit findings on duplicate event
       if (normalizedEvent.validation) {
+        if (!normalizedEvent.validation.findings) normalizedEvent.validation.findings = [];
+        normalizedEvent.validation.findings.push({
+          code: 'DUPLICATE_EVENT_DETECTED',
+          severity: 'warning',
+          parameter: 'event',
+          message: `Double firing detected: Event "${normalizedEvent.displayName || normalizedEvent.name}" double-fired on the same user action (${matched.reason}).`,
+          ruleSource: 'Deduplication Audit'
+        });
+        if (!normalizedEvent.validation.issues) normalizedEvent.validation.issues = [];
         normalizedEvent.validation.issues.push({
           code: 'DUPLICATE_EVENT_DETECTED',
           severity: 'warning',
@@ -52,9 +63,27 @@ export class EventStore {
           message: `Event "${normalizedEvent.displayName || normalizedEvent.name}" double-fired on the same user action (${matched.reason}).`,
           recommendation: 'Check your trigger configurations in Google Tag Manager or website JS to ensure this action only fires once per trigger.'
         });
-        normalizedEvent.validation.warningsCount++;
+        normalizedEvent.validation.warningsCount = (normalizedEvent.validation.warningsCount || 0) + 1;
         if (normalizedEvent.validation.status === 'valid') {
           normalizedEvent.validation.status = 'warning';
+        }
+      }
+
+      // Also flag primary event
+      if (matched.event.validation) {
+        if (!matched.event.validation.findings) matched.event.validation.findings = [];
+        if (!matched.event.validation.findings.some(f => f.code === 'DUPLICATE_EVENT_DETECTED')) {
+          matched.event.validation.findings.push({
+            code: 'DUPLICATE_EVENT_DETECTED',
+            severity: 'warning',
+            parameter: 'event',
+            message: `Double firing detected: This event fired ${matched.event.requestCount} times on the same page interaction (${matched.reason}).`,
+            ruleSource: 'Deduplication Audit'
+          });
+          matched.event.validation.warningsCount = (matched.event.validation.warningsCount || 0) + 1;
+          if (matched.event.validation.status === 'valid') {
+            matched.event.validation.status = 'warning';
+          }
         }
       }
     } else {
@@ -73,7 +102,7 @@ export class EventStore {
    */
   detectActionDuplicate(newEvent) {
     if (!newEvent.name) return null;
-    const windowMs = 3000; // 3.0-second action threshold for accidental double-fires
+    const windowMs = 5000; // 5.0-second action threshold for accidental double-fires
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const existing = this.events[i];
@@ -87,27 +116,37 @@ export class EventStore {
         };
       }
 
-      // Rule 2: Same event name on the same URL within 3 seconds with identical content/amount/parameters
+      // Rule 2: Same event name on the same URL within 5 seconds with identical content/amount/parameters
       if (existing.name === newEvent.name && timeDiff < windowMs) {
         const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : true;
         
-        // Compare contents if present
+        // Compare parameters
         const existingParams = JSON.stringify(existing.parameters || {});
         const newParams = JSON.stringify(newEvent.parameters || {});
 
-        if (samePath && existingParams === newParams) {
+        if (samePath && (existingParams === newParams || (!existing.parameters && !newEvent.parameters))) {
           return {
             event: existing,
             reason: `Fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
           };
         }
 
-        // Special check for page_viewed: 2 page_viewed calls on the same page load
+        // Special check for page_viewed: 2 page_viewed calls on the same page load within 5 seconds
         if (newEvent.name === 'page_viewed' && samePath) {
           return {
             event: existing,
             reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
           };
+        }
+
+        // Special check for order_created / purchase: matching order/plan ID or identical monetary value
+        if ((newEvent.name === 'order_created' || newEvent.name === 'purchase') && samePath) {
+          if (newEvent.parameters?.amount && existing.parameters?.amount && newEvent.parameters.amount === existing.parameters.amount) {
+            return {
+              event: existing,
+              reason: `Duplicate order conversion fired ${timeDiff}ms after previous order with same value (${newEvent.parameters.amount})`
+            };
+          }
         }
       }
     }
