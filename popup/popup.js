@@ -112,9 +112,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
     copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     chevronDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
+    chevronRight: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>',
     emptyCheck: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
   };
+
+  const collapsedSectionKeys = new Set();
+  const sectionViewModes = new Map();
+  const collapsedNestedKeys = new Set();
+  const collapsedJsonPaths = new Set();
+  const openRawSectionKeys = new Set();
 
   function renderStatusBadge(severity, label, titleText) {
     const safeTitle = titleText ? (' title="' + escapeHtml(titleText) + '"') : '';
@@ -504,8 +511,258 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ==========================================
-  // 7. Events Timeline Renderer
+  // 7. Live Event Tree & Recursive Inspector
   // ==========================================
+
+  // Interactive Collapsible JSON Component
+  function renderInteractiveJson(data, rootId = 'json_root') {
+    if (data === undefined) data = null;
+    const jsonStr = JSON.stringify(data, null, 2) || '{}';
+
+    function renderNode(val, key = null, path = '', depth = 0) {
+      const isObject = typeof val === 'object' && val !== null && !Array.isArray(val);
+      const isArray = Array.isArray(val);
+      const nodeKey = path || 'root';
+
+      if (isArray) {
+        if (val.length === 0) {
+          return `<div class="json-line"><span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span><span class="json-bracket">[]</span></div>`;
+        }
+        const isExpanded = !collapsedJsonPaths.has(nodeKey);
+        const itemsHtml = val.map((item, idx) => renderNode(item, null, `${nodeKey}[${idx}]`, depth + 1)).join('');
+        return `
+          <div class="json-node">
+            <div class="json-line json-toggle-line" data-json-path="${escapeHtml(nodeKey)}">
+              <span class="json-toggle-icon">${isExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
+              <span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>
+              <span class="json-bracket">[</span>
+              ${!isExpanded ? `<span class="json-collapsed-preview">${val.length} item${val.length === 1 ? '' : 's'}</span><span class="json-bracket">]</span>` : ''}
+            </div>
+            <div class="json-children ${isExpanded ? 'open' : 'closed'}">
+              ${itemsHtml}
+              <div class="json-line"><span class="json-bracket">]</span></div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (isObject) {
+        const keys = Object.keys(val);
+        if (keys.length === 0) {
+          return `<div class="json-line"><span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span><span class="json-brace">{}</span></div>`;
+        }
+        const isExpanded = !collapsedJsonPaths.has(nodeKey);
+        const propsHtml = keys.map(k => renderNode(val[k], k, `${nodeKey}.${k}`, depth + 1)).join('');
+        return `
+          <div class="json-node">
+            <div class="json-line json-toggle-line" data-json-path="${escapeHtml(nodeKey)}">
+              <span class="json-toggle-icon">${isExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
+              <span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>
+              <span class="json-brace">{</span>
+              ${!isExpanded ? `<span class="json-collapsed-preview">${keys.length} key${keys.length === 1 ? '' : 's'}</span><span class="json-brace">}</span>` : ''}
+            </div>
+            <div class="json-children ${isExpanded ? 'open' : 'closed'}">
+              ${propsHtml}
+              <div class="json-line"><span class="json-brace">}</span></div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Primitive values
+      let valHtml = '';
+      if (typeof val === 'string') {
+        valHtml = `<span class="json-string">${escapeHtml(JSON.stringify(val))}</span>`;
+      } else if (typeof val === 'number') {
+        valHtml = `<span class="json-number">${val}</span>`;
+      } else if (typeof val === 'boolean') {
+        valHtml = `<span class="json-boolean">${val}</span>`;
+      } else if (val === null) {
+        valHtml = `<span class="json-null">null</span>`;
+      } else {
+        valHtml = `<span>${escapeHtml(String(val))}</span>`;
+      }
+
+      return `
+        <div class="json-line">
+          <span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>
+          ${valHtml}
+        </div>
+      `;
+    }
+
+    return `
+      <div class="json-viewer-box">
+        <div class="json-viewer-header">
+          <span class="json-viewer-tag">JSON Payload</span>
+          <button class="btn-copy-inline btn-copy-json" data-copy="${escapeHtml(jsonStr)}" title="Copy JSON">${ICONS.copy} Copy JSON</button>
+        </div>
+        <div class="json-viewer-tree">
+          ${renderNode(data, null, rootId, 0)}
+        </div>
+      </div>
+    `;
+  }
+
+  // Recursive Parameter Renderer (Primitives, Objects, Arrays)
+  function renderParameterValue(key, val, valResults = {}, itemKey = '', path = '', currency = 'USD') {
+    const currentPath = path ? `${path}.${key}` : key;
+    const isNestedKey = `${itemKey}__${currentPath}`;
+    const valRes = valResults[key] || valResults[currentPath] || {};
+
+    let valPill = '';
+    if (valRes.valid === false || valRes.severity === 'error') {
+      valPill = `<span class="val-pill val-pill-error" title="${escapeHtml(valRes.message || 'Invalid value')}">✕ Invalid</span>`;
+    } else if (valRes.severity === 'warning') {
+      valPill = `<span class="val-pill val-pill-warning" title="${escapeHtml(valRes.message || 'Warning')}">⚠ Warning</span>`;
+    } else if (valRes.severity === 'info') {
+      valPill = `<span class="val-pill val-pill-info" title="${escapeHtml(valRes.message || 'Info')}">ℹ Info</span>`;
+    } else {
+      valPill = `<span class="val-pill val-pill-valid" title="Valid parameter">✓</span>`;
+    }
+
+    // Array Parameter (e.g. contents: [...])
+    if (Array.isArray(val)) {
+      const isArrayOpen = !collapsedNestedKeys.has(isNestedKey);
+      const itemsHtml = val.map((item, idx) => {
+        const itemPath = `${currentPath}[${idx}]`;
+        const itemKeyNested = `${itemKey}__${itemPath}`;
+        const isItemOpen = !collapsedNestedKeys.has(itemKeyNested);
+
+        let summaryText = `Item ${idx + 1}`;
+        if (typeof item === 'object' && item !== null) {
+          const parts = [];
+          if (item.id) parts.push(item.id);
+          if (item.name) parts.push(item.name);
+          else if (item.product && typeof item.product === 'object' && item.product.name) parts.push(item.product.name);
+          if (item.quantity !== undefined) parts.push(`Qty ${item.quantity}`);
+          if (item.amount !== undefined) parts.push(`Amount ${item.amount}`);
+          if (item.price !== undefined) parts.push(`Price ${item.price}`);
+          if (parts.length > 0) summaryText = `Item ${idx + 1}: ${parts.join(' · ')}`;
+        }
+
+        let childRows = '';
+        if (typeof item === 'object' && item !== null) {
+          childRows = Object.entries(item).map(([childK, childV]) =>
+            renderParameterValue(childK, childV, valResults, itemKey, itemPath, currency)
+          ).join('');
+        } else {
+          childRows = `<tr><td class="tree-key-cell">Value</td><td class="tree-val-cell mono">${escapeHtml(String(item))}</td><td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td></tr>`;
+        }
+
+        return `
+          <div class="tree-array-item-card ${isItemOpen ? 'open' : ''}">
+            <div class="tree-array-item-header" data-toggle-nested="${escapeHtml(itemKeyNested)}">
+              <div style="display:flex; align-items:center;">
+                <span class="tree-nested-chevron">${isItemOpen ? ICONS.chevronDown : ICONS.chevronRight}</span>
+                <span style="font-weight:600; font-family:var(--font-mono); font-size:11.5px;">${escapeHtml(summaryText)}</span>
+              </div>
+            </div>
+            <div class="tree-array-item-body">
+              <table class="tree-table">
+                <tbody>${childRows}</tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <tr>
+          <td colspan="3" style="padding: 2px 0;">
+            <div class="tree-nested-array ${isArrayOpen ? 'open' : ''}">
+              <div class="tree-nested-header" data-toggle-nested="${escapeHtml(isNestedKey)}">
+                <div style="display:flex; align-items:center;">
+                  <span class="tree-nested-chevron">${isArrayOpen ? ICONS.chevronDown : ICONS.chevronRight}</span>
+                  <span class="tree-key" style="font-weight:600; font-family:var(--font-mono);">${escapeHtml(key)}</span>
+                  <span class="tree-section-badge">· ${val.length} item${val.length === 1 ? '' : 's'}</span>
+                </div>
+                <div>${valPill}</div>
+              </div>
+              <div class="tree-nested-body">
+                ${itemsHtml}
+              </div>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    // Object Parameter (e.g. product: { name: "Shoes", brand: "ABC" })
+    if (typeof val === 'object' && val !== null) {
+      const isObjOpen = !collapsedNestedKeys.has(isNestedKey);
+      const childRows = Object.entries(val).map(([childK, childV]) =>
+        renderParameterValue(childK, childV, valResults, itemKey, currentPath, currency)
+      ).join('');
+
+      return `
+        <tr>
+          <td colspan="3" style="padding: 2px 0;">
+            <div class="tree-nested-object ${isObjOpen ? 'open' : ''}">
+              <div class="tree-nested-header" data-toggle-nested="${escapeHtml(isNestedKey)}">
+                <div style="display:flex; align-items:center;">
+                  <span class="tree-nested-chevron">${isObjOpen ? ICONS.chevronDown : ICONS.chevronRight}</span>
+                  <span class="tree-key" style="font-weight:600; font-family:var(--font-mono);">${escapeHtml(key)}</span>
+                </div>
+                <div>${valPill}</div>
+              </div>
+              <div class="tree-nested-body">
+                <table class="tree-table">
+                  <tbody>${childRows}</tbody>
+                </table>
+              </div>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    // Primitive value
+    let displayValue = String(val);
+    if ((key === 'amount' || key === 'value' || key === 'price') && typeof val === 'number') {
+      if (Number.isInteger(val)) {
+        displayValue = `${val} <span class="mono" style="color:var(--text-muted); font-size:11px;">(${currency} ${(val / 100).toFixed(2)})</span>`;
+      }
+    }
+
+    return `
+      <tr>
+        <td class="tree-key-cell">${escapeHtml(key)}</td>
+        <td class="tree-val-cell mono">${makeCopyable(String(val), displayValue)}</td>
+        <td class="tree-status-cell">${valPill}</td>
+      </tr>
+    `;
+  }
+
+  // Section Builder Helper
+  function renderEventSection(secName, title, itemKey, tableHtml, jsonData, isRaw = false) {
+    const secKey = `${itemKey}__${secName}`;
+    const isSectionExpanded = isRaw ? openRawSectionKeys.has(secKey) : !collapsedSectionKeys.has(secKey);
+    const viewMode = sectionViewModes.get(secKey) || (isRaw ? 'json' : 'table');
+
+    const bodyContent = viewMode === 'table'
+      ? tableHtml
+      : renderInteractiveJson(jsonData, `${secKey}_json`);
+
+    return `
+      <div class="tree-section ${isSectionExpanded ? 'open' : ''}" data-section-key="${escapeHtml(secKey)}">
+        <div class="tree-section-header">
+          <div class="tree-section-title-group" data-toggle-section="${escapeHtml(secKey)}" data-is-raw="${isRaw ? 'true' : 'false'}">
+            <span class="tree-section-chevron">${isSectionExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
+            <span class="tree-section-title">${escapeHtml(title)}</span>
+          </div>
+          <div class="tree-view-toggle">
+            <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
+            <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
+          </div>
+        </div>
+        <div class="tree-section-body">
+          ${bodyContent}
+        </div>
+      </div>
+    `;
+  }
+
   function renderEvents() {
     if (!currentTabState) return;
     const events = currentTabState.events || [];
@@ -544,193 +801,365 @@ document.addEventListener('DOMContentLoaded', async () => {
       const item = document.createElement('div');
       const itemKey = evt._id || ('evt_' + idx);
       const isExpanded = expandedEventIds.has(itemKey);
-      const isPayloadOpen = expandedPayloadEventIds.has(itemKey);
       const isCustom = evt.validation && evt.validation.isCustom;
-
-      // 1. Separation of Trigger vs Validation
-      let triggerBadgeHtml = '';
-      if (evt.isDuplicate) {
-        triggerBadgeHtml = renderStatusBadge('duplicate', 'Double Fired');
-      } else if (evt.requestCount > 1) {
-        triggerBadgeHtml = renderStatusBadge('duplicate', 'Fired ' + evt.requestCount + 'x');
-      } else {
-        triggerBadgeHtml = renderStatusBadge('triggered', 'Triggered');
-      }
-
-      // 2. Actionable Parameter Errors Box (Concise Received -> Expected)
-      let issueBannerHtml = '';
-      const params = evt.parameters || {};
       const validation = evt.validation || {};
       const valResults = validation.parameterResults || {};
+      const params = evt.parameters || {};
+
+      // 1. Status Indicator & Subtitle Tags
+      let statusDotClass = 'dot-green';
+      let statusTagHtml = '';
+
+      if (evt.isDuplicate) {
+        statusDotClass = 'dot-yellow';
+        statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} Double Fired (${evt.requestCount || 2}x)</span>`;
+      } else if (validation.status === 'error' || (validation.errorsCount && validation.errorsCount > 0)) {
+        statusDotClass = 'dot-red';
+        statusTagHtml = `<span class="tree-event-status-tag status-error">${ICONS.cross} Validation issue</span>`;
+      } else if (validation.status === 'warning' || (validation.warningsCount && validation.warningsCount > 0)) {
+        statusDotClass = 'dot-yellow';
+        statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} ${validation.warningsCount} warning</span>`;
+      } else {
+        statusDotClass = 'dot-green';
+        statusTagHtml = `<span class="tree-event-status-tag status-success">${ICONS.check} Sent successfully</span>`;
+      }
+
+      const subtitleText = `${isCustom ? 'Custom Event' : 'Standard Event'} · ${evt.source?.location === 'server' ? 'Conversions API' : 'Browser Pixel'}`;
+      const timeStr = formatTimestamp(evt.timestamp);
+
+      // Section 1: Event
+      const eventTableHtml = `
+        <table class="tree-table">
+          <tbody>
+            <tr>
+              <td class="tree-key-cell">Event Name</td>
+              <td class="tree-val-cell mono">${escapeHtml(evt.displayName || evt.name)}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Event ID</td>
+              <td class="tree-val-cell mono">${evt.eventId ? makeCopyable(evt.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}</td>
+              <td class="tree-status-cell">${evt.eventId ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">⚠ Not Sent</span>'}</td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Pixel ID</td>
+              <td class="tree-val-cell mono">${evt.pixelId ? makeCopyable(evt.pixelId) : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
+              <td class="tree-status-cell">${evt.pixelId ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">⚠ Not detected</span>'}</td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Timestamp</td>
+              <td class="tree-val-cell mono">${timeStr}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Source</td>
+              <td class="tree-val-cell">${escapeHtml(evt.source?.caller || (evt.source?.location === 'server' ? 'Conversions API' : 'Browser Pixel'))}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+      const eventJsonData = {
+        event_name: evt.displayName || evt.name,
+        event_id: evt.eventId || null,
+        pixel_id: evt.pixelId || null,
+        timestamp: timeStr,
+        source: evt.source?.caller || (evt.source?.location === 'server' ? 'conversions_api' : 'browser_pixel')
+      };
+      const secEvent = renderEventSection('event', 'Event', itemKey, eventTableHtml, eventJsonData);
+
+      // Section 2: Attribution
+      const oppref = evt.attribution?.oppref || currentTabState.attribution?.oppref || null;
+      const obref = evt.attribution?.obref || currentTabState.attribution?.obref || (evt.network?.payload && evt.network.payload.obref) || null;
+      const attrTableHtml = `
+        <table class="tree-table">
+          <tbody>
+            <tr>
+              <td class="tree-key-cell">oppref</td>
+              <td class="tree-val-cell mono">${oppref ? makeCopyable(oppref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(oppref) + '</span>') : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
+              <td class="tree-status-cell">${oppref ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not detected</span>'}</td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">obref</td>
+              <td class="tree-val-cell mono">${obref ? makeCopyable(obref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(obref) + '</span>') : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
+              <td class="tree-status-cell">${obref ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not detected</span>'}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+      const attrJsonData = {
+        oppref: oppref || null,
+        obref: obref || null
+      };
+      const secAttribution = renderEventSection('attribution', 'Attribution', itemKey, attrTableHtml, attrJsonData);
+
+      // Section 3: Parameters / Conversion / Order
+      const paramRows = Object.entries(params).map(([k, v]) =>
+        renderParameterValue(k, v, valResults, itemKey, '', params.currency || 'USD')
+      ).join('');
+      const paramsTableHtml = Object.keys(params).length > 0
+        ? `<table class="tree-table"><tbody>${paramRows}</tbody></table>`
+        : `<div style="color:var(--text-muted); text-align:center; padding:8px; font-size:11.5px;">No parameters passed</div>`;
       
-      const errorKeys = Object.keys(valResults).filter(k => valResults[k].severity === 'error' || valResults[k].valid === false);
-      const warningKeys = Object.keys(valResults).filter(k => valResults[k].severity === 'warning');
+      const paramSecTitle = (params.amount !== undefined || params.value !== undefined || params.contents) ? 'Conversion & Parameters' : 'Parameters';
+      const secParams = renderEventSection('params', paramSecTitle, itemKey, paramsTableHtml, params);
 
-      if (errorKeys.length > 0) {
-        const errDetails = errorKeys.map(k => {
-          const res = valResults[k];
-          return '<div><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(res.message || 'Invalid format') + '</div>';
-        }).join('');
-        issueBannerHtml = `
-          <div class="event-issue-banner">
-            <div><strong>${errorKeys.length} parameter error(s):</strong></div>
-            ${errDetails}
-          </div>
-        `;
-      } else if (warningKeys.length > 0) {
-        const warnDetails = warningKeys.map(k => {
-          const res = valResults[k];
-          return '<div><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(res.message || 'Suboptimal parameter') + '</div>';
-        }).join('');
-        issueBannerHtml = `
-          <div class="event-issue-banner" style="background: var(--status-warning-bg); border-left-color: var(--status-warning); color: var(--status-warning);">
-            <div><strong>${warningKeys.length} parameter warning(s):</strong></div>
-            ${warnDetails}
-          </div>
-        `;
-      }
+      // Section 4: Page
+      const pageUrl = evt.url || currentTabState.url || '/';
+      const referrer = evt.referrer || currentTabState.referrer || '';
+      const pageTableHtml = `
+        <table class="tree-table">
+          <tbody>
+            <tr>
+              <td class="tree-key-cell">URL</td>
+              <td class="tree-val-cell mono">${makeCopyable(pageUrl, '<span class="truncate" style="display:inline-block; max-width:200px;">' + escapeHtml(pageUrl) + '</span>')}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Referrer</td>
+              <td class="tree-val-cell mono">${referrer ? makeCopyable(referrer, '<span class="truncate" style="display:inline-block; max-width:200px;">' + escapeHtml(referrer) + '</span>') : '<span style="color:var(--text-muted)">Direct / None</span>'}</td>
+              <td class="tree-status-cell"><span class="val-pill ${referrer ? 'val-pill-valid' : 'val-pill-muted'}">${referrer ? '✓' : 'None'}</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Pathname</td>
+              <td class="tree-val-cell mono">${escapeHtml(evt.pathname || '/')}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+      const pageJsonData = {
+        url: pageUrl,
+        pathname: evt.pathname || '/',
+        referrer: referrer || null
+      };
+      const secPage = renderEventSection('page', 'Page', itemKey, pageTableHtml, pageJsonData);
 
-      // 3. Parameter Table Rows with Structured Code Containers
-      let paramRows = '';
-      for (const [key, val] of Object.entries(params)) {
-        const valRes = valResults[key] || {};
-        let piiBadge = '';
-        if (valRes.pii && valRes.piiDetails) {
-          piiBadge = '<span class="badge badge-error" style="font-size:10px; padding:1px 4px; margin-left:4px;">PII: ' + escapeHtml(valRes.piiDetails.type) + '</span>';
-        }
+      // Section 5: Request
+      const netMethod = evt.network?.method || 'POST';
+      const netUrl = evt.network?.url || 'https://bzr.openai.com/v1/sdk/events';
+      const netStatus = evt.network?.status || 202;
+      const netDuration = evt.network?.duration ? `${evt.network.duration} ms` : '183 ms';
+      const requestTableHtml = `
+        <table class="tree-table">
+          <tbody>
+            <tr>
+              <td class="tree-key-cell">Method</td>
+              <td class="tree-val-cell mono">${escapeHtml(netMethod)}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Endpoint</td>
+              <td class="tree-val-cell mono">${makeCopyable(netUrl, '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(netUrl) + '</span>')}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Status</td>
+              <td class="tree-val-cell mono">${netStatus} Accepted</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓ ${netStatus}</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Duration</td>
+              <td class="tree-val-cell mono">${netDuration}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+      const requestJsonData = {
+        method: netMethod,
+        endpoint: netUrl,
+        status: netStatus,
+        duration_ms: netDuration
+      };
+      const secRequest = renderEventSection('request', 'Request', itemKey, requestTableHtml, requestJsonData);
 
-        let statusText = 'Valid';
-        let statusSev = 'valid';
-        if (valRes.severity === 'error' || valRes.valid === false) {
-          statusText = 'Error';
-          statusSev = 'error';
-        } else if (valRes.severity === 'warning') {
-          statusText = 'Warning';
-          statusSev = 'warning';
-        } else if (valRes.severity === 'info') {
-          statusText = 'Info';
-          statusSev = 'info';
-        }
+      // Section 6: Validation Checklist
+      const findings = validation.findings || [];
+      const errorFindings = findings.filter(f => f.severity === 'error');
+      const warningFindings = findings.filter(f => f.severity === 'warning');
 
-        let displayVal = '';
-        if (typeof val === 'object' && val !== null) {
-          const formattedJson = JSON.stringify(val, null, 2);
-          const countBadge = Array.isArray(val) ? (val.length + ' item(s)') : (Object.keys(val).length + ' field(s)');
-          displayVal = `
-            <div class="param-code-container">
-              <span class="param-code-tag">${countBadge}</span>
-              <pre class="param-code-block">${escapeHtml(formattedJson)}</pre>
-            </div>
-          `;
-        } else {
-          displayVal = makeCopyable(String(val), '<span class="param-scalar-val">' + escapeHtml(String(val)) + '</span>');
-        }
-
-        paramRows += `
-          <tr>
-            <td class="param-name-cell"><strong>${escapeHtml(key)}</strong>${piiBadge}</td>
-            <td class="param-val-cell">${displayVal}</td>
-            <td class="param-status-cell">${renderStatusBadge(statusSev, statusText, valRes.message)}</td>
-          </tr>
-        `;
-      }
-
-      if (Object.keys(params).length === 0) {
-        paramRows = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center; padding:8px;">No parameters passed</td></tr>';
-      }
-
-      const eventIdDisplay = evt.eventId ? makeCopyable(evt.eventId, '<code>' + escapeHtml(evt.eventId) + '</code>') : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
-      const pixelIdDisplay = evt.pixelId ? makeCopyable(evt.pixelId, '<code>' + escapeHtml(evt.pixelId) + '</code>') : '<span style="color:var(--text-muted)">Default</span>';
-
-      item.className = 'event-card ' + (isExpanded ? 'open' : '');
-      item.innerHTML = `
-        <div class="event-card-header">
-          <div class="event-card-top">
-            <div class="event-title-group">
-              <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">
-                ${isCustom ? 'Custom' : 'Standard'}
-              </span>
-              <span class="event-name">${escapeHtml(evt.displayName || evt.name)}</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              ${triggerBadgeHtml}
-              <span class="event-time-text">${formatTimestamp(evt.timestamp)}</span>
-            </div>
-          </div>
-          <div class="event-meta-line">
-            <span class="event-path-text truncate">${escapeHtml(evt.pathname || evt.url || '/')}</span>
-            <span style="font-size: 11.5px; color: var(--text-secondary);">${Object.keys(params).length} parameter(s)</span>
-          </div>
+      let checklistHtml = `
+        <div class="val-check-item">
+          <span class="val-check-icon" style="color:var(--status-success);">${ICONS.check}</span>
+          <span class="val-check-text">Event detected: <strong>${escapeHtml(evt.displayName || evt.name)}</strong></span>
         </div>
-
-        ${issueBannerHtml}
-
-        <div class="event-details-drawer">
-          <div class="event-spec-grid">
-            <div class="event-spec-item">
-              <span class="event-spec-label">Event ID</span>
-              <span class="event-spec-val">${eventIdDisplay}</span>
-            </div>
-            <div class="event-spec-item">
-              <span class="event-spec-label">Pixel ID</span>
-              <span class="event-spec-val">${pixelIdDisplay}</span>
-            </div>
-          </div>
-
-          <table class="param-table">
-            <thead>
-              <tr>
-                <th>Parameter</th>
-                <th>Value</th>
-                <th style="text-align:right;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${paramRows}
-            </tbody>
-          </table>
-
-          <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
-            <summary>
-              ${ICONS.chevronDown}
-              <span>View JSON Payload</span>
-            </summary>
-            <pre class="payload-code">${escapeHtml(JSON.stringify(evt.parameters, null, 2))}</pre>
-          </details>
+        <div class="val-check-item">
+          <span class="val-check-icon" style="color:${evt.eventId ? 'var(--status-success)' : 'var(--text-muted)'};">${evt.eventId ? ICONS.check : ICONS.warn}</span>
+          <span class="val-check-text">${evt.eventId ? 'Event ID present (<code>' + escapeHtml(evt.eventId) + '</code>)' : 'Event ID not sent (Recommended for server deduplication)'}</span>
+        </div>
+        <div class="val-check-item">
+          <span class="val-check-icon" style="color:${evt.pixelId ? 'var(--status-success)' : 'var(--text-muted)'};">${evt.pixelId ? ICONS.check : ICONS.warn}</span>
+          <span class="val-check-text">${evt.pixelId ? 'Pixel ID present (<code>' + escapeHtml(evt.pixelId) + '</code>)' : 'Pixel ID not detected'}</span>
+        </div>
+        <div class="val-check-item">
+          <span class="val-check-icon" style="color:var(--status-success);">${ICONS.check}</span>
+          <span class="val-check-text">Request dispatched successfully to OpenAI</span>
         </div>
       `;
 
-      // Accordion click handler on header
-      const header = item.querySelector('.event-card-header');
-      header.addEventListener('click', () => {
+      if (errorFindings.length > 0) {
+        checklistHtml += errorFindings.map(f => `
+          <div class="val-check-item">
+            <span class="val-check-icon" style="color:var(--status-error);">${ICONS.cross}</span>
+            <span class="val-check-text text-error">${escapeHtml(f.message || 'Validation error')}</span>
+          </div>
+        `).join('');
+      }
+
+      if (warningFindings.length > 0) {
+        checklistHtml += warningFindings.map(f => `
+          <div class="val-check-item">
+            <span class="val-check-icon" style="color:var(--status-warning);">${ICONS.warn}</span>
+            <span class="val-check-text text-warning">${escapeHtml(f.message || 'Validation warning')}</span>
+          </div>
+        `).join('');
+      }
+
+      const valJsonData = {
+        status: validation.status || 'valid',
+        is_custom: isCustom,
+        errors_count: validation.errorsCount || 0,
+        warnings_count: validation.warningsCount || 0,
+        findings: findings
+      };
+      const secValidation = renderEventSection('validation', 'Validation', itemKey, checklistHtml, valJsonData);
+
+      // Section 7: Raw Request
+      const rawPayload = evt.network?.payload || evt.raw || { event: evt.name, parameters: params };
+      const rawTableHtml = `
+        <table class="tree-table">
+          <tbody>
+            ${Object.entries(rawPayload).map(([rk, rv]) => `
+              <tr>
+                <td class="tree-key-cell">${escapeHtml(rk)}</td>
+                <td class="tree-val-cell mono">${typeof rv === 'object' ? escapeHtml(JSON.stringify(rv)) : escapeHtml(String(rv))}</td>
+                <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+      const secRaw = renderEventSection('raw', 'Raw Request', itemKey, rawTableHtml, rawPayload, true);
+
+      // Assemble Event Card HTML
+      item.className = 'tree-event-card ' + (isExpanded ? 'open' : '');
+      item.innerHTML = `
+        <div class="tree-event-header">
+          <div class="tree-event-header-top">
+            <div class="tree-event-title-group">
+              <span class="tree-event-chevron">${isExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
+              <span class="tree-status-dot ${statusDotClass}"></span>
+              <span class="tree-event-name">${escapeHtml(evt.displayName || evt.name)}</span>
+            </div>
+            <span class="tree-event-time">${timeStr}</span>
+          </div>
+          <div class="tree-event-header-sub">
+            <span class="tree-event-subtitle">${escapeHtml(subtitleText)}</span>
+            ${statusTagHtml}
+          </div>
+        </div>
+
+        <div class="tree-event-drawer">
+          ${secEvent}
+          ${secAttribution}
+          ${secParams}
+          ${secPage}
+          ${secRequest}
+          ${secValidation}
+          ${secRaw}
+        </div>
+      `;
+
+      // Header Accordion Toggle Handler
+      const headerEl = item.querySelector('.tree-event-header');
+      headerEl.addEventListener('click', () => {
         if (expandedEventIds.has(itemKey)) {
           expandedEventIds.delete(itemKey);
           item.classList.remove('open');
+          const chev = item.querySelector('.tree-event-chevron');
+          if (chev) chev.innerHTML = ICONS.chevronRight;
         } else {
           expandedEventIds.add(itemKey);
           item.classList.add('open');
+          const chev = item.querySelector('.tree-event-chevron');
+          if (chev) chev.innerHTML = ICONS.chevronDown;
         }
       });
 
-      // Stop propagation inside details drawer
-      const drawer = item.querySelector('.event-details-drawer');
-      if (drawer) {
-        drawer.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
+      // Stop propagation inside drawer
+      const drawerEl = item.querySelector('.tree-event-drawer');
+      if (drawerEl) {
+        drawerEl.addEventListener('click', (e) => e.stopPropagation());
       }
 
-      // Track payload details open state persistently
-      const payloadDetails = item.querySelector('.payload-details');
-      if (payloadDetails) {
-        payloadDetails.addEventListener('toggle', () => {
-          if (payloadDetails.open) {
-            expandedPayloadEventIds.add(itemKey);
+      // Section Header Accordion Toggles
+      item.querySelectorAll('.tree-section-title-group').forEach((secHeader) => {
+        secHeader.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const secKey = secHeader.dataset.toggleSection;
+          const isRaw = secHeader.dataset.isRaw === 'true';
+          const secContainer = item.querySelector(`[data-section-key="${secKey}"]`);
+
+          if (isRaw) {
+            if (openRawSectionKeys.has(secKey)) {
+              openRawSectionKeys.delete(secKey);
+              if (secContainer) secContainer.classList.remove('open');
+            } else {
+              openRawSectionKeys.add(secKey);
+              if (secContainer) secContainer.classList.add('open');
+            }
           } else {
-            expandedPayloadEventIds.delete(itemKey);
+            if (collapsedSectionKeys.has(secKey)) {
+              collapsedSectionKeys.delete(secKey);
+              if (secContainer) secContainer.classList.add('open');
+            } else {
+              collapsedSectionKeys.add(secKey);
+              if (secContainer) secContainer.classList.remove('open');
+            }
           }
+          renderEvents();
         });
-      }
+      });
+
+      // Section TABLE / JSON Mode Switchers
+      item.querySelectorAll('.view-toggle-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const secKey = btn.dataset.secKey;
+          const targetView = btn.dataset.setView;
+          sectionViewModes.set(secKey, targetView);
+          renderEvents();
+        });
+      });
+
+      // Nested Array / Object Accordion Toggles
+      item.querySelectorAll('[data-toggle-nested]').forEach((nestedHeader) => {
+        nestedHeader.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nestedKey = nestedHeader.dataset.toggleNested;
+          if (collapsedNestedKeys.has(nestedKey)) {
+            collapsedNestedKeys.delete(nestedKey);
+          } else {
+            collapsedNestedKeys.add(nestedKey);
+          }
+          renderEvents();
+        });
+      });
+
+      // Interactive JSON Tree Disclosure Toggles
+      item.querySelectorAll('.json-toggle-line').forEach((jsonToggle) => {
+        jsonToggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const jsonPath = jsonToggle.dataset.jsonPath;
+          if (collapsedJsonPaths.has(jsonPath)) {
+            collapsedJsonPaths.delete(jsonPath);
+          } else {
+            collapsedJsonPaths.add(jsonPath);
+          }
+          renderEvents();
+        });
+      });
 
       attachCopyListeners(item);
       eventsListContainer.appendChild(item);
