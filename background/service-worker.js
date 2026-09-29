@@ -1,42 +1,3 @@
-
-// =========================================================================
-// DevTools Long-Lived Port Connection Manager (Real-time push streaming)
-// =========================================================================
-const devtoolsPorts = new Map(); // tabId -> Set of ports
-
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name.startsWith('devtools-')) {
-    const tabId = parseInt(port.name.replace('devtools-', ''), 10);
-    if (!devtoolsPorts.has(tabId)) {
-      devtoolsPorts.set(tabId, new Set());
-    }
-    devtoolsPorts.get(tabId).add(port);
-
-    const state = getOrCreateTabState(tabId);
-    port.postMessage({ action: 'SYNC_STATE', state: state });
-
-    port.onDisconnect.addListener(() => {
-      const ports = devtoolsPorts.get(tabId);
-      if (ports) {
-        ports.delete(port);
-        if (ports.size === 0) devtoolsPorts.delete(tabId);
-      }
-    });
-  }
-});
-
-function broadcastToDevTools(tabId, message) {
-  if (!tabId || tabId < 0) return;
-  const ports = devtoolsPorts.get(tabId);
-  if (ports) {
-    for (const port of ports) {
-      try {
-        port.postMessage(message);
-      } catch {}
-    }
-  }
-}
-
 /**
  * OpenAI Ads Pixel Inspector - Background Service Worker (Manifest V3)
  * 
@@ -49,7 +10,7 @@ function broadcastToDevTools(tabId, message) {
 import { normalizeEvent } from '../core/normalizer.js';
 import { EventStore } from '../core/event-store.js';
 import { generateAuditReport } from '../core/scanner.js';
-import { parseNetworkPayload, isOpenAINetworkRequest, parseOpenAINetworkBatch } from '../network/request-parser.js';
+import { parseNetworkPayload, isOpenAINetworkRequest } from '../network/request-parser.js';
 
 const tabStates = new Map();
 const tabStores = new Map();
@@ -122,73 +83,6 @@ function getOrCreateTabState(tabId, url = '', title = '') {
   return state;
 }
 
-function notifyStateUpdated(tabId) {
-  try {
-    const p = chrome.runtime.sendMessage({ action: 'STATE_UPDATED', tabId: tabId });
-    if (p && typeof p.catch === 'function') {
-      p.catch(() => {});
-    }
-  } catch {}
-}
-
-async function persistTabState(tabId, state) {
-  if (!tabId || !state || typeof chrome.storage === 'undefined' || !chrome.storage.local) return;
-  try {
-    const dataToSave = {
-      tabId: state.tabId,
-      sessionId: state.sessionId,
-      url: state.url,
-      title: state.title,
-      visitedPages: state.visitedPages,
-      lastUpdated: state.lastUpdated,
-      pixel: state.pixel,
-      attribution: state.attribution,
-      events: state.events,
-      stats: state.stats,
-      serverHeaders: state.serverHeaders || [],
-      userMatching: state.userMatching || null,
-      diagnostics: state.diagnostics || null,
-      network: (state.network || []).slice(-50)
-    };
-    await chrome.storage.local.set({ [`tab_state_${tabId}`]: dataToSave });
-  } catch {}
-}
-
-async function restoreTabStateFromStorage(tabId) {
-  if (!tabId || typeof chrome.storage === 'undefined' || !chrome.storage.local) return null;
-  try {
-    const res = await chrome.storage.local.get([`tab_state_${tabId}`]);
-    const stored = res[`tab_state_${tabId}`];
-    if (stored) {
-      tabStates.set(tabId, stored);
-      const store = getOrCreateTabStore(tabId);
-      if (Array.isArray(stored.events) && store.events.length === 0) {
-        stored.events.forEach(e => store.events.push(e));
-      }
-      return stored;
-    }
-  } catch {}
-  return null;
-}
-
-// Restore sessions on worker boot
-async function restoreAllSessions() {
-  if (typeof chrome.storage === 'undefined' || !chrome.storage.local) return;
-  try {
-    const all = await chrome.storage.local.get(null);
-    for (const [key, val] of Object.entries(all)) {
-      if (key.startsWith('tab_state_') && val && val.tabId) {
-        tabStates.set(val.tabId, val);
-        const store = getOrCreateTabStore(val.tabId);
-        if (Array.isArray(val.events) && store.events.length === 0) {
-          val.events.forEach(e => store.events.push(e));
-        }
-      }
-    }
-  } catch {}
-}
-restoreAllSessions();
-
 function updateBadge(tabId, state) {
   if (!state || !tabId || tabId < 0 || typeof chrome.action === 'undefined') return;
   const errCount = state.stats ? state.stats.errorEvents : 0;
@@ -257,9 +151,6 @@ async function scanBrowserCookiesForTab(tabId, url) {
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabStates.delete(tabId);
   tabStores.delete(tabId);
-  if (typeof chrome.storage !== 'undefined' && chrome.storage.local) {
-    chrome.storage.local.remove([`tab_state_${tabId}`]).catch(() => {});
-  }
   for (const [reqId, reqInfo] of pendingRequests.entries()) {
     if (reqInfo.tabId === tabId) {
       pendingRequests.delete(reqId);
@@ -290,61 +181,31 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
   chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
       const { tabId, url, method, requestId, requestBody } = details;
+      if (tabId < 0) return; // Background / system requests
 
-      // Resolve effective tabId even if request sent via beacon or service worker (tabId: -1)
-      let effectiveTabId = tabId;
-      if (effectiveTabId < 0) {
-        if (details.initiator) {
-          for (const [id, s] of tabStates.entries()) {
-            if (s.url && s.url.startsWith(details.initiator)) {
-              effectiveTabId = id;
-              break;
-            }
-          }
-        }
-        if (effectiveTabId < 0) {
-          for (const [id, s] of tabStates.entries()) {
-            if (s.lastUpdated) {
-              effectiveTabId = id;
-              break;
-            }
-          }
-        }
-        if (effectiveTabId < 0) {
-          effectiveTabId = 0;
-        }
-      }
-
-      const state = getOrCreateTabState(effectiveTabId);
-      const store = getOrCreateTabStore(effectiveTabId);
+      const state = getOrCreateTabState(tabId);
+      const store = getOrCreateTabStore(tabId);
 
       // Check SDK Script Download (bzrcdn.openai.com)
-      if (url.includes('bzrcdn.openai.com/sdk/oaiq') || url.includes('/sdk/oaiq')) {
+      if (url.includes('bzrcdn.openai.com/sdk/oaiq')) {
         state.pixel.detected = true;
         state.pixel.confidence = 'high';
         if (!state.pixel.scriptSources.includes(url)) {
           state.pixel.scriptSources.push(url);
         }
         state.lastUpdated = Date.now();
-        updateBadge(effectiveTabId, state);
-        persistTabState(effectiveTabId, state);
-        notifyStateUpdated(effectiveTabId);
+        updateBadge(tabId, state);
         return;
       }
 
-      // Check Ingestion Endpoint (bzr.openai.com, /v1/sdk/events, /events?pid=...)
+      // Check Ingestion Endpoint (bzr.openai.com)
       if (isOpenAINetworkRequest(url)) {
         let parsedPayload = null;
         if (requestBody) {
           if (requestBody.raw && requestBody.raw.length > 0) {
             try {
               const decoder = new TextDecoder('utf-8');
-              let str = '';
-              for (const chunk of requestBody.raw) {
-                if (chunk.bytes) {
-                  str += decoder.decode(chunk.bytes);
-                }
-              }
+              const str = decoder.decode(requestBody.raw[0].bytes);
               parsedPayload = parseNetworkPayload(str);
             } catch {}
           } else if (requestBody.formData) {
@@ -363,57 +224,50 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         };
 
         pendingRequests.set(requestId, {
-          tabId: effectiveTabId,
+          tabId: tabId,
           start: Date.now(),
           entry: netEntry
         });
 
         state.network.push(netEntry);
 
-        // Parse multi-event batch
-        const batch = parseOpenAINetworkBatch(netEntry);
-        netEntry.openAIRequest = batch.openAIRequest;
+        // If the request contains an event name, correlate or record
+        if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event)) {
+          const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event;
+          
+          // Correlate with existing event or add if not captured via JS bridge
+          const correlated = store.correlateNetworkRequest(netEntry);
+          if (!correlated) {
+            const normalized = normalizeEvent({
+              name: evtName,
+              parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
+              event_id: parsedPayload.event_id || null, // Real event_id only
+              pixelId: parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
+              url: state.url,
+              timestamp: Date.now(),
+              caller: 'network (webRequest)'
+            }, {
+              url: state.url,
+              pixelId: state.pixel.pixelIds[0] || null,
+              oppref: state.attribution.oppref || null
+            });
 
-        // Register Pixel ID
-        if (batch.parentRequest.pixelId) {
-          state.pixel.detected = true;
-          state.pixel.confidence = 'verified_network';
-          if (!state.pixel.pixelIds.includes(batch.parentRequest.pixelId)) {
-            state.pixel.pixelIds.push(batch.parentRequest.pixelId);
+            normalized.network.detected = true;
+            normalized.network.url = url;
+            normalized.network.method = method;
+            store.addEvent(normalized);
           }
+          state.events = store.events;
+        } else {
+          store.correlateNetworkRequest(netEntry);
+          state.events = store.events;
         }
 
-        // Store transport obref separately without confusing with advertising oppref
-        if (batch.parentRequest.obref) {
-          state.transportObref = batch.parentRequest.obref;
-        }
-
-        if (batch.userMatching) {
-          state.userMatching = batch.userMatching;
-        }
-
-        if (batch.diagnostics) {
-          state.diagnostics = batch.diagnostics;
-        }
-
-        // Process batch in event store
-        store.addNetworkBatch(batch, {
-          url: state.url,
-          pixelId: batch.parentRequest.pixelId || state.pixel.pixelIds[0] || null,
-          oppref: state.attribution.oppref || null
-        });
-
-        state.events = store.events;
-        state.capturedRequests = store.capturedRequests;
-        state.networkSummary = store.getNetworkActivitySummary();
         state.lastUpdated = Date.now();
-        updateBadge(effectiveTabId, state);
-        broadcastToDevTools(effectiveTabId, { action: 'NEW_BATCH', batch: batch, openAIRequest: batch.openAIRequest });
-        persistTabState(effectiveTabId, state);
-        notifyStateUpdated(effectiveTabId);
+        updateBadge(tabId, state);
       }
     },
-    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] },
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] },
     ['requestBody']
   );
 
@@ -422,26 +276,23 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
     (details) => {
       const { requestId, statusCode, tabId } = details;
       if (pendingRequests.has(requestId)) {
-        const { entry, tabId: pendingTabId } = pendingRequests.get(requestId);
+        const { entry } = pendingRequests.get(requestId);
         entry.status = statusCode;
         entry.ok = statusCode >= 200 && statusCode < 300;
         entry.responseTimestamp = Date.now();
         pendingRequests.delete(requestId);
 
-        const targetTabId = tabId >= 0 ? tabId : pendingTabId;
-        if (targetTabId !== undefined && targetTabId !== null) {
-          const store = getOrCreateTabStore(targetTabId);
+        if (tabId >= 0) {
+          const store = getOrCreateTabStore(tabId);
           store.correlateNetworkRequest(entry);
-          const state = getOrCreateTabState(targetTabId);
+          const state = getOrCreateTabState(tabId);
           state.events = store.events;
           state.lastUpdated = Date.now();
-          updateBadge(targetTabId, state);
-          persistTabState(targetTabId, state);
-          notifyStateUpdated(targetTabId);
+          updateBadge(tabId, state);
         }
       }
     },
-    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] }
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] }
   );
 
   // 3. Inspect Response Headers for Server-Side Tagging Containers
@@ -532,8 +383,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           state.serverSideSignals = Object.assign({}, state.serverSideSignals, message.data.details.serverSideSignals);
         }
         state.lastUpdated = Date.now();
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -549,8 +398,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
         }
         state.lastUpdated = Date.now();
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -578,8 +425,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         state.lastUpdated = Date.now();
         if (state.url) scanBrowserCookiesForTab(tabId, state.url);
         updateBadge(tabId, state);
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -600,8 +445,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -649,8 +492,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -662,25 +503,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         netReq.payload = parseNetworkPayload(netReq.payload);
         state.network.push(netReq);
         store.correlateNetworkRequest(netReq);
-
-        // If batch payload contains events, parse and add
-        if (netReq.payload && (Array.isArray(netReq.payload.events) || isOpenAINetworkRequest(netReq.url))) {
-          const batch = parseOpenAINetworkBatch(netReq);
-          if (batch && batch.measurementEvents && batch.measurementEvents.length > 0) {
-            store.addNetworkBatch(batch, {
-              url: state.url,
-              pixelId: batch.parentRequest?.pixelId || state.pixel?.pixelIds[0] || null,
-              oppref: state.attribution?.oppref || null
-            });
-          }
-        }
-
         state.events = store.events;
-        state.capturedRequests = store.capturedRequests;
         state.lastUpdated = Date.now();
-        updateBadge(tabId, state);
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -695,8 +519,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         state.lastUpdated = Date.now();
         scanBrowserCookiesForTab(tabId, state.url);
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
       }
       sendResponse({ status: 'ok' });
       break;
@@ -704,51 +526,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'GET_TAB_STATE':
     case 'GET_ACTIVE_TAB_STATE': {
-      const targetId = message.tabId || (sender.tab ? sender.tab.id : null);
-      (async () => {
-        let curState = targetId ? tabStates.get(targetId) : null;
-        if (!curState && targetId) {
-          curState = await restoreTabStateFromStorage(targetId);
-        }
-
-        // If target tab has 0 events or no state, see if any state in memory or storage matches domain or has events
-        if (!curState || !curState.events || curState.events.length === 0) {
-          if (message.url) {
-            try {
-              const reqHost = new URL(message.url).hostname;
-              for (const [id, s] of tabStates.entries()) {
-                if (s && s.url && s.events && s.events.length > 0) {
-                  try {
-                    if (new URL(s.url).hostname === reqHost) {
-                      curState = s;
-                      break;
-                    }
-                  } catch {}
-                }
-              }
-            } catch {}
-          }
-          if (!curState || !curState.events || curState.events.length === 0) {
-            for (const [id, s] of tabStates.entries()) {
-              if (s && s.events && s.events.length > 0) {
-                curState = s;
-                break;
-              }
-            }
-          }
-        }
-
-        if (!curState && targetId) {
-          curState = getOrCreateTabState(targetId, message.url, message.title);
-        }
-
-        if (curState && curState.url && targetId) {
-          scanBrowserCookiesForTab(targetId, curState.url);
-        }
-
-        sendResponse({ state: curState });
-      })();
-      return true;
+      const targetId = message.tabId;
+      const curState = targetId ? getOrCreateTabState(targetId) : null;
+      if (curState && curState.url) {
+        scanBrowserCookiesForTab(targetId, curState.url);
+      }
+      sendResponse({ state: curState });
+      break;
     }
 
     case 'GET_AUDIT_REPORT': {
@@ -771,10 +555,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const state = createDefaultTabState(targetId, tabStates.get(targetId)?.url || '');
         tabStates.set(targetId, state);
         updateBadge(targetId, state);
-        if (typeof chrome.storage !== 'undefined' && chrome.storage.local) {
-          chrome.storage.local.remove([`tab_state_${targetId}`]).catch(() => {});
-        }
-        notifyStateUpdated(targetId);
       }
       sendResponse({ status: 'cleared' });
       break;

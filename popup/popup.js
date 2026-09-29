@@ -1,15 +1,14 @@
 /**
- * OpenAI Ads Pixel Inspector - Professional Live Debugger & Audit System
+ * OpenAI Ads Pixel Inspector - Professional Developer & Analytics Debugger
  * Reference Style: Stripe Dashboard + Linear + Chrome DevTools + OpenAI Branding
  */
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
 import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown, formatAuditCsv } from '../core/scanner.js';
-import { getCurrencyDecimalPlaces, decodeMoney, getFieldExplanation } from '../validators/schemas.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
-  const allNavTabs = document.querySelectorAll('.nav-tab');
+  const allNavTabs = document.querySelectorAll('.nav-tab, .nav-tab-secondary');
   const tabPanes = document.querySelectorAll('.tab-pane');
   const targetHostEl = document.getElementById('target-host');
   const btnCopyHost = document.getElementById('btn-copy-host');
@@ -19,9 +18,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnTheme = document.getElementById('btn-theme');
   const themeIcon = document.getElementById('theme-icon');
   const btnSidepanel = document.getElementById('btn-sidepanel');
-  const navScrollTrack = document.getElementById('nav-scroll-track');
-  const btnNavScrollPrev = document.getElementById('nav-scroll-prev');
-  const btnNavScrollNext = document.getElementById('nav-scroll-next');
 
   // Overview Tab elements
   const pixelStatusBadge = document.getElementById('pixel-status-badge');
@@ -41,48 +37,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Tab counters
   const tabCountEvents = document.getElementById('tab-count-events');
-  const tabCountNetwork = document.getElementById('tab-count-network');
   const tabCountFunnel = document.getElementById('tab-count-funnel');
-  const tabCountMatching = document.getElementById('tab-count-matching');
   const tabCountDatalayer = document.getElementById('tab-count-datalayer');
   const tabCountIssues = document.getElementById('tab-count-issues');
 
-  // Overview Diagnostics & Matching
-  const sdkDroppedBadge = document.getElementById('sdk-dropped-badge');
-  const diagValSdkStatus = document.getElementById('diag-val-sdk-status');
-  const diagValAam = document.getElementById('diag-val-aam');
-  const diagValDropped = document.getElementById('diag-val-dropped');
-  const diagValErrors = document.getElementById('diag-val-errors');
-
-  const matchingScorecardBadge = document.getElementById('matching-scorecard-badge');
-  const valMatchEmail = document.getElementById('val-match-email');
-  const valMatchPhone = document.getElementById('val-match-phone');
-  const valMatchEid = document.getElementById('val-match-eid');
-  const valMatchGeo = document.getElementById('val-match-geo');
-
   // Events Tab elements
   const eventSearchInput = document.getElementById('event-search-input');
-  const eventPixelSelect = document.getElementById('event-pixel-select');
   const filterChips = document.querySelectorAll('.filter-chip');
   const eventsListContainer = document.getElementById('events-list-container');
-
-  // Network Requests Tab elements
-  const networkRequestsBadge = document.getElementById('network-requests-badge');
-  const networkRequestsContainer = document.getElementById('network-requests-container');
 
   // Funnel Tab elements
   const funnelRateBadge = document.getElementById('funnel-rate-badge');
   const funnelPipelineContainer = document.getElementById('funnel-pipeline-container');
-
-  // Timeline Tab elements
-  const timelineStepsBadge = document.getElementById('timeline-steps-badge');
-  const timelineContainer = document.getElementById('timeline-container');
-
-  // Matching & Privacy Tab elements
-  const matchingCoverageBadge = document.getElementById('matching-coverage-badge');
-  const matchingDetailsContainer = document.getElementById('matching-details-container');
-  const privacyStatusBadge = document.getElementById('privacy-status-badge');
-  const privacyInspectorContainer = document.getElementById('privacy-inspector-container');
 
   // Data Layer Tab elements
   const gtmContainerBadge = document.getElementById('gtm-container-badge');
@@ -122,39 +88,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Modal elements
   const rawModal = document.getElementById('raw-modal');
   const modalCloseBtn = document.getElementById('modal-close-btn');
-  const modalCloseBtnFooter = document.getElementById('modal-close-btn-footer');
-  const modalBtnViewOrganized = document.getElementById('modal-btn-view-organized');
-  const modalBtnViewRaw = document.getElementById('modal-btn-view-raw');
-  const modalOrganizedView = document.getElementById('modal-organized-view');
-  const modalRawView = document.getElementById('modal-raw-view');
   const modalJsonContent = document.getElementById('modal-json-content');
   const modalCopyBtn = document.getElementById('modal-copy-btn');
   const modalEventTitle = document.getElementById('modal-event-title');
-  const modalEventSubtitle = document.getElementById('modal-event-subtitle');
-  const modalEventIcon = document.getElementById('modal-event-icon');
-  const modalPayloadMeta = document.getElementById('modal-payload-meta');
 
   let activeTab = null;
   let currentTabState = null;
-  let viewMode = 'client'; // 'client' | 'technical'
-  let showSystemEvents = false;
-  let showDiagnostics = false;
   let currentFilter = 'all';
   let currentIssueFilter = 'all';
   let searchQuery = '';
-  let selectedPixel = 'all';
   let activeModalJson = '';
-  let activeModalEvent = null;
   const expandedEventIds = new Set();
   const expandedPayloadEventIds = new Set();
-  const expandedNetReqIds = new Set();
+  const expandedDlIndices = new Set();
 
-  const btnViewClient = document.getElementById('btn-view-client');
-  const btnViewTechnical = document.getElementById('btn-view-technical');
-  const chkShowSystem = document.getElementById('chk-show-system');
-  const chkShowDiagnostics = document.getElementById('chk-show-diagnostics');
-
-  // SVG Icon System
+  // ==========================================
+  // SVG Icon System (Professional & Zero Emojis)
+  // ==========================================
   const ICONS = {
     check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
     cross: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
@@ -163,18 +113,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     sun: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
     moon: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
     copy: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-    code: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
     chevronDown: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
-    package: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
-    dollar: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-    user: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    emptyCheck: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     emptyEvents: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>'
   };
 
   function renderStatusBadge(severity, label, titleText) {
     const safeTitle = titleText ? (' title="' + escapeHtml(titleText) + '"') : '';
     if (severity === 'valid' || severity === 'pass' || severity === 'success' || severity === 'detected' || severity === 'triggered') {
-      return '<span class="badge badge-success"' + safeTitle + '>' + ICONS.check + ' ' + (label || 'Valid') + '</span>';
+      return '<span class="badge badge-success"' + safeTitle + '>' + ICONS.check + ' ' + (label || 'Triggered') + '</span>';
     } else if (severity === 'error' || severity === 'critical' || severity === 'fail' || severity === 'duplicate') {
       return '<span class="badge badge-error"' + safeTitle + '>' + ICONS.cross + ' ' + (label || 'Error') + '</span>';
     } else if (severity === 'warning') {
@@ -186,1444 +133,1140 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Format currency value from minor integer units to human-readable string
-  function formatMonetaryValue(amount, currencyCode = 'USD') {
-    if (amount === undefined || amount === null) return null;
-    const cleanCurrency = String(currencyCode || 'USD').trim().toUpperCase();
-    const decimals = getCurrencyDecimalPlaces(cleanCurrency);
-    const num = Number(amount);
-    if (isNaN(num)) return String(amount);
-    
-    const majorValue = num / Math.pow(10, decimals);
-    try {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: cleanCurrency,
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-      }).format(majorValue);
-    } catch {
-      return cleanCurrency + ' ' + majorValue.toFixed(decimals);
-    }
-  }
-
-  function fallbackCopyText(str) {
-    const el = document.createElement('textarea');
-    el.value = str;
-    el.setAttribute('readonly', '');
-    el.style.position = 'absolute';
-    el.style.left = '-9999px';
-    document.body.appendChild(el);
-    el.select();
-    try {
-      document.execCommand('copy');
-    } catch (err) {
-      console.warn('Clipboard fallback failed', err);
-    }
-    document.body.removeChild(el);
-  }
-
+  // Copy with Visual Feedback
   function copyToClipboard(text, triggerBtn) {
-    if (!text) return Promise.resolve(false);
-    const str = typeof text === 'object' ? JSON.stringify(text, null, 2) : String(text);
-
-    const showFeedback = () => {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
       if (triggerBtn) {
         const originalHtml = triggerBtn.innerHTML;
-        const span = triggerBtn.querySelector('span');
-        if (span) {
-          span.textContent = 'Copied!';
-        } else {
-          triggerBtn.textContent = 'Copied!';
-        }
-        triggerBtn.classList.add('copied');
+        triggerBtn.innerHTML = ICONS.check;
         triggerBtn.style.color = 'var(--status-success)';
         setTimeout(() => {
           triggerBtn.innerHTML = originalHtml;
-          triggerBtn.classList.remove('copied');
           triggerBtn.style.color = '';
         }, 1500);
       }
-    };
+    });
+  }
 
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(str).then(() => {
-        showFeedback();
-        return true;
-      }).catch(() => {
-        fallbackCopyText(str);
-        showFeedback();
-        return true;
+  // Helper to make copyable element
+  function makeCopyable(text, displayHtml, extraClass = '') {
+    if (!text) return displayHtml || '<span style="color:var(--text-muted);">None</span>';
+    return `
+      <span class="copyable-inline ${extraClass}">
+        <span>${displayHtml || escapeHtml(text)}</span>
+        <button class="btn-copy-inline" data-copy="${escapeHtml(text)}" title="Copy value">${ICONS.copy}</button>
+      </span>
+    `;
+  }
+
+  function attachCopyListeners(container) {
+    if (!container) return;
+    container.querySelectorAll('.btn-copy-inline[data-copy]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(btn.dataset.copy, btn);
       });
-    } else {
-      fallbackCopyText(str);
-      showFeedback();
-      return Promise.resolve(true);
+    });
+  }
+
+  // ==========================================
+  // 1. Theme Management (Dark / Light)
+  // ==========================================
+  let currentTheme = localStorage.getItem('openai_pixel_inspector_theme') || 'dark';
+
+  function applyTheme(theme) {
+    currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.setAttribute('data-theme', theme);
+    if (themeIcon) {
+      themeIcon.innerHTML = theme === 'dark' ? ICONS.sun : ICONS.moon;
     }
+    localStorage.setItem('openai_pixel_inspector_theme', theme);
   }
 
-  function formatAndHighlightJson(jsonObj) {
-    if (jsonObj === undefined || jsonObj === null) return '<span class="text-muted">null</span>';
-    let jsonStr = typeof jsonObj === 'string' ? jsonObj : JSON.stringify(jsonObj, null, 2);
-    
-    jsonStr = escapeHtml(jsonStr);
-    return jsonStr.replace(
-      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\\-]?\d+)?)/g,
-      function (match) {
-        let cls = 'hl-num';
-        if (/^"/.test(match)) {
-          if (/:$/.test(match)) {
-            cls = 'hl-key';
-          } else {
-            cls = 'hl-str';
-          }
-        } else if (/true|false/.test(match)) {
-          cls = 'hl-bool';
-        } else if (/null/.test(match)) {
-          cls = 'hl-null';
-        }
-        return '<span class="' + cls + '">' + match + '</span>';
-      }
-    );
-  }
-
-  // Theme
-  function initTheme() {
-    const saved = localStorage.getItem('__oai_theme') || 'light';
-    document.documentElement.setAttribute('data-theme', saved);
-    if (themeIcon) themeIcon.innerHTML = saved === 'dark' ? ICONS.sun : ICONS.moon;
-  }
+  applyTheme(currentTheme);
 
   if (btnTheme) {
     btnTheme.addEventListener('click', () => {
-      const cur = document.documentElement.getAttribute('data-theme') || 'light';
-      const next = cur === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('__oai_theme', next);
-      if (themeIcon) themeIcon.innerHTML = next === 'dark' ? ICONS.sun : ICONS.moon;
+      applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
     });
   }
-  initTheme();
 
-  // Side Panel
+  // ==========================================
+  // 2. Side Panel Opener (Wide View Mode)
+  // ==========================================
   if (btnSidepanel) {
     btnSidepanel.addEventListener('click', async () => {
       try {
-        if (chrome.sidePanel && chrome.sidePanel.open && activeTab?.id) {
-          await chrome.sidePanel.open({ tabId: activeTab.id });
+        const currentWindow = await chrome.windows.getCurrent();
+        if (chrome.sidePanel && chrome.sidePanel.open) {
+          await chrome.sidePanel.open({ windowId: currentWindow.id });
           window.close();
         } else {
-          window.open(chrome.runtime.getURL('popup/popup.html'), '_blank', 'width=500,height=750');
+          chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
         }
-      } catch {
-        window.open(chrome.runtime.getURL('popup/popup.html'), '_blank', 'width=500,height=750');
+      } catch (err) {
+        console.warn('[OpenAI Pixel Inspector] SidePanel open error:', err);
+        chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
       }
     });
   }
 
-  // Navigation Switching
+  // ==========================================
+  // 3. Single-Row Carousel Navigation System
+  // ==========================================
+  const navScrollTrack = document.getElementById('nav-scroll-track');
+  const navScrollPrev = document.getElementById('nav-scroll-prev');
+  const navScrollNext = document.getElementById('nav-scroll-next');
+
+  if (navScrollPrev && navScrollTrack) {
+    navScrollPrev.addEventListener('click', () => {
+      navScrollTrack.scrollBy({ left: -120, behavior: 'smooth' });
+    });
+  }
+
+  if (navScrollNext && navScrollTrack) {
+    navScrollNext.addEventListener('click', () => {
+      navScrollTrack.scrollBy({ left: 120, behavior: 'smooth' });
+    });
+  }
+
   allNavTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
-      const tabTarget = tab.getAttribute('data-tab');
+      const targetId = tab.dataset.tab;
+      
       allNavTabs.forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
-      tabPanes.forEach((p) => p.classList.remove('active'));
-      const targetPane = document.getElementById('pane-' + tabTarget);
-      if (targetPane) targetPane.classList.add('active');
+
+      tab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+      tabPanes.forEach((pane) => {
+        if (pane.id === ('pane-' + targetId)) {
+          pane.classList.add('active');
+        } else {
+          pane.classList.remove('active');
+        }
+      });
     });
   });
 
-  // Carousel Scroll
-  if (btnNavScrollPrev && btnNavScrollNext && navScrollTrack) {
-    btnNavScrollPrev.addEventListener('click', () => {
-      navScrollTrack.scrollBy({ left: -100, behavior: 'smooth' });
-    });
-    btnNavScrollNext.addEventListener('click', () => {
-      navScrollTrack.scrollBy({ left: 100, behavior: 'smooth' });
-    });
-  }
-
-  // Filter Chips
-  filterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      filterChips.forEach((c) => c.classList.remove('active'));
-      chip.classList.add('active');
-      currentFilter = chip.getAttribute('data-filter') || 'all';
-      renderEventsList();
-    });
-  });
-
-  if (eventPixelSelect) {
-    eventPixelSelect.addEventListener('change', () => {
-      selectedPixel = eventPixelSelect.value;
-      renderEventsList();
-    });
-  }
-
+  // Search Filter Handler
   if (eventSearchInput) {
     eventSearchInput.addEventListener('input', (e) => {
-      searchQuery = e.target.value.toLowerCase().trim();
-      renderEventsList();
+      searchQuery = e.target.value;
+      renderEvents();
     });
   }
 
-  // Refresh & Clear
-  if (btnRefresh) {
-    btnRefresh.addEventListener('click', () => {
-      btnRefresh.style.transform = 'rotate(180deg)';
-      setTimeout(() => { btnRefresh.style.transform = ''; }, 300);
-      loadActiveTabState();
+  // Filter Chips Handler (Events)
+  if (filterChips) {
+    filterChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filterChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentFilter = chip.dataset.filter;
+        renderEvents();
+      });
     });
   }
 
-  if (btnClear) {
-    btnClear.addEventListener('click', () => {
-      if (activeTab?.id) {
-        chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }, () => {
-          loadActiveTabState();
-        });
+  // Filter Chips Handler (Issues / Diagnostics)
+  if (issueFilterChips) {
+    issueFilterChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        issueFilterChips.forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+        currentIssueFilter = chip.dataset.filter;
+        renderIssues();
+      });
+    });
+  }
+
+  // Copy Hostname Button
+  if (btnCopyHost) {
+    btnCopyHost.addEventListener('click', () => {
+      if (activeTab && activeTab.url) {
+        try {
+          const urlObj = new URL(activeTab.url);
+          copyToClipboard(urlObj.hostname, btnCopyHost);
+        } catch (_) {
+          copyToClipboard(activeTab.url, btnCopyHost);
+        }
       }
     });
   }
 
-  if (btnCopyHost && targetHostEl) {
-    btnCopyHost.addEventListener('click', () => {
-      copyToClipboard(targetHostEl.textContent, btnCopyHost);
+  // ==========================================
+  // 4. Modal Handlers
+  // ==========================================
+  function openRawModal(title, jsonData) {
+    if (modalEventTitle) modalEventTitle.textContent = title;
+    activeModalJson = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData, null, 2);
+    if (modalJsonContent) modalJsonContent.textContent = activeModalJson;
+    if (rawModal) rawModal.classList.remove('hidden');
+  }
+
+  if (modalCloseBtn && rawModal) {
+    modalCloseBtn.addEventListener('click', () => {
+      rawModal.classList.add('hidden');
     });
   }
 
-  // Modal View Switcher
-  if (modalBtnViewOrganized && modalBtnViewRaw) {
-    modalBtnViewOrganized.addEventListener('click', () => {
-      modalBtnViewOrganized.classList.add('active');
-      modalBtnViewRaw.classList.remove('active');
-      if (modalOrganizedView) modalOrganizedView.style.display = 'block';
-      if (modalRawView) modalRawView.style.display = 'none';
-    });
-
-    modalBtnViewRaw.addEventListener('click', () => {
-      modalBtnViewRaw.classList.add('active');
-      modalBtnViewOrganized.classList.remove('active');
-      if (modalOrganizedView) modalOrganizedView.style.display = 'none';
-      if (modalRawView) modalRawView.style.display = 'block';
-    });
-  }
-
-  function closeModal() {
-    if (rawModal) rawModal.classList.add('hidden');
-    activeModalJson = '';
-    activeModalEvent = null;
-  }
-
-  if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeModal);
-  if (modalCloseBtnFooter) modalCloseBtnFooter.addEventListener('click', closeModal);
   if (rawModal) {
     rawModal.addEventListener('click', (e) => {
-      if (e.target === rawModal) closeModal();
+      if (e.target === rawModal) rawModal.classList.add('hidden');
     });
   }
 
   if (modalCopyBtn) {
     modalCopyBtn.addEventListener('click', () => {
       copyToClipboard(activeModalJson, modalCopyBtn);
+      modalCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { modalCopyBtn.textContent = 'Copy JSON'; }, 1500);
     });
   }
 
-  // Issue filter chips
-  issueFilterChips.forEach((chip) => {
-    chip.addEventListener('click', () => {
-      issueFilterChips.forEach((c) => c.classList.remove('active'));
-      chip.classList.add('active');
-      currentIssueFilter = chip.getAttribute('data-filter') || 'all';
-      renderIssues();
-    });
-  });
+  // ==========================================
+  // 5. Active Tab & Session Sync
+  // ==========================================
+  async function getActiveTab() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs[0] || null;
+  }
 
-  // State Loader
-  async function loadActiveTabState() {
+  async function updateState() {
+    activeTab = await getActiveTab();
+    if (!activeTab) {
+      targetHostEl.textContent = 'No active tab';
+      return;
+    }
+
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab) {
-        if (targetHostEl) targetHostEl.textContent = 'No active tab found';
-        return;
-      }
-      activeTab = tab;
+      const urlObj = new URL(activeTab.url);
+      targetHostEl.textContent = urlObj.hostname || activeTab.url;
+      badgeTabIdEl.textContent = 'Tab #' + activeTab.id;
+    } catch (_) {
+      targetHostEl.textContent = activeTab.url || 'Internal page';
+      badgeTabIdEl.textContent = 'Tab #' + activeTab.id;
+    }
 
-      if (badgeTabIdEl) badgeTabIdEl.textContent = 'Tab #' + tab.id;
-      if (targetHostEl && tab.url) {
-        try {
-          const u = new URL(tab.url);
-          targetHostEl.textContent = u.hostname + (u.pathname.length > 1 ? u.pathname : '');
-        } catch {
-          targetHostEl.textContent = tab.url;
-        }
-      }
+    // Proactively request scan from content script
+    if (activeTab && activeTab.id) {
+      chrome.tabs.sendMessage(activeTab.id, { action: 'REQUEST_SCAN' }).catch(() => {});
+    }
 
-      chrome.runtime.sendMessage({ action: 'GET_ACTIVE_TAB_STATE', tabId: tab.id }, (response) => {
-        if (response && response.state) {
-          currentTabState = response.state;
-          renderAll();
-        } else {
-          currentTabState = null;
-          renderEmpty();
-        }
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'GET_TAB_STATE',
+        tabId: activeTab.id
       });
+      if (response && response.state) {
+        currentTabState = response.state;
+        renderAll();
+      }
     } catch (err) {
-      console.warn('[OpenAI Pixel Inspector] Tab query error:', err);
+      console.warn('[OpenAI Pixel Inspector] Background sync error:', err);
     }
   }
 
   function renderAll() {
-    if (!currentTabState) {
-      renderEmpty();
-      return;
-    }
     renderOverview();
-    renderEventsList();
-    renderNetworkRequests();
+    renderEvents();
     renderFunnel();
-    renderTimeline();
-    renderMatchingAndPrivacy();
     renderDataLayer();
     renderAttribution();
     renderIssues();
     renderAudit();
   }
 
-  function renderEmpty() {
-    if (pixelStatusBadge) {
-      pixelStatusBadge.className = 'badge badge-neutral';
-      pixelStatusBadge.textContent = 'Scanning';
-    }
-    if (healthStatusBadge) {
-      healthStatusBadge.className = 'badge badge-neutral';
-      healthStatusBadge.textContent = 'Ready';
-    }
-    if (valPixelId) valPixelId.textContent = 'Not detected';
-    if (valOppref) valOppref.textContent = 'Not detected';
-    if (valServersideStatus) valServersideStatus.textContent = 'No activity detected';
-  }
-
-  // 1. Overview Tab
+  // ==========================================
+  // 6. Overview Renderer (Tracking Health Dashboard)
+  // ==========================================
   function renderOverview() {
-    const s = currentTabState;
-    if (!s) return;
+    if (!currentTabState) return;
 
-    if (pixelStatusBadge) {
-      if (s.pixel && s.pixel.detected) {
-        pixelStatusBadge.className = 'badge badge-success';
-        pixelStatusBadge.textContent = 'Pixel Detected ✓';
+    const pixel = currentTabState.pixel || {};
+    const stats = currentTabState.stats || {};
+    const attribution = currentTabState.attribution || {};
+    const dataLayer = currentTabState.dataLayer || [];
+    const events = currentTabState.events || [];
+    const report = generateAuditReport(currentTabState);
+    const issues = report.issues || [];
+
+    // SINGLE SOURCE OF TRUTH FOR COUNTS
+    const errorsCount = issues.filter(i => i.severity === 'error' || i.severity === 'critical').length;
+    const warningsCount = issues.filter(i => i.severity === 'warning').length;
+    const infosCount = issues.filter(i => i.severity === 'info').length;
+    const totalDiagnostics = errorsCount + warningsCount + infosCount;
+
+    // Top-Level Workspace Bar Status Badge
+    if (errorsCount > 0) {
+      pixelStatusBadge.textContent = errorsCount + ' Error' + (errorsCount === 1 ? '' : 's');
+      pixelStatusBadge.className = 'badge badge-error';
+    } else if (warningsCount > 0) {
+      pixelStatusBadge.textContent = warningsCount + ' Warning' + (warningsCount === 1 ? '' : 's');
+      pixelStatusBadge.className = 'badge badge-warning';
+    } else if (events.length > 0) {
+      pixelStatusBadge.textContent = 'Active';
+      pixelStatusBadge.className = 'badge badge-success';
+    } else {
+      pixelStatusBadge.textContent = 'Ready';
+      pixelStatusBadge.className = 'badge badge-neutral';
+    }
+
+    // Health Card Badge & Subtitle
+    if (report.overallStatus === 'pass') {
+      healthStatusBadge.textContent = 'Healthy (Pass)';
+      healthStatusBadge.className = 'badge badge-success';
+      healthOverallLabel.textContent = 'All tracking criteria verified';
+    } else if (report.overallStatus === 'warning') {
+      healthStatusBadge.textContent = 'Needs Attention · ' + warningsCount + ' warning' + (warningsCount === 1 ? '' : 's');
+      healthStatusBadge.className = 'badge badge-warning';
+      healthOverallLabel.textContent = warningsCount + ' warning(s) detected';
+    } else {
+      healthStatusBadge.textContent = 'Needs Attention · ' + errorsCount + ' error' + (errorsCount === 1 ? '' : 's');
+      healthStatusBadge.className = 'badge badge-error';
+      healthOverallLabel.textContent = 'Parameter error(s) require resolution';
+    }
+
+    // Pixel ID Row (SDK row removed as requested)
+    if (pixel.pixelIds && pixel.pixelIds.length > 0) {
+      const pidStr = pixel.pixelIds.join(', ');
+      valPixelId.innerHTML = makeCopyable(pidStr, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11.5px;">(' + escapeHtml(pidStr) + ')</span>');
+    } else {
+      valPixelId.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
+    }
+
+    // Session ID Row
+    const sessId = currentTabState.sessionId || ('SESSION_' + (activeTab ? activeTab.id : ''));
+    valSessionId.innerHTML = makeCopyable(sessId, '<span class="mono" style="color:var(--text-main); font-weight:600;">' + escapeHtml(sessId) + '</span>');
+
+    // Attribution (oppref) Row
+    if (attribution.oppref) {
+      valOppref.innerHTML = makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(' + escapeHtml(truncateString(attribution.oppref, 14)) + ')</span>');
+    } else {
+      valOppref.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
+    }
+
+    // Server-Side Activity Check (Clean short status + detailed tooltip)
+    const hasCapi = currentTabState.events ? currentTabState.events.some(e => e.isCapi || e.requestOrigin === 'server' || (e.url && e.url.includes('/api/'))) : false;
+    if (hasCapi) {
+      valServersideStatus.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span style="color:var(--text-secondary); font-size:11.5px;">(First-party endpoint)</span>';
+    } else {
+      valServersideStatus.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No activity detected</span>';
+    }
+
+    // Metric Summary Cards (Clean & neutral by default, highlight only meaningful issues)
+    metricTotalEvents.textContent = stats.totalEvents || 0;
+    metricStandardEvents.textContent = stats.standardEvents || 0;
+    metricCustomEvents.textContent = stats.customEvents || 0;
+    
+    // Issues Metric Card (Matches shared source of truth)
+    metricIssuesEvents.textContent = totalDiagnostics;
+    if (errorsCount > 0) {
+      metricIssuesEvents.className = 'metric-num text-rose';
+    } else if (warningsCount > 0) {
+      metricIssuesEvents.className = 'metric-num text-amber';
+    } else if (infosCount > 0) {
+      metricIssuesEvents.className = 'metric-num text-blue';
+    } else {
+      metricIssuesEvents.className = 'metric-num text-muted';
+    }
+
+    // Navigation Count Badges
+    tabCountEvents.textContent = stats.totalEvents || 0;
+    tabCountFunnel.textContent = report.funnel.completedCount + '/5';
+    tabCountDatalayer.textContent = dataLayer.length || 0;
+    tabCountIssues.textContent = totalDiagnostics;
+
+    // Latest Observed Event Snapshot (Clean, compact 3-line layout)
+    if (events.length > 0) {
+      const latest = events[events.length - 1];
+      latestEventTime.textContent = formatTimestamp(latest.timestamp);
+      
+      let latestTriggerBadge = '';
+      if (latest.isDuplicate) {
+        latestTriggerBadge = renderStatusBadge('duplicate', 'Double Fired');
       } else {
-        pixelStatusBadge.className = 'badge badge-neutral';
-        pixelStatusBadge.textContent = 'Not detected';
+        latestTriggerBadge = renderStatusBadge('triggered', 'Triggered');
       }
+
+      const isCustom = latest.validation && latest.validation.isCustom;
+
+      latestEventContent.innerHTML = `
+        <div class="latest-event-compact">
+          <div class="latest-event-top-line">
+            <strong class="latest-event-name">${escapeHtml(latest.displayName || latest.name)}</strong>
+            ${latestTriggerBadge}
+          </div>
+          <div class="latest-event-meta-line">
+            <span>${formatTimestamp(latest.timestamp)} &bull; <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">${isCustom ? 'Custom' : 'Standard'}</span></span>
+          </div>
+          <div class="latest-event-path-line">
+            <code class="mono truncate">${escapeHtml(latest.pathname || '/')}</code>
+          </div>
+        </div>
+      `;
+    } else {
+      latestEventContent.innerHTML = '<div class="empty-state-sm" style="padding: 6px 0;">No events detected yet.</div>';
+      latestEventTime.textContent = '--:--:--';
     }
 
-    const totalEvts = s.events ? s.events.length : 0;
-    if (healthStatusBadge) {
-      if (!s.pixel?.detected && totalEvts === 0) {
-        healthStatusBadge.className = 'badge badge-neutral';
-        healthStatusBadge.textContent = 'Ready';
-        if (healthOverallLabel) healthOverallLabel.textContent = 'Implementation Status';
-      } else if (s.stats?.errorEvents > 0) {
-        healthStatusBadge.className = 'badge badge-error';
-        healthStatusBadge.textContent = 'Issues Found';
-        if (healthOverallLabel) healthOverallLabel.textContent = s.stats.errorEvents + ' Critical Issue(s)';
-      } else if (s.stats?.warningEvents > 0) {
-        healthStatusBadge.className = 'badge badge-warning';
-        healthStatusBadge.textContent = 'Needs Review';
-        if (healthOverallLabel) healthOverallLabel.textContent = s.stats.warningEvents + ' Warning(s)';
-      } else {
-        healthStatusBadge.className = 'badge badge-success';
-        healthStatusBadge.textContent = 'Healthy ✓';
-        if (healthOverallLabel) healthOverallLabel.textContent = 'Passing Schema Validation';
-      }
-    }
-
-    if (valPixelId) {
-      if (s.pixel?.pixelIds && s.pixel.pixelIds.length > 0) {
-        valPixelId.innerHTML = s.pixel.pixelIds.map(p => '<span class="badge badge-neutral mono" style="font-size:11px;">' + escapeHtml(p) + '</span>').join(' ');
-      } else {
-        valPixelId.textContent = 'Not detected';
-      }
-    }
-
-    if (valOppref) {
-      if (s.attribution?.oppref) {
-        valOppref.innerHTML = '<span class="badge badge-success mono" style="font-size:11px;" title="' + escapeHtml(s.attribution.oppref) + '">' + truncateString(s.attribution.oppref, 18) + '</span>';
-      } else {
-        valOppref.textContent = 'Not detected';
-      }
-    }
-
-    if (valSessionId) valSessionId.textContent = s.sessionId || 'Active';
-
-    if (metricTotalEvents) metricTotalEvents.textContent = totalEvts;
-    if (metricStandardEvents) metricStandardEvents.textContent = s.stats ? s.stats.standardEvents : 0;
-    if (metricCustomEvents) metricCustomEvents.textContent = s.stats ? s.stats.customEvents : 0;
-    if (metricIssuesEvents) metricIssuesEvents.textContent = s.stats ? (s.stats.errorEvents + s.stats.warningEvents) : 0;
-
-    if (tabCountEvents) tabCountEvents.textContent = totalEvts;
-    if (tabCountNetwork) tabCountNetwork.textContent = (s.network ? s.network.length : 0);
-    if (tabCountDatalayer) tabCountDatalayer.textContent = (s.dataLayer ? s.dataLayer.length : 0);
-    if (tabCountIssues) tabCountIssues.textContent = (s.stats ? s.stats.errorEvents + s.stats.warningEvents : 0);
-
-    // Diagnostics
-    const diag = s.diagnostics || (s.networkSummary ? s.networkSummary.latestDiagnostics : null);
-    if (diag) {
-      const dropCount = diag.droppedEventCount || 0;
-      if (sdkDroppedBadge) {
-        sdkDroppedBadge.className = dropCount > 0 ? 'badge badge-error' : 'badge badge-success';
-        sdkDroppedBadge.textContent = dropCount > 0 ? dropCount + ' Dropped ✕' : '0 Dropped ✓';
-      }
-      if (diagValSdkStatus) diagValSdkStatus.textContent = '✓ Running';
-      if (diagValAam) diagValAam.textContent = diag.automaticAdvancedMatching === 'enabled' ? '✓ Enabled' : 'Disabled';
-      if (diagValDropped) {
-        diagValDropped.className = dropCount > 0 ? 'diag-val text-rose' : 'diag-val text-emerald';
-        diagValDropped.textContent = dropCount > 0 ? dropCount + ' events rejected' : '0 detected ✓';
-      }
-      if (diagValErrors) {
-        const errs = s.stats?.errorEvents || 0;
-        diagValErrors.textContent = errs > 0 ? errs + ' validation issue(s)' : 'None detected ✓';
-      }
-    }
-
-    // Matching Scorecard
-    const uMatch = s.userMatching || (s.networkSummary ? s.networkSummary.latestUserMatching : null);
-    const fields = uMatch?.fields || [];
-    const hasEmail = fields.some(f => f.type === 'email');
-    const hasPhone = fields.some(f => f.type === 'phone');
-    const hasEid = fields.some(f => f.type === 'external_id');
-    const hasGeo = fields.some(f => f.type === 'country' || f.type === 'region');
-
-    let matchScore = 'No Identifiers';
-    let matchBadgeClass = 'badge badge-neutral';
-
-    if (hasEmail && (hasPhone || hasEid)) {
-      matchScore = 'Strong Coverage';
-      matchBadgeClass = 'badge badge-success';
-    } else if (hasEmail || hasPhone || hasEid) {
-      matchScore = 'Moderate Coverage';
-      matchBadgeClass = 'badge badge-info';
-    } else if (hasGeo) {
-      matchScore = 'Limited (Geo Only)';
-      matchBadgeClass = 'badge badge-warning';
-    }
-
-    if (matchingScorecardBadge) {
-      matchingScorecardBadge.className = matchBadgeClass;
-      matchingScorecardBadge.textContent = matchScore;
-    }
-    if (tabCountMatching) {
-      tabCountMatching.textContent = fields.length || 0;
-    }
-
-    if (valMatchEmail) valMatchEmail.innerHTML = hasEmail ? '<span class="text-emerald">✓ Detected (Hashed)</span>' : '<span class="text-muted">Not detected</span>';
-    if (valMatchPhone) valMatchPhone.innerHTML = hasPhone ? '<span class="text-emerald">✓ Detected (Hashed)</span>' : '<span class="text-muted">Not detected</span>';
-    if (valMatchEid) valMatchEid.innerHTML = hasEid ? '<span class="text-emerald">✓ Detected (Hashed)</span>' : '<span class="text-muted">Not detected</span>';
-    if (valMatchGeo) valMatchGeo.innerHTML = hasGeo ? '<span class="text-emerald">✓ Detected</span>' : '<span class="text-muted">Not detected</span>';
-
-    // Multi-Pixel Card
-    const multiCard = document.getElementById('multi-pixel-card');
-    const multiContent = document.getElementById('multi-pixel-content');
-    const pids = s.pixel?.pixelIds || [];
-    if (multiCard && multiContent) {
-      if (pids.length > 1) {
-        multiCard.style.display = 'block';
-        multiContent.innerHTML = '<div style="font-size:12px; margin-bottom:6px; color:var(--text-secondary);">Multi-Pixel setup detected with ' + pids.length + ' initialized IDs:</div><div style="display:flex; flex-wrap:wrap; gap:6px;">' + pids.map(id => '<span class="badge badge-info mono" style="font-size:11px;">' + escapeHtml(id) + '</span>').join('') + '</div>';
-      } else {
-        multiCard.style.display = 'none';
-      }
-    }
-
-    // Latest Event
-    if (latestEventContent && latestEventTime) {
-      if (s.events && s.events.length > 0) {
-        const last = s.events[s.events.length - 1];
-        latestEventTime.textContent = formatTimestamp(last.timestamp);
-        latestEventContent.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;"><div style="display:flex; align-items:center; gap:6px;"><span class="mono font-bold" style="font-size:13px; color:var(--accent-brand);">' + escapeHtml(last.displayName || last.name) + '</span><span class="badge badge-neutral" style="font-size:10px;">' + escapeHtml(last.validation?.dataShape || 'contents') + '</span></div>' + renderStatusBadge(last.validation?.status || 'valid', last.validation?.status?.toUpperCase() || 'VALID') + '</div>';
-      } else {
-        latestEventTime.textContent = '--:--:--';
-        latestEventContent.innerHTML = '<div class="empty-state-sm">No events detected yet.</div>';
-      }
-    }
+    attachCopyListeners(valPixelId);
+    attachCopyListeners(valSessionId);
+    attachCopyListeners(valOppref);
   }
 
-  // 2. Live Events Feed
-  function renderEventsList() {
-    if (!eventsListContainer) return;
-    const s = currentTabState;
-    if (!s || !s.events || s.events.length === 0) {
-      eventsListContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.emptyEvents + '</div><div class="empty-title">No Live Events Detected</div><div class="empty-desc">OpenAI Ads Pixel measure calls will be captured here in real time.</div></div>';
-      return;
-    }
+  // ==========================================
+  // 7. Events Timeline Renderer
+  // ==========================================
+  function renderEvents() {
+    if (!currentTabState) return;
+    const events = currentTabState.events || [];
 
-    if (eventPixelSelect) {
-      const pids = s.pixel?.pixelIds || [];
-      const currentVal = eventPixelSelect.value;
-      let opts = '<option value="all">All Pixels</option>';
-      pids.forEach(p => {
-        opts += '<option value="' + escapeHtml(p) + '" ' + (p === currentVal ? 'selected' : '') + '>' + escapeHtml(p) + '</option>';
-      });
-      eventPixelSelect.innerHTML = opts;
-    }
-
-    const filtered = s.events.filter(evt => {
-      if (selectedPixel !== 'all' && evt.pixelId !== selectedPixel) return false;
-      const name = (evt.name || '').toLowerCase();
-      const isSystem = name.startsWith('openai::') || name === 'sdk_lifecycle' || name === 'sdk_init';
-      const isDiagnostic = name.startsWith('oai::') || name === 'diagnostic';
-      const isTech = isSystem || isDiagnostic;
-      const isCommerce = ['contents_viewed', 'items_added', 'checkout_started', 'order_created'].includes(name);
-
-      // System / Diagnostic visibility toggles
-      if (isSystem && !showSystemEvents && currentFilter !== 'technical') return false;
-      if (isDiagnostic && !showDiagnostics && currentFilter !== 'technical') return false;
-
-      if (currentFilter === 'commerce' && !isCommerce) return false;
-      if (currentFilter === 'technical' && !isTech) return false;
-      if (currentFilter === 'standard' && (evt.validation?.isCustom || isTech)) return false;
-      if (currentFilter === 'custom' && !evt.validation?.isCustom) return false;
-      if (currentFilter === 'errors' && evt.validation?.status !== 'error') return false;
-      if (currentFilter === 'warnings' && evt.validation?.status !== 'warning') return false;
+    const filtered = events.filter((evt) => {
+      if (currentFilter === 'standard' && evt.validation && evt.validation.isCustom) return false;
+      if (currentFilter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
       if (currentFilter === 'duplicates' && !evt.isDuplicate) return false;
+      if (currentFilter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
+      if (currentFilter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
 
-      if (searchQuery) {
-        const text = (evt.name + ' ' + (evt.pixelId || '') + ' ' + (evt.url || '') + ' ' + JSON.stringify(evt.parameters || {})).toLowerCase();
-        if (!text.includes(searchQuery)) return false;
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase().trim();
+        const nameMatch = (evt.displayName || evt.name || '').toLowerCase().includes(q);
+        const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
+        const idMatch = (evt.eventId || '').toLowerCase().includes(q);
+        const paramsMatch = JSON.stringify(evt.parameters || {}).toLowerCase().includes(q);
+        return nameMatch || urlMatch || idMatch || paramsMatch;
       }
       return true;
     });
 
     if (filtered.length === 0) {
-      eventsListContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.info + '</div><div class="empty-title">No matching events</div><div class="empty-desc">Try clearing filters or search query.</div></div>';
+      eventsListContainer.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">${ICONS.emptyEvents}</span>
+          <p class="empty-text">No matching events observed.</p>
+          <span class="empty-subtext">Trigger tracking interactions on the target page.</span>
+        </div>
+      `;
       return;
     }
 
     eventsListContainer.innerHTML = '';
+    filtered.slice().reverse().forEach((evt, idx) => {
+      const item = document.createElement('div');
+      const itemKey = evt._id || ('evt_' + idx);
+      const isExpanded = expandedEventIds.has(itemKey);
+      const isPayloadOpen = expandedPayloadEventIds.has(itemKey);
+      const isCustom = evt.validation && evt.validation.isCustom;
 
-    filtered.forEach((evt) => {
-      const isExpanded = expandedEventIds.has(evt._id);
-      const isRawView = expandedPayloadEventIds.has(evt._id);
-      const name = evt.displayName || evt.name;
-      const isTech = name.startsWith('openai::') || name.startsWith('oai::');
-      const timeStr = formatTimestamp(evt.timestamp);
-      const status = evt.validation?.status || 'valid';
+      // 1. Separation of Trigger vs Validation
+      let triggerBadgeHtml = '';
+      if (evt.isDuplicate) {
+        triggerBadgeHtml = renderStatusBadge('duplicate', 'Double Fired');
+      } else if (evt.requestCount > 1) {
+        triggerBadgeHtml = renderStatusBadge('duplicate', 'Fired ' + evt.requestCount + 'x');
+      } else {
+        triggerBadgeHtml = renderStatusBadge('triggered', 'Triggered');
+      }
 
-      const card = document.createElement('div');
-      card.className = 'event-accordion-item ' + (isExpanded ? 'open' : '');
-      card.id = 'event-row-' + evt._id;
+      // 2. Actionable Parameter Errors Box (Concise Received -> Expected)
+      let issueBannerHtml = '';
+      const params = evt.parameters || {};
+      const validation = evt.validation || {};
+      const valResults = validation.parameterResults || {};
+      
+      const errorKeys = Object.keys(valResults).filter(k => valResults[k].severity === 'error' || valResults[k].valid === false);
+      const warningKeys = Object.keys(valResults).filter(k => valResults[k].severity === 'warning');
 
-      card.innerHTML = '<div class="event-header-row" data-id="' + evt._id + '">' +
-        '<div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">' +
-        '<span class="mono text-muted" style="font-size:11px;">' + timeStr + '</span>' +
-        '<span class="event-name-tag ' + (isTech ? 'tech' : '') + '">' + escapeHtml(name) + '</span>' +
-        (evt.isDuplicate ? '<span class="badge badge-warning" style="font-size:10px;">Duplicate</span>' : '') +
-        (evt.pixelId ? '<span class="badge badge-neutral mono" style="font-size:10px;">' + truncateString(evt.pixelId, 12) + '</span>' : '') +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:6px;">' +
-        renderStatusBadge(status, status.toUpperCase()) +
-        '<button class="icon-button btn-inspect-modal" title="Inspect Full Analysis" data-id="' + evt._id + '" style="padding:3px;">' +
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>' +
-        '</button>' +
-        '<span class="accordion-chevron ' + (isExpanded ? 'rotated' : '') + '">' + ICONS.chevronDown + '</span>' +
-        '</div>' +
-        '</div>' +
-        '<div class="event-body-container" style="display: ' + (isExpanded ? 'block' : 'none') + '; padding: 10px 12px; border-top: 1px solid var(--border-subtle); background: var(--bg-subtle);">' +
-        '<div class="event-body-content" id="event-body-' + evt._id + '">' +
-        '</div>' +
-        '</div>';
+      if (errorKeys.length > 0) {
+        const errDetails = errorKeys.map(k => {
+          const res = valResults[k];
+          return '<div><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(res.message || 'Invalid format') + '</div>';
+        }).join('');
+        issueBannerHtml = `
+          <div class="event-issue-banner">
+            <div><strong>${errorKeys.length} parameter error(s):</strong></div>
+            ${errDetails}
+          </div>
+        `;
+      } else if (warningKeys.length > 0) {
+        const warnDetails = warningKeys.map(k => {
+          const res = valResults[k];
+          return '<div><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(res.message || 'Suboptimal parameter') + '</div>';
+        }).join('');
+        issueBannerHtml = `
+          <div class="event-issue-banner" style="background: var(--status-warning-bg); border-left-color: var(--status-warning); color: var(--status-warning);">
+            <div><strong>${warningKeys.length} parameter warning(s):</strong></div>
+            ${warnDetails}
+          </div>
+        `;
+      }
 
-      const headerRow = card.querySelector('.event-header-row');
-      headerRow.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-inspect-modal')) return;
-        if (expandedEventIds.has(evt._id)) {
-          expandedEventIds.delete(evt._id);
-        } else {
-          expandedEventIds.add(evt._id);
+      // 3. Parameter Table Rows with Structured Code Containers
+      let paramRows = '';
+      for (const [key, val] of Object.entries(params)) {
+        const valRes = valResults[key] || {};
+        let piiBadge = '';
+        if (valRes.pii && valRes.piiDetails) {
+          piiBadge = '<span class="badge badge-error" style="font-size:10px; padding:1px 4px; margin-left:4px;">PII: ' + escapeHtml(valRes.piiDetails.type) + '</span>';
         }
-        renderEventsList();
+
+        let statusText = 'Valid';
+        let statusSev = 'valid';
+        if (valRes.severity === 'error' || valRes.valid === false) {
+          statusText = 'Error';
+          statusSev = 'error';
+        } else if (valRes.severity === 'warning') {
+          statusText = 'Warning';
+          statusSev = 'warning';
+        } else if (valRes.severity === 'info') {
+          statusText = 'Info';
+          statusSev = 'info';
+        }
+
+        let displayVal = '';
+        if (typeof val === 'object' && val !== null) {
+          const formattedJson = JSON.stringify(val, null, 2);
+          const countBadge = Array.isArray(val) ? (val.length + ' item(s)') : (Object.keys(val).length + ' field(s)');
+          displayVal = `
+            <div class="param-code-container">
+              <span class="param-code-tag">${countBadge}</span>
+              <pre class="param-code-block">${escapeHtml(formattedJson)}</pre>
+            </div>
+          `;
+        } else {
+          displayVal = makeCopyable(String(val), '<span class="param-scalar-val">' + escapeHtml(String(val)) + '</span>');
+        }
+
+        paramRows += `
+          <tr>
+            <td class="param-name-cell"><strong>${escapeHtml(key)}</strong>${piiBadge}</td>
+            <td class="param-val-cell">${displayVal}</td>
+            <td class="param-status-cell">${renderStatusBadge(statusSev, statusText, valRes.message)}</td>
+          </tr>
+        `;
+      }
+
+      if (Object.keys(params).length === 0) {
+        paramRows = '<tr><td colspan="3" style="color:var(--text-muted); text-align:center; padding:8px;">No parameters passed</td></tr>';
+      }
+
+      const eventIdDisplay = evt.eventId ? makeCopyable(evt.eventId, '<code>' + escapeHtml(evt.eventId) + '</code>') : '<span style="color:var(--text-muted); font-style:italic;">Not Sent</span>';
+      const pixelIdDisplay = evt.pixelId ? makeCopyable(evt.pixelId, '<code>' + escapeHtml(evt.pixelId) + '</code>') : '<span style="color:var(--text-muted)">Default</span>';
+
+      item.className = 'event-card ' + (isExpanded ? 'open' : '');
+      item.innerHTML = `
+        <div class="event-card-header">
+          <div class="event-card-top">
+            <div class="event-title-group">
+              <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">
+                ${isCustom ? 'Custom' : 'Standard'}
+              </span>
+              <span class="event-name">${escapeHtml(evt.displayName || evt.name)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${triggerBadgeHtml}
+              <span class="event-time-text">${formatTimestamp(evt.timestamp)}</span>
+            </div>
+          </div>
+          <div class="event-meta-line">
+            <span class="event-path-text truncate">${escapeHtml(evt.pathname || evt.url || '/')}</span>
+            <span style="font-size: 11.5px; color: var(--text-secondary);">${Object.keys(params).length} parameter(s)</span>
+          </div>
+        </div>
+
+        ${issueBannerHtml}
+
+        <div class="event-details-drawer">
+          <div class="event-spec-grid">
+            <div class="event-spec-item">
+              <span class="event-spec-label">Event ID</span>
+              <span class="event-spec-val">${eventIdDisplay}</span>
+            </div>
+            <div class="event-spec-item">
+              <span class="event-spec-label">Pixel ID</span>
+              <span class="event-spec-val">${pixelIdDisplay}</span>
+            </div>
+          </div>
+
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Value</th>
+                <th style="text-align:right;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${paramRows}
+            </tbody>
+          </table>
+
+          <details class="payload-details" ${isPayloadOpen ? 'open' : ''}>
+            <summary>
+              ${ICONS.chevronDown}
+              <span>View JSON Payload</span>
+            </summary>
+            <pre class="payload-code">${escapeHtml(JSON.stringify(evt.parameters, null, 2))}</pre>
+          </details>
+        </div>
+      `;
+
+      // Accordion click handler on header
+      const header = item.querySelector('.event-card-header');
+      header.addEventListener('click', () => {
+        if (expandedEventIds.has(itemKey)) {
+          expandedEventIds.delete(itemKey);
+          item.classList.remove('open');
+        } else {
+          expandedEventIds.add(itemKey);
+          item.classList.add('open');
+        }
       });
 
-      const btnInspect = card.querySelector('.btn-inspect-modal');
-      if (btnInspect) {
-        btnInspect.addEventListener('click', (e) => {
+      // Stop propagation inside details drawer
+      const drawer = item.querySelector('.event-details-drawer');
+      if (drawer) {
+        drawer.addEventListener('click', (e) => {
           e.stopPropagation();
-          openEventModal(evt);
         });
       }
 
-      if (isExpanded) {
-        const bodyContent = card.querySelector('#event-body-' + evt._id);
-        if (bodyContent) {
-          bodyContent.innerHTML = renderOrganizedEventHtml(evt, isRawView);
-          attachEventBodyListeners(bodyContent, evt);
-        }
+      // Track payload details open state persistently
+      const payloadDetails = item.querySelector('.payload-details');
+      if (payloadDetails) {
+        payloadDetails.addEventListener('toggle', () => {
+          if (payloadDetails.open) {
+            expandedPayloadEventIds.add(itemKey);
+          } else {
+            expandedPayloadEventIds.delete(itemKey);
+          }
+        });
       }
 
-      eventsListContainer.appendChild(card);
+      attachCopyListeners(item);
+      eventsListContainer.appendChild(item);
     });
   }
 
-  function openEventModal(evt) {
-    activeModalEvent = evt;
-    activeModalJson = JSON.stringify(evt.rawEvent || evt, null, 2);
-
-    if (modalEventTitle) modalEventTitle.textContent = (evt.displayName || evt.name).toUpperCase();
-    if (modalEventSubtitle) modalEventSubtitle.textContent = 'Timestamp: ' + formatTimestamp(evt.timestamp) + ' | Pixel: ' + (evt.pixelId || 'Default');
-    if (modalPayloadMeta) modalPayloadMeta.textContent = 'Event ID: ' + (evt.sdkEventId || evt.eventId || 'Not assigned');
-
-    if (modalEventIcon) {
-      const isTech = (evt.name || '').startsWith('openai::') || (evt.name || '').startsWith('oai::');
-      modalEventIcon.innerHTML = isTech ? ICONS.code : ICONS.package;
-    }
-
-    if (modalOrganizedView) {
-      modalOrganizedView.innerHTML = renderOrganizedEventHtml(evt, false);
-      attachEventBodyListeners(modalOrganizedView, evt);
-      modalOrganizedView.style.display = 'block';
-    }
-
-    if (modalRawView) {
-      modalRawView.style.display = 'none';
-      if (modalJsonContent) {
-        modalJsonContent.innerHTML = formatAndHighlightJson(evt.rawEvent || evt);
-      }
-    }
-
-    if (modalBtnViewOrganized) modalBtnViewOrganized.classList.add('active');
-    if (modalBtnViewRaw) modalBtnViewRaw.classList.remove('active');
-    if (rawModal) rawModal.classList.remove('hidden');
-  }
-
-  function renderOrganizedEventHtml(evt, isRawView) {
-    const params = evt.parameters || {};
-    const userInfo = evt.userInfo || currentTabState?.userMatching;
-    const val = evt.validation || {};
-    const formattedAmount = formatMonetaryValue(params.amount, params.currency);
-    const contents = Array.isArray(params.contents) ? params.contents : [];
-
-    if (isRawView) {
-      return '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-        '<span style="font-size:11px; font-weight:600; color:var(--text-secondary);">Raw JSON Network Payload</span>' +
-        '<button class="btn btn-secondary btn-copy-raw-inline" data-id="' + evt._id + '" style="padding:3px 8px; font-size:11px;">Copy</button>' +
-        '</div>' +
-        '<pre class="raw-code">' + formatAndHighlightJson(evt.rawEvent || evt) + '</pre>';
-    }
-
-    let html = '';
-
-    // 1. Revenue Hero
-    if (params.amount !== undefined) {
-      const isInteger = Number.isInteger(params.amount);
-      html += '<div class="revenue-hero">' +
-        '<div>' +
-        '<div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted);">Monetary Value</div>' +
-        '<div class="revenue-amount-hero">' + (formattedAmount || params.amount) + '</div>' +
-        '<div class="revenue-subtext">Currency: <strong>' + escapeHtml(params.currency || 'USD') + '</strong> (Raw Payload: <code>' + params.amount + '</code>)</div>' +
-        '</div>' +
-        '<div style="text-align:right;">' +
-        (isInteger ? '<span class="badge badge-success">✓ Integer Minor Units</span>' : '<span class="badge badge-error">✕ Invalid Non-Integer</span>') +
-        '</div>' +
-        '</div>';
-    }
-
-    // 2. Event Information
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">1. Event Information</span>' +
-      renderStatusBadge(val.status || 'valid', val.status?.toUpperCase()) +
-      '</div>' +
-      '<div class="org-explanation">Identifies the specific action received by OpenAI and when it happened.</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Event Name</span><span class="org-val">' + escapeHtml(evt.displayName || evt.name) + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Data Shape</span><span class="org-val">' + escapeHtml(val.dataShape || 'contents') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Event ID</span><span class="org-val">' + escapeHtml(evt.sdkEventId || evt.eventId || 'Generated automatically') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Timestamp</span><span class="org-val">' + new Date(evt.timestamp).toLocaleString() + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Target Pixel ID</span><span class="org-val">' + escapeHtml(evt.pixelId || 'Default Pixel') + '</span></div>' +
-      '</div>' +
-      '</div>';
-
-    // 3. Page & Journey Information
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">2. Page & Journey Context</span>' +
-      '</div>' +
-      '<div class="org-explanation">Tells OpenAI where the action occurred and which page the visitor came from.</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Source URL</span><span class="org-val truncate" title="' + escapeHtml(evt.sourceUrl || evt.url || '') + '">' + escapeHtml(evt.sourceUrl || evt.url || 'Current Page') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Referrer URL</span><span class="org-val truncate" title="' + escapeHtml(evt.referrerUrl || 'Direct / None') + '">' + escapeHtml(evt.referrerUrl || 'Direct / None') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Opt-Out Status</span><span class="org-val">' + (evt.optOut === true ? 'Opted Out' : 'false (Tracked) ✓') + '</span></div>' +
-      '</div>' +
-      '</div>';
-
-    // 4. Products
-    if (contents.length > 0) {
-      html += '<div class="org-section">' +
-        '<div class="org-section-header">' +
-        '<span class="org-section-title">3. Product & Content Items (' + contents.length + ')</span>' +
-        '</div>' +
-        '<div class="org-explanation">Item-level product and catalog breakdown passed in the contents array.</div>' +
-        '<div style="padding:8px 10px;">';
-
-      contents.forEach((item, cIdx) => {
-        const itemFormatted = formatMonetaryValue(item.amount, item.currency || params.currency);
-        html += '<div class="product-card-item">' +
-          '<div class="product-card-header">' +
-          '<span>Item #' + (cIdx + 1) + ': ' + escapeHtml(item.name || item.id || 'Product') + '</span>' +
-          '<span class="badge badge-neutral" style="font-size:10px;">' + escapeHtml(item.content_type || 'product') + '</span>' +
-          '</div>' +
-          '<div class="org-row"><span class="org-label">Product ID (SKU)</span><span class="org-val">' + escapeHtml(item.id || 'Not sent') + '</span></div>' +
-          '<div class="org-row"><span class="org-label">Quantity</span><span class="org-val">' + (item.quantity !== undefined ? item.quantity : 1) + '</span></div>' +
-          (item.amount !== undefined ? '<div class="org-row"><span class="org-label">Item Value</span><span class="org-val">' + (itemFormatted || item.amount) + ' (' + escapeHtml(item.currency || params.currency || 'USD') + ')</span></div>' : '') +
-          '</div>';
-      });
-
-      html += '</div></div>';
-    }
-
-    // 5. Customer Matching
-    const matchFields = userInfo?.fields || [];
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">4. Customer Matching (Advanced Matching)</span>' +
-      '<span class="badge badge-neutral">' + matchFields.length + ' Detected</span>' +
-      '</div>' +
-      '<div class="org-explanation">Hashed user identifiers enabling conversion attribution without exposing raw PII.</div>' +
-      '<div class="org-grid">';
-
-    if (matchFields.length > 0) {
-      matchFields.forEach(f => {
-        html += '<div class="org-row">' +
-          '<span class="org-label">' + escapeHtml(f.label) + ' (' + escapeHtml(f.source) + ')</span>' +
-          '<span class="org-val text-emerald">' + (f.isHashed ? '✓ Hashed: ' + escapeHtml(f.masked) : escapeHtml(f.masked)) + '</span>' +
-          '</div>';
-      });
-    } else {
-      html += '<div style="font-size:11.5px; color:var(--text-muted); padding:4px 0;">No user matching identifiers sent with this event.</div>';
-    }
-    html += '</div></div>';
-
-    // 6. Privacy
-    const hasRawEmail = JSON.stringify(params).includes('@');
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">5. Privacy & Hashing Verification</span>' +
-      (hasRawEmail ? '<span class="badge badge-error">✕ Raw PII Alert</span>' : '<span class="badge badge-success">✓ Clean</span>') +
-      '</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Raw Email Sent in Payload</span><span class="org-val ' + (hasRawEmail ? 'text-rose font-bold' : 'text-emerald') + '">' + (hasRawEmail ? '✕ Raw Email Detected!' : '✓ Not detected (Clean)') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Hashed Protection</span><span class="org-val text-emerald">' + (matchFields.some(f => f.isHashed) ? '✓ SHA-256 Hashed Identifiers' : 'No identifiers in this event') + '</span></div>' +
-      '</div>' +
-      '</div>';
-
-    // 7. What OpenAI Received (Plain-language client summary)
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">7. What OpenAI Received</span>' +
-      '<span class="badge badge-neutral">Client Summary</span>' +
-      '</div>' +
-      '<div class="org-explanation">Clear non-technical translation of the exact data package ingested by OpenAI.</div>' +
-      '<div class="org-grid">' +
-      '<div class="org-row"><span class="org-label">Action Captured</span><span class="org-val font-bold">' + escapeHtml(evt.displayName || evt.name) + '</span></div>' +
-      (params.amount !== undefined ? '<div class="org-row"><span class="org-label">Reported Value</span><span class="org-val text-emerald font-bold">' + (formattedAmount || params.amount) + ' (' + escapeHtml(params.currency || 'USD') + ')</span></div>' : '') +
-      '<div class="org-row"><span class="org-label">Tracking Scope</span><span class="org-val">' + (evt.optOut === true ? 'User Opted Out of Personalization' : 'Tracked for Conversion Attribution') + '</span></div>' +
-      '<div class="org-row"><span class="org-label">Advanced Matching</span><span class="org-val">' + (matchFields.length > 0 ? '✓ Protected with SHA-256 Hashing (' + matchFields.length + ' identifiers)' : 'No identifiers provided') + '</span></div>' +
-      '</div></div>';
-
-    // 8. Why is this data sent? (Deterministic field explanations)
-    const paramKeys = Object.keys(params).filter(k => k !== 'contents');
-    if (paramKeys.length > 0) {
-      html += '<div class="org-section">' +
-        '<div class="org-section-header">' +
-        '<span class="org-section-title">8. Why is this data sent?</span>' +
-        '<span class="badge badge-info">Documentation Reference</span>' +
-        '</div>' +
-        '<div class="org-explanation">Deterministic schema purpose explaining why OpenAI requests each technical field.</div>' +
-        '<div style="padding:4px 0;">';
-
-      paramKeys.forEach(k => {
-        const expl = getFieldExplanation(k);
-        if (expl) {
-          html += '<div style="padding:6px 0; border-bottom:1px solid var(--border-subtle);">' +
-            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">' +
-            '<strong class="mono" style="font-size:11px; color:var(--accent-brand);">' + escapeHtml(k) + '</strong>' +
-            '<span class="text-muted" style="font-size:10.5px;">' + escapeHtml(expl.label) + '</span>' +
-            '</div>' +
-            '<div style="font-size:11px; color:var(--text-secondary);">' + escapeHtml(expl.meaning) + '</div>' +
-            '<div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Doc note: ' + escapeHtml(expl.docNote) + '</div>' +
-            '</div>';
-        }
-      });
-
-      html += '</div></div>';
-    }
-
-    // 9. Validation
-    const findings = val.findings || [];
-    html += '<div class="org-section">' +
-      '<div class="org-section-header">' +
-      '<span class="org-section-title">9. Validation Diagnostics</span>' +
-      '<span class="badge ' + (val.errorsCount > 0 ? 'badge-error' : (val.warningsCount > 0 ? 'badge-warning' : 'badge-success')) + '">' +
-      val.errorsCount + ' Errors, ' + val.warningsCount + ' Warnings' +
-      '</span>' +
-      '</div>' +
-      '<div class="org-grid">';
-
-    if (findings.length > 0) {
-      findings.forEach(find => {
-        html += '<div style="padding:6px 0; border-bottom:1px solid var(--border-subtle);">' +
-          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">' +
-          '<strong style="font-size:11.5px; color:var(--text-main);">' + escapeHtml(find.title) + '</strong>' +
-          renderStatusBadge(find.severity, find.severity.toUpperCase()) +
-          '</div>' +
-          '<div style="font-size:11px; color:var(--text-secondary); margin-bottom:2px;">' + escapeHtml(find.message) + '</div>' +
-          (find.ruleSource ? '<div style="font-size:10px; color:var(--text-muted); margin-bottom:2px;">Rule: <span class="badge badge-neutral" style="font-size:9.5px;">' + escapeHtml(find.ruleSource) + '</span></div>' : '') +
-          (find.recommendedFix ? '<div style="font-size:10.5px; color:var(--accent-brand);">Fix: ' + escapeHtml(find.recommendedFix) + '</div>' : '') +
-          '</div>';
-      });
-    } else {
-      html += '<div style="font-size:11.5px; color:var(--status-success); padding:4px 0;">✓ All schema rules and consistency checks passed successfully.</div>';
-    }
-    html += '</div></div>';
-
-    return html;
-  }
-
-  function attachEventBodyListeners(container, evt) {
-    const btnCopyInline = container.querySelector('.btn-copy-raw-inline');
-    if (btnCopyInline) {
-      btnCopyInline.addEventListener('click', () => {
-        copyToClipboard(evt.rawEvent || evt, btnCopyInline);
-      });
-    }
-  }
-
-  // 3. Network Requests Tab
-  // 3. Network Requests Tab
-  function renderNetworkRequests() {
-    if (!networkRequestsContainer) return;
-    const s = currentTabState;
-    const reqs = s?.capturedRequests?.length > 0 ? s.capturedRequests : (s?.network || []);
-
-    if (networkRequestsBadge) {
-      networkRequestsBadge.textContent = reqs.length + ' Requests';
-    }
-
-    if (reqs.length === 0) {
-      networkRequestsContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.code + '</div><div class="empty-title">No Network Requests Captured</div><div class="empty-desc">Outgoing network requests to OpenAI Pixel endpoints will appear here.</div></div>';
-      return;
-    }
-
-    networkRequestsContainer.innerHTML = '';
-
-    reqs.forEach((req, idx) => {
-      // Support both normalized OpenAIRequest container and raw netEntry
-      const isNormalized = Boolean(req.sdk && req.request && req.events);
-      const reqId = req.requestId || req.id || `REQ_${idx}`;
-      const isExpanded = expandedNetReqIds.has(reqId);
-
-      const method = isNormalized ? req.request.method : (req.method || 'POST');
-      const fullUrl = isNormalized ? req.request.fullUrl : (req.url || '');
-      const statusCode = isNormalized ? req.request.statusCode : (req.status || 202);
-      const timestamp = isNormalized ? req.capturedAt : (req.timestamp || Date.now());
-      const queryParams = isNormalized ? req.query : (req.queryParams || {});
-      const pixelId = isNormalized ? (req.sdk.pixelId || 'Default') : (queryParams.pid || 'Default');
-      const eventsList = isNormalized ? req.events : (req.payload?.events || []);
-      const userMatching = isNormalized ? req.matching : (req.payload?.user ? { detected: true, fields: [] } : null);
-      const diagnostics = isNormalized ? req.diagnostics : null;
-      const validation = isNormalized ? req.validation : null;
-      const derived = isNormalized ? req.derived : null;
-      const rawPayload = isNormalized ? req.raw.parsedBody : (req.payload || {});
-
-      const statusClass = statusCode >= 200 && statusCode < 300 ? 'badge-success' : (statusCode === 'pending' ? 'badge-neutral' : 'badge-error');
-
-      const card = document.createElement('div');
-      card.className = 'net-req-card';
-
-      // Header row
-      card.innerHTML = '<div class="net-req-header" data-reqid="' + escapeHtml(reqId) + '">' +
-        '<div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">' +
-        '<span class="net-req-method">' + escapeHtml(method) + '</span>' +
-        '<span class="net-req-url" title="' + escapeHtml(fullUrl) + '">' + escapeHtml(fullUrl) + '</span>' +
-        '<span class="badge badge-neutral mono" style="font-size:10px;">' + escapeHtml(pixelId) + '</span>' +
-        '</div>' +
-        '<div style="display:flex; align-items:center; gap:6px;">' +
-        '<span class="badge ' + statusClass + '">' + statusCode + '</span>' +
-        '<span class="mono text-muted" style="font-size:11px;">' + formatTimestamp(timestamp) + '</span>' +
-        '<span class="accordion-chevron ' + (isExpanded ? 'rotated' : '') + '">' + ICONS.chevronDown + '</span>' +
-        '</div>' +
-        '</div>' +
-        '<div class="net-req-body" id="net-body-' + escapeHtml(reqId) + '" style="display: ' + (isExpanded ? 'block' : 'none') + ';">' +
-        '</div>';
-
-      const header = card.querySelector('.net-req-header');
-      header.addEventListener('click', () => {
-        if (expandedNetReqIds.has(reqId)) {
-          expandedNetReqIds.delete(reqId);
-        } else {
-          expandedNetReqIds.add(reqId);
-        }
-        renderNetworkRequests();
-      });
-
-      if (isExpanded) {
-        const bodyEl = card.querySelector('#net-body-' + reqId);
-        if (bodyEl) {
-          let bodyHtml = '';
-
-          // 1. Request Metadata Box
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>1. Request Metadata</span><span class="mono" style="font-size:10px;">ID: ' + escapeHtml(reqId) + '</span></div>' +
-            '<div class="org-grid">' +
-            '<div class="org-row"><span class="org-label">Full URL</span><span class="org-val truncate" title="' + escapeHtml(fullUrl) + '">' + escapeHtml(fullUrl) + '</span></div>' +
-            '<div class="org-row"><span class="org-label">Status</span><span class="org-val ' + (statusCode === 202 ? 'text-emerald' : '') + '">HTTP ' + statusCode + ' (' + (statusCode === 202 ? 'Accepted by OpenAI' : 'Response') + ')</span></div>' +
-            '<div class="org-row"><span class="org-label">Captured Timestamp</span><span class="org-val">' + new Date(timestamp).toLocaleString() + '</span></div>' +
-            (derived ? '<div class="org-row"><span class="org-label">Batch Delay</span><span class="org-val">' + escapeHtml(derived.batchDelay) + '<span class="derived-tag">[Derived]</span></span></div>' : '') +
-            (derived?.journeyContext ? '<div class="org-row"><span class="org-label">Journey Context</span><span class="org-val">' + escapeHtml(derived.journeyContext) + '<span class="derived-tag">[Derived]</span></span></div>' : '') +
-            '</div></div>';
-
-          // 2. Query Parameters
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>2. Query Parameters</span></div>' +
-            '<div class="org-grid">' +
-            '<div class="org-row"><span class="org-label">pid (Pixel ID)</span><span class="org-val mono">' + escapeHtml(queryParams.pid || 'Not set') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">st (SDK Transport)</span><span class="org-val mono">' + escapeHtml(queryParams.st || 'oaiq-web') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">sv (SDK Version)</span><span class="org-val mono">' + escapeHtml(queryParams.sv || 'Unknown') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">ec (Event Count)</span><span class="org-val mono">' + (queryParams.ec !== null && queryParams.ec !== undefined ? queryParams.ec : eventsList.length) + '</span></div>' +
-            '<div class="org-row"><span class="org-label">t (Request Time ms)</span><span class="org-val mono">' + (queryParams.t || timestamp) + '</span></div>' +
-            '</div></div>';
-
-          // 3. Transport & Request-Level Data
-          const transportObref = isNormalized ? req.transport?.obref : rawPayload.obref;
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>3. Request-Level Data & Transport</span></div>' +
-            '<div class="org-grid">' +
-            '<div class="org-row"><span class="org-label">Browser Ref (obref)</span><span class="org-val mono">' + escapeHtml(transportObref || 'Not sent') + '</span></div>' +
-            '<div class="org-row"><span class="org-label">Total Batched Events</span><span class="org-val font-bold">' + eventsList.length + ' event(s)</span></div>' +
-            '</div></div>';
-
-          // 4. Batched Events List
-          bodyHtml += '<div class="net-req-section">' +
-            '<div class="net-req-section-title"><span>4. Batched Events (' + eventsList.length + ')</span></div>' +
-            '<div style="display:flex; flex-direction:column; gap:6px;">';
-
-          eventsList.forEach((ev, eIdx) => {
-            const evType = ev.type || 'unknown';
-            const evData = ev.data || {};
-            const evAmount = evData.amount;
-            const evCurrency = evData.currency || 'USD';
-            const formattedMoney = (evAmount !== undefined && Number.isInteger(evAmount)) ? decodeMoney(evAmount, evCurrency) : (evAmount !== undefined ? evAmount : null);
-            const isSystem = evType.startsWith('openai::') || evType.startsWith('oai::');
-
-            bodyHtml += '<div style="background:var(--bg-subtle); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:6px 10px;">' +
-              '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-              '<span class="net-event-chip" style="font-size:11px; font-weight:600;">#' + (eIdx + 1) + ' ' + escapeHtml(evType) + '</span>' +
-              (formattedMoney ? '<span class="text-emerald font-bold" style="font-size:11px;">' + formattedMoney + '</span>' : '') +
-              '</div>' +
-              '<div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Event ID: <code class="mono">' + escapeHtml(ev.id || ev.eventId || 'SDK-generated') + '</code> | Shape: <code class="mono">' + escapeHtml(ev.dataType || evData.type || 'contents') + '</code></div>' +
-              (ev.sourceUrl ? '<div style="font-size:10.5px; color:var(--text-secondary); margin-top:2px;" class="truncate">Source: ' + escapeHtml(ev.sourceUrl) + '</div>' : '') +
-              '</div>';
-          });
-
-          bodyHtml += '</div></div>';
-
-          // 5. Customer Matching (if present)
-          if (userMatching && userMatching.detected) {
-            bodyHtml += '<div class="net-req-section">' +
-              '<div class="net-req-section-title"><span>5. Advanced Customer Matching</span><span class="badge badge-success" style="font-size:10px;">' + userMatching.count + ' Identifiers</span></div>' +
-              '<div class="org-grid">';
-
-            userMatching.fields.forEach(f => {
-              bodyHtml += '<div class="org-row"><span class="org-label">' + escapeHtml(f.label) + '</span><span class="org-val mono text-emerald">' + escapeHtml(f.masked) + '</span></div>';
-            });
-
-            bodyHtml += '</div></div>';
-          }
-
-          // 6. Validation Diagnostics (Level 1 Network QA)
-          if (validation) {
-            bodyHtml += '<div class="net-req-section">' +
-              '<div class="net-req-section-title"><span>6. Network & Batch Validation</span>' +
-              '<span class="badge ' + (validation.errors.length > 0 ? 'badge-error' : (validation.warnings.length > 0 ? 'badge-warning' : 'badge-success')) + '">' +
-              validation.status.toUpperCase() +
-              '</span></div>' +
-              '<div style="font-size:11px; padding:4px 0;">';
-
-            validation.passes.forEach(p => {
-              bodyHtml += '<div style="color:var(--status-success); margin-bottom:2px;">✓ ' + escapeHtml(p) + '</div>';
-            });
-            validation.warnings.forEach(w => {
-              bodyHtml += '<div style="color:var(--status-warning); margin-bottom:2px;">⚠ ' + escapeHtml(w) + '</div>';
-            });
-            validation.errors.forEach(e => {
-              bodyHtml += '<div style="color:var(--status-error); margin-bottom:2px;">✕ ' + escapeHtml(e) + '</div>';
-            });
-
-            bodyHtml += '</div></div>';
-          }
-
-          // 7. Copy Action Bar
-          bodyHtml += '<div class="net-action-bar">' +
-            '<button class="btn-net-copy btn-copy-url" data-url="' + escapeHtml(fullUrl) + '">Copy URL</button>' +
-            '<button class="btn-net-copy btn-copy-params">Copy Params</button>' +
-            '<button class="btn-net-copy btn-copy-payload">Copy Payload</button>' +
-            '<button class="btn-net-copy btn-copy-matching">Copy Matching</button>' +
-            '<button class="btn-net-copy btn-export-json">Export JSON</button>' +
-            '</div>';
-
-          bodyEl.innerHTML = bodyHtml;
-
-          // Wire up copy buttons for this network card
-          const btnCopyUrl = bodyEl.querySelector('.btn-copy-url');
-          if (btnCopyUrl) {
-            btnCopyUrl.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(fullUrl, btnCopyUrl);
-            });
-          }
-
-          const btnCopyParams = bodyEl.querySelector('.btn-copy-params');
-          if (btnCopyParams) {
-            btnCopyParams.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(queryParams, btnCopyParams);
-            });
-          }
-
-          const btnCopyPayload = bodyEl.querySelector('.btn-copy-payload');
-          if (btnCopyPayload) {
-            btnCopyPayload.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(rawPayload, btnCopyPayload);
-            });
-          }
-
-          const btnCopyMatching = bodyEl.querySelector('.btn-copy-matching');
-          if (btnCopyMatching) {
-            btnCopyMatching.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(userMatching || { note: 'No matching data sent' }, btnCopyMatching);
-            });
-          }
-
-          const btnExportJson = bodyEl.querySelector('.btn-export-json');
-          if (btnExportJson) {
-            btnExportJson.addEventListener('click', (e) => {
-              e.stopPropagation();
-              copyToClipboard(isNormalized ? req : { request: req, payload: rawPayload }, btnExportJson);
-            });
-          }
-        }
-      }
-
-      networkRequestsContainer.appendChild(card);
-    });
-  }
-
-  // 4. Funnel Tab
+  // ==========================================
+  // 8. Funnel Journey Renderer
+  // ==========================================
   function renderFunnel() {
-    if (!funnelPipelineContainer) return;
-    const s = currentTabState;
-    const events = s?.events || [];
+    if (!currentTabState) return;
+    const report = generateAuditReport(currentTabState);
+    const funnel = report.funnel;
 
-    const FUNNEL_STEPS = [
-      { name: 'contents_viewed', label: '1. Product View', desc: 'Visitor viewed product details' },
-      { name: 'items_added', label: '2. Add to Cart', desc: 'Item added to shopping cart' },
-      { name: 'checkout_started', label: '3. Checkout Begin', desc: 'Initiated checkout flow' },
-      { name: 'order_created', label: '4. Purchase / Order', desc: 'Completed purchase conversion' }
-    ];
-
-    let observedCount = 0;
-    funnelPipelineContainer.innerHTML = '';
-
-    FUNNEL_STEPS.forEach((step) => {
-      const match = events.find(e => e.name === step.name);
-      const isObserved = Boolean(match);
-      if (isObserved) observedCount++;
-
-      const stepCard = document.createElement('div');
-      stepCard.className = 'funnel-step-card ' + (isObserved ? 'observed' : 'missing');
-      stepCard.style.cssText = 'background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;';
-
-      const amountFormatted = match ? formatMonetaryValue(match.parameters?.amount, match.parameters?.currency) : null;
-
-      stepCard.innerHTML = '<div>' +
-        '<div style="font-weight:700; font-size:12.5px; color:var(--text-main);">' + step.label + '</div>' +
-        '<div style="font-size:11px; color:var(--text-muted);">' + step.desc + '</div>' +
-        (amountFormatted ? '<div style="font-size:11px; color:var(--accent-brand); font-weight:600; margin-top:2px;">Value: ' + amountFormatted + '</div>' : '') +
-        '</div>' +
-        '<div>' +
-        (isObserved 
-          ? '<span class="badge badge-success">✓ Observed in session</span>' 
-          : '<span class="badge badge-neutral" title="Not observed in this debugging session">✕ Not observed</span>') +
-        '</div>';
-
-      funnelPipelineContainer.appendChild(stepCard);
-    });
-
-    const completionRate = Math.round((observedCount / FUNNEL_STEPS.length) * 100);
-    if (funnelRateBadge) {
-      funnelRateBadge.textContent = observedCount + '/' + FUNNEL_STEPS.length + ' Completed (' + completionRate + '%)';
-      funnelRateBadge.className = observedCount > 0 ? 'badge badge-success' : 'badge badge-neutral';
-    }
-    if (tabCountFunnel) {
-      tabCountFunnel.textContent = observedCount + '/' + FUNNEL_STEPS.length;
-    }
-  }
-
-  // 5. Timeline Tab
-  function renderTimeline() {
-    if (!timelineContainer) return;
-    const s = currentTabState;
-    const events = s?.events || [];
-
-    if (timelineStepsBadge) {
-      timelineStepsBadge.textContent = events.length + ' Steps';
-    }
-
-    if (events.length === 0) {
-      timelineContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.code + '</div><div class="empty-title">No Session Activity Recorded</div><div class="empty-desc">Chronological journey timeline will populate as actions occur.</div></div>';
-      return;
-    }
-
-    let html = '<div class="timeline-track">';
-    let prevTime = events[0].timestamp;
-
-    events.forEach((evt, idx) => {
-      const diffMs = evt.timestamp - prevTime;
-      prevTime = evt.timestamp;
-      const timeStr = formatTimestamp(evt.timestamp);
-      const amount = formatMonetaryValue(evt.parameters?.amount, evt.parameters?.currency);
-
-      html += '<div class="timeline-item">' +
-        '<div class="timeline-dot"></div>' +
-        '<div class="timeline-item-header">' +
-        '<span>Step #' + (idx + 1) + ' • ' + timeStr + '</span>' +
-        (idx > 0 ? '<span>+' + diffMs + 'ms</span>' : '<span>Session Start</span>') +
-        '</div>' +
-        '<div class="timeline-item-card">' +
-        (evt.pathname ? '<div class="timeline-page-badge">' + escapeHtml(evt.pathname) + '</div>' : '') +
-        '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-        '<strong style="font-size:12px; color:var(--text-main);">' + escapeHtml(evt.displayName || evt.name) + '</strong>' +
-        renderStatusBadge(evt.validation?.status || 'valid', evt.validation?.status?.toUpperCase()) +
-        '</div>' +
-        (amount ? '<div style="font-size:11px; color:var(--accent-brand); font-weight:600; margin-top:2px;">' + amount + '</div>' : '') +
-        '</div>' +
-        '</div>';
-    });
-
-    html += '</div>';
-    timelineContainer.innerHTML = html;
-  }
-
-  // 6. Matching & Privacy Tab
-  function renderMatchingAndPrivacy() {
-    if (!matchingDetailsContainer || !privacyInspectorContainer) return;
-    const s = currentTabState;
-    const uMatch = s?.userMatching || (s?.networkSummary ? s.networkSummary.latestUserMatching : null);
-    const fields = uMatch?.fields || [];
-
-    if (matchingCoverageBadge) {
-      const hasEmail = fields.some(f => f.type === 'email');
-      const hasPhone = fields.some(f => f.type === 'phone');
-      const hasEid = fields.some(f => f.type === 'external_id');
-      const hasGeo = fields.some(f => f.type === 'country' || f.type === 'region');
-
-      if (hasEmail && (hasPhone || hasEid)) {
-        matchingCoverageBadge.className = 'badge badge-success';
-        matchingCoverageBadge.textContent = 'Strong Coverage';
-      } else if (hasEmail || hasPhone || hasEid) {
-        matchingCoverageBadge.className = 'badge badge-info';
-        matchingCoverageBadge.textContent = 'Moderate Coverage';
-      } else if (hasGeo) {
-        matchingCoverageBadge.className = 'badge badge-warning';
-        matchingCoverageBadge.textContent = 'Limited (Geo Only)';
-      } else {
-        matchingCoverageBadge.className = 'badge badge-neutral';
-        matchingCoverageBadge.textContent = 'No Identifiers';
-      }
-    }
-
-    if (fields.length > 0) {
-      let html = '<div class="org-grid">';
-      fields.forEach(f => {
-        html += '<div class="org-row">' +
-          '<span class="org-label">' + escapeHtml(f.label) + ' (' + escapeHtml(f.source) + ')</span>' +
-          '<span class="org-val text-emerald">' + (f.isHashed ? '✓ ' + escapeHtml(f.masked) : escapeHtml(f.masked)) + '</span>' +
-          '</div>';
-      });
-      html += '</div>';
-      matchingDetailsContainer.innerHTML = html;
+    // Progress badge (Teal/Neutral progress styling instead of alert orange)
+    funnelRateBadge.textContent = funnel.completionPercentage + '% Completed (' + funnel.completedCount + '/5)';
+    if (funnel.completionPercentage === 100) {
+      funnelRateBadge.className = 'badge badge-success';
+    } else if (funnel.completionPercentage > 0) {
+      funnelRateBadge.className = 'badge badge-info';
     } else {
-      matchingDetailsContainer.innerHTML = '<div class="empty-state-sm">No advanced matching user identifiers detected in this session yet.</div>';
+      funnelRateBadge.className = 'badge badge-neutral';
     }
 
-    // Privacy Inspector
-    const allEvtsStr = JSON.stringify(s?.events || []);
-    const hasRawEmail = allEvtsStr.includes('@');
-    const hasRawPhone = /"phone":\s*"\+?[0-9]{8,15}"/i.test(allEvtsStr);
+    let funnelHtml = '';
+    funnel.steps.forEach((step) => {
+      const isTriggered = step.detected;
+      const timeStr = step.latestTimestamp ? formatTimestamp(step.latestTimestamp) : '';
 
-    privacyInspectorContainer.innerHTML = '<div class="privacy-item">' +
-      '<span>Protected Hashed Identifiers</span>' +
-      '<span class="privacy-status-pass">' + (fields.some(f => f.isHashed) ? '✓ Detected SHA-256' : 'Not sent') + '</span>' +
-      '</div>' +
-      '<div class="privacy-item">' +
-      '<span>Raw Email in Network Payload</span>' +
-      '<span class="' + (hasRawEmail ? 'privacy-status-alert' : 'privacy-status-pass') + '">' + (hasRawEmail ? '✕ Raw Email Exposed!' : '✓ Clean (Not detected)') + '</span>' +
-      '</div>' +
-      '<div class="privacy-item">' +
-      '<span>Raw Phone in Network Payload</span>' +
-      '<span class="' + (hasRawPhone ? 'privacy-status-alert' : 'privacy-status-pass') + '">' + (hasRawPhone ? '✕ Raw Phone Exposed!' : '✓ Clean (Not detected)') + '</span>' +
-      '</div>';
+      // Check if this step event had parameter errors/warnings
+      let stepSubText = 'Action pending in session';
+      let statusBadgeHtml = '';
+
+      if (isTriggered) {
+        const stepEvt = currentTabState.events ? currentTabState.events.find(e => e.name === step.name) : null;
+        const valResults = (stepEvt && stepEvt.validation && stepEvt.validation.parameterResults) ? Object.values(stepEvt.validation.parameterResults) : [];
+        const errorCount = valResults.filter(r => r.severity === 'error' || r.valid === false).length;
+        const warningCount = valResults.filter(r => r.severity === 'warning').length;
+
+        if (errorCount > 0) {
+          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered') + ' <span class="badge badge-error" style="font-size:10px; padding:1px 5px; margin-left:4px;">' + errorCount + ' issue</span>';
+          stepSubText = '<span style="color:var(--status-error);">' + errorCount + ' parameter error (' + (errorCount === 1 ? 'e.g. amount' : 'parameters') + ')</span> &bull; Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent');
+        } else if (warningCount > 0) {
+          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered') + ' <span class="badge badge-warning" style="font-size:10px; padding:1px 5px; margin-left:4px;">' + warningCount + ' warning</span>';
+          stepSubText = 'Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent');
+        } else {
+          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered');
+          stepSubText = 'Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent') + (step.hasAmount ? ' &bull; Amount set' : '');
+        }
+      } else {
+        statusBadgeHtml = renderStatusBadge('neutral', 'Not triggered');
+      }
+
+      funnelHtml += `
+        <div class="funnel-step-row ${isTriggered ? 'completed' : 'pending'}">
+          <div class="funnel-step-disc">${step.stepNumber}</div>
+          <div class="funnel-step-content">
+            <span class="funnel-step-title">${escapeHtml(step.label)}</span>
+            <span class="funnel-step-sub">${stepSubText}</span>
+          </div>
+          <div class="funnel-step-meta">
+            ${timeStr ? ('<span class="mono" style="font-size: 11px; color: var(--text-muted);">' + timeStr + '</span>') : ''}
+            ${statusBadgeHtml}
+          </div>
+        </div>
+      `;
+    });
+    funnelPipelineContainer.innerHTML = funnelHtml;
   }
 
-  // 7. Data Layer
+  // ==========================================
+  // 9. Data Layer Developer Feed Renderer
+  // ==========================================
   function renderDataLayer() {
-    if (!datalayerListContainer) return;
-    const s = currentTabState;
-    const dl = s?.dataLayer || [];
+    if (!currentTabState) return;
+    const gtmContainers = currentTabState.gtmContainers || [];
+    const dataLayerEvents = currentTabState.dataLayer || [];
 
-    if (gtmContainerBadge && gtmContainerPills) {
-      const gtm = s?.gtmContainers || [];
-      if (gtm.length > 0) {
-        gtmContainerBadge.className = 'badge badge-success';
-        gtmContainerBadge.textContent = gtm.length + ' Active';
-        gtmContainerPills.innerHTML = gtm.map(id => '<span class="badge badge-info mono">' + escapeHtml(id) + '</span>').join(' ');
-      } else {
-        gtmContainerBadge.className = 'badge badge-neutral';
-        gtmContainerBadge.textContent = 'None detected';
-        gtmContainerPills.innerHTML = '<span class="text-muted" style="font-size:11.5px;">No GTM containers found</span>';
-      }
+    if (gtmContainers.length > 0) {
+      gtmContainerBadge.textContent = gtmContainers.length + ' Detected';
+      gtmContainerBadge.className = 'badge badge-success';
+      gtmContainerPills.innerHTML = gtmContainers.map((gId) => `
+        <span class="gtm-pill">
+          <span>${escapeHtml(gId)}</span>
+          <button class="btn-copy-inline" data-copy="${escapeHtml(gId)}" title="Copy GTM ID">${ICONS.copy}</button>
+        </span>
+      `).join(' ');
+      attachCopyListeners(gtmContainerPills);
+    } else {
+      gtmContainerBadge.textContent = 'None Detected';
+      gtmContainerBadge.className = 'badge badge-neutral';
+      gtmContainerPills.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No Google Tag Manager containers detected.</span>';
     }
 
-    if (dl.length === 0) {
-      datalayerListContainer.innerHTML = '<div class="empty-state-sm">No dataLayer.push events recorded.</div>';
+    if (dataLayerEvents.length === 0) {
+      datalayerListContainer.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">${ICONS.emptyEvents}</span>
+          <p class="empty-text">No window.dataLayer pushes recorded.</p>
+          <span class="empty-subtext">Events pushed to window.dataLayer appear here in real time.</span>
+        </div>
+      `;
       return;
     }
 
     datalayerListContainer.innerHTML = '';
-    dl.forEach((item) => {
+    dataLayerEvents.slice().reverse().forEach((dl, idx) => {
+      const isExpanded = expandedDlIndices.has(idx);
+      const evtName = dl.event || (dl.data && dl.data.event) || 'dataLayer.push';
+      const timeStr = formatTimestamp(dl.timestamp);
+
+      // Distinguish GTM core lifecycle vs Custom / Ecom
+      const isGtmCore = ['gtm.js', 'gtm.dom', 'gtm.load', 'gtm.historyChange-v2', 'gtm.init'].includes(evtName);
+      const badgeClass = isGtmCore ? 'dl-badge dl-badge-core' : 'dl-badge dl-badge-custom';
+      const badgeLabel = isGtmCore ? 'GTM Core' : 'Custom';
+
       const row = document.createElement('div');
-      row.style.cssText = 'padding:6px 0; border-bottom:1px solid var(--border-subtle); font-size:11.5px;';
-      row.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-        '<strong class="mono text-emerald">' + escapeHtml(item.event || 'push') + '</strong>' +
-        '<span class="text-muted mono">' + formatTimestamp(item.timestamp) + '</span>' +
-        '</div>';
+      row.className = 'dl-row ' + (isExpanded ? 'open' : '');
+      row.innerHTML = `
+        <div class="dl-row-header">
+          <div class="dl-row-left">
+            <span class="dl-chevron">${ICONS.chevronDown}</span>
+            <span class="dl-time">${timeStr}</span>
+            <span class="${badgeClass}">${badgeLabel}</span>
+            <span class="dl-name">${escapeHtml(evtName)}</span>
+          </div>
+          <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${Object.keys(dl.data || {}).length} keys</span>
+        </div>
+        <div class="dl-drawer">
+          <pre class="payload-code">${escapeHtml(JSON.stringify(dl.data || dl, null, 2))}</pre>
+        </div>
+      `;
+
+      row.addEventListener('click', () => {
+        if (expandedDlIndices.has(idx)) {
+          expandedDlIndices.delete(idx);
+          row.classList.remove('open');
+        } else {
+          expandedDlIndices.add(idx);
+          row.classList.add('open');
+        }
+      });
+
       datalayerListContainer.appendChild(row);
     });
   }
 
-  // 8. Attribution
+  // ==========================================
+  // 10. Attribution (oppref) Renderer
+  // ==========================================
   function renderAttribution() {
-    const s = currentTabState;
-    const attr = s?.attribution || {};
+    if (!currentTabState) return;
+    const attribution = currentTabState.attribution || {};
 
-    if (opprefStatusBadge) {
-      if (attr.oppref) {
-        opprefStatusBadge.className = 'badge badge-success';
-        opprefStatusBadge.textContent = 'Detected ✓';
-      } else {
-        opprefStatusBadge.className = 'badge badge-neutral';
-        opprefStatusBadge.textContent = 'Not detected';
-      }
+    if (attribution.oppref) {
+      opprefStatusBadge.textContent = 'Detected';
+      opprefStatusBadge.className = 'badge badge-success';
+    } else {
+      opprefStatusBadge.textContent = 'Not detected';
+      opprefStatusBadge.className = 'badge badge-neutral';
     }
 
-    if (attrUrlVal) attrUrlVal.textContent = attr.details?.urlParam || 'Not found';
-    if (attrCookieVal) attrCookieVal.textContent = attr.details?.cookieValue || 'Not found';
-    if (attrStorageVal) attrStorageVal.textContent = attr.details?.localStorage || 'Not found';
-    if (attrActiveKey) attrActiveKey.textContent = attr.oppref || 'None';
+    attrUrlVal.innerHTML = attribution.urlDetected ? makeCopyable(attribution.details.urlParam, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.urlParam) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    attrCookieVal.innerHTML = attribution.cookieDetected ? makeCopyable(attribution.details.cookieValue, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.cookieValue) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    attrStorageVal.innerHTML = attribution.storageDetected ? makeCopyable(attribution.details.localStorage, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.localStorage) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    attrActiveKey.innerHTML = attribution.oppref ? makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.oppref) + '</span>') : '<span style="color:var(--text-muted);">None</span>';
+
+    attachCopyListeners(attrUrlVal);
+    attachCopyListeners(attrCookieVal);
+    attachCopyListeners(attrStorageVal);
+    attachCopyListeners(attrActiveKey);
   }
 
-  // 9. Issues
+  // ==========================================
+  // 11. Issues & Diagnostics Renderer
+  // ==========================================
   function renderIssues() {
-    if (!issuesListContainer) return;
-    const s = currentTabState;
-    const events = s?.events || [];
+    if (!currentTabState) return;
+    const report = generateAuditReport(currentTabState);
+    const allIssues = report.issues || [];
 
-    const allIssues = [];
-    events.forEach(e => {
-      if (e.validation?.findings) {
-        e.validation.findings.forEach(f => allIssues.push(f));
-      }
-    });
-
-    const errorCount = allIssues.filter(i => i.severity === 'error' || i.severity === 'critical').length;
-    const warnCount = allIssues.filter(i => i.severity === 'warning').length;
+    const errorCount = allIssues.filter(i => i.severity === 'critical' || i.severity === 'error').length;
+    const warningCount = allIssues.filter(i => i.severity === 'warning').length;
     const infoCount = allIssues.filter(i => i.severity === 'info').length;
+    const totalCount = allIssues.length;
 
-    if (issueFilterCountAll) issueFilterCountAll.textContent = allIssues.length;
+    // Update filter counts
+    if (issueFilterCountAll) issueFilterCountAll.textContent = totalCount;
     if (issueFilterCountError) issueFilterCountError.textContent = errorCount;
-    if (issueFilterCountWarning) issueFilterCountWarning.textContent = warnCount;
+    if (issueFilterCountWarning) issueFilterCountWarning.textContent = warningCount;
     if (issueFilterCountInfo) issueFilterCountInfo.textContent = infoCount;
 
-    if (issuesStatusBadge) {
-      if (errorCount > 0) {
-        issuesStatusBadge.className = 'badge badge-error';
-        issuesStatusBadge.textContent = errorCount + ' Critical';
-      } else if (warnCount > 0) {
-        issuesStatusBadge.className = 'badge badge-warning';
-        issuesStatusBadge.textContent = warnCount + ' Warnings';
-      } else {
-        issuesStatusBadge.className = 'badge badge-success';
-        issuesStatusBadge.textContent = '0 Issues ✓';
-      }
+    // Update badges
+    issuesStatusBadge.textContent = totalCount + ' Diagnostic' + (totalCount === 1 ? '' : 's');
+    if (errorCount > 0) {
+      issuesStatusBadge.className = 'badge badge-error';
+    } else if (warningCount > 0) {
+      issuesStatusBadge.className = 'badge badge-warning';
+    } else if (infoCount > 0) {
+      issuesStatusBadge.className = 'badge badge-info';
+    } else {
+      issuesStatusBadge.className = 'badge badge-neutral';
     }
 
-    const filteredIssues = allIssues.filter(i => {
-      if (currentIssueFilter === 'error') return i.severity === 'error' || i.severity === 'critical';
-      if (currentIssueFilter === 'warning') return i.severity === 'warning';
-      if (currentIssueFilter === 'info') return i.severity === 'info';
+    issuesSummarySubtitle.textContent = errorCount + ' Error' + (errorCount === 1 ? '' : 's') + ' · ' + warningCount + ' Warning' + (warningCount === 1 ? '' : 's') + ' · ' + infoCount + ' Info';
+
+    const filteredIssues = allIssues.filter((iss) => {
+      const sev = iss.severity === 'critical' ? 'error' : iss.severity;
+      if (currentIssueFilter === 'all') return true;
+      if (currentIssueFilter === 'error') return sev === 'error';
+      if (currentIssueFilter === 'warning') return sev === 'warning';
+      if (currentIssueFilter === 'info') return sev === 'info';
       return true;
     });
 
     if (filteredIssues.length === 0) {
-      issuesListContainer.innerHTML = '<div class="empty-state"><div class="empty-icon text-emerald">' + ICONS.check + '</div><div class="empty-title">All Checks Passed</div><div class="empty-desc">No tracking or schema issues detected in this session.</div></div>';
+      issuesListContainer.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">${ICONS.emptyCheck}</span>
+          <p class="empty-text">No diagnostics matching this filter.</p>
+          <span class="empty-subtext">All observed tracking calls meet verification criteria.</span>
+        </div>
+      `;
       return;
     }
 
     issuesListContainer.innerHTML = '';
-    filteredIssues.forEach(iss => {
-      const el = document.createElement('div');
-      el.className = 'issue-item-card';
-      el.style.cssText = 'background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px;';
+    filteredIssues.forEach((iss) => {
+      const card = document.createElement('div');
+      const sev = iss.severity === 'critical' ? 'error' : (iss.severity || 'warning');
+      card.className = 'issue-item issue-item-' + sev;
 
-      el.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">' +
-        '<strong style="font-size:12px; color:var(--text-main);">' + escapeHtml(iss.title) + '</strong>' +
-        renderStatusBadge(iss.severity, iss.severity.toUpperCase()) +
-        '</div>' +
-        '<div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:4px;">' + escapeHtml(iss.message) + '</div>' +
-        (iss.recommendedFix ? '<div style="font-size:11px; color:var(--accent-brand); font-weight:500;">Recommended Fix: ' + escapeHtml(iss.recommendedFix) + '</div>' : '');
+      // Human-readable titles
+      let headline = iss.title || iss.code;
+      if (iss.code === 'PARAM_CONTENTS_ITEM_ERROR') headline = 'Invalid Item Amount';
+      else if (iss.code === 'PII_LEAK_DETECTED') headline = 'PII Data Privacy Violation';
+      else if (iss.code === 'DOUBLE_FIRING_DETECTED') headline = 'Duplicate Event Double Fired';
+      else if (iss.code === 'OPPREF_NOT_DETECTED') headline = 'No Attribution Identifier (Direct Visit)';
+      else if (iss.code === 'PIXEL_NOT_INITIALIZED') headline = 'Pixel SDK Not Initialized';
 
-      issuesListContainer.appendChild(el);
+      const eventName = iss.event || '';
+      const paramName = iss.parameter || '';
+
+      // Parse Received vs Expected if available
+      let receivedVal = iss.received;
+      let expectedVal = iss.expected;
+
+      if (receivedVal === undefined && iss.message && iss.message.includes('Received')) {
+        const match = iss.message.match(/Received\s+([^\s→]+)\s*→\s*Expected\s+([^\s(]+)/);
+        if (match) {
+          receivedVal = match[1];
+          expectedVal = match[2];
+        }
+      }
+
+      // Build structured context elements
+      let contextHtml = '';
+      if (eventName || paramName) {
+        contextHtml = `
+          <div class="issue-context-grid">
+            ${eventName ? ('<div class="issue-context-item"><span class="issue-context-label">Event</span><code class="issue-context-val">' + escapeHtml(eventName) + '</code></div>') : ''}
+            ${paramName ? ('<div class="issue-context-item"><span class="issue-context-label">Parameter</span><code class="issue-context-val">' + escapeHtml(paramName) + '</code></div>') : ''}
+          </div>
+        `;
+      }
+
+      let diffHtml = '';
+      if (receivedVal !== undefined && expectedVal !== undefined && receivedVal !== null && expectedVal !== null) {
+        diffHtml = `
+          <div class="issue-diff-row">
+            <div class="issue-diff-item"><span class="diff-label">Received:</span> <code class="diff-val-received">${escapeHtml(String(receivedVal))}</code></div>
+            <span class="diff-arrow">&rarr;</span>
+            <div class="issue-diff-item"><span class="diff-label">Expected:</span> <code class="diff-val-expected">${escapeHtml(String(expectedVal))}</code></div>
+          </div>
+        `;
+      }
+
+      const recText = iss.recommendation || '';
+
+      card.innerHTML = `
+        <div class="issue-item-top">
+          <span class="issue-headline">${escapeHtml(headline)}</span>
+          ${renderStatusBadge(sev, sev.toUpperCase())}
+        </div>
+        <span class="issue-code-meta">${escapeHtml(iss.code)}</span>
+        ${contextHtml}
+        ${diffHtml}
+        <p class="issue-desc">${escapeHtml(iss.message)}</p>
+        ${recText ? ('<div class="issue-action-box"><strong>Recommended fix:</strong> ' + escapeHtml(recText) + '</div>') : ''}
+      `;
+      issuesListContainer.appendChild(card);
     });
   }
 
-  // 10. Audit Tab
+  // ==========================================
+  // 12. Audit Summary & Export Renderer
+  // ==========================================
+  // ==========================================
+  // 12. Audit Summary & Export Renderer (14 Sections)
+  // ==========================================
   function renderAudit() {
-    if (!auditSummaryBox) return;
-    const s = currentTabState;
-    if (!s) return;
+    if (!currentTabState) return;
+    const report = generateComprehensiveAudit(currentTabState);
 
-    let targetWebsite = 'Current Page';
-    try {
-      if (s.url) targetWebsite = new URL(s.url).hostname;
-    } catch {}
-
-    const fullReport = generateComprehensiveAudit(s, targetWebsite);
-
+    // Update Header Badge & Subtitle
     if (auditScoreBadge) {
-      auditScoreBadge.textContent = fullReport.overallHealthScore + '% Health';
-      auditScoreBadge.className = fullReport.overallHealthScore >= 80 ? 'badge badge-success' : 'badge badge-warning';
+      auditScoreBadge.textContent = `${report.overallHealthScore}% Health`;
+      auditScoreBadge.className = `badge ${report.overallHealthScore >= 80 ? 'badge-success' : (report.overallHealthScore >= 60 ? 'badge-warning' : 'badge-error')}`;
     }
-
     if (auditSubtitleWebsite) {
-      auditSubtitleWebsite.textContent = targetWebsite + ' | ' + fullReport.auditDate;
+      auditSubtitleWebsite.textContent = `${report.website} · ${report.auditDate}`;
     }
 
-    auditSummaryBox.innerHTML = '<div class="audit-summary-box-inner" style="padding:10px 14px; font-size:12px;">' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Total Events:</span><strong>' + fullReport.counts.total + '</strong></div>' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Standard Events:</span><strong>' + fullReport.counts.standard + '</strong></div>' +
-      '<div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Passed:</span><strong class="text-emerald">' + fullReport.counts.passed + '</strong></div>' +
-      '<div style="display:flex; justify-content:space-between;"><span>Issues / Warnings:</span><strong class="text-rose">' + (fullReport.counts.warnings + fullReport.counts.critical) + '</strong></div>' +
-      '</div>';
+    // 1. Audit Summary Grid (Executive Metrics)
+    if (auditSummaryBox) {
+      auditSummaryBox.innerHTML = `
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Total Events</span>
+          <span class="audit-stat-val">${report.counts.total} (${report.counts.standard} Standard · ${report.counts.custom} Custom)</span>
+        </div>
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Event Health</span>
+          <span class="audit-stat-val text-emerald">${report.counts.passed} Passed · <span class="${report.counts.warnings > 0 ? 'text-amber' : ''}">${report.counts.warnings} Warnings</span></span>
+        </div>
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Critical Issues</span>
+          <span class="audit-stat-val ${report.counts.critical > 0 ? 'text-rose' : 'text-emerald'}">${report.counts.critical > 0 ? (report.counts.critical + ' Critical Issue(s)') : '0 Critical Issues'}</span>
+        </div>
+        <div class="audit-stat-card">
+          <span class="audit-stat-label">Overall Status</span>
+          <span class="audit-stat-val ${report.overallHealthScore >= 80 ? 'text-emerald' : 'text-amber'}">${report.overallStatus}</span>
+        </div>
+      `;
+    }
 
+    // 2. Event Tracking Overview Table
+    if (auditOverviewCount) {
+      auditOverviewCount.textContent = `${report.counts.total} Events`;
+    }
     if (auditOverviewTableContainer) {
-      let rowsHtml = '';
-      (fullReport.overviewTable || []).forEach(row => {
-        rowsHtml += '<tr>' +
-          '<td style="font-weight:600;">' + escapeHtml(row.name) + '</td>' +
-          '<td>' + escapeHtml(row.type) + '</td>' +
-          '<td style="text-align:center;">' + row.trigger + '</td>' +
-          '<td style="text-align:center;">' + row.parameters + '</td>' +
-          '<td style="text-align:center;">' + row.duplicate + '</td>' +
-          '<td style="text-align:right;">' + row.status + '</td>' +
-          '</tr>';
-      });
-
-      auditOverviewTableContainer.innerHTML = '<table class="health-table" style="width:100%; font-size:11.5px;">' +
-        '<thead>' +
-        '<tr style="color:var(--text-muted); border-bottom:1px solid var(--border-color);">' +
-        '<th>Event</th>' +
-        '<th>Type</th>' +
-        '<th style="text-align:center;">Trigger</th>' +
-        '<th style="text-align:center;">Params</th>' +
-        '<th style="text-align:center;">Duplicate</th>' +
-        '<th style="text-align:right;">Status</th>' +
-        '</tr>' +
-        '</thead>' +
-        '<tbody>' + (rowsHtml || '<tr><td colspan="6" class="text-muted">No events tracked</td></tr>') + '</tbody>' +
-        '</table>';
-    }
-
-    if (auditScoresGrid) {
-      const sc = fullReport.scores || {};
-      auditScoresGrid.innerHTML = '<div class="score-card-item"><span>Payload Quality:</span> <strong>' + (sc.payloadQuality || 100) + '%</strong></div>' +
-        '<div class="score-card-item"><span>Ecommerce Data:</span> <strong>' + (sc.ecommerceData || 100) + '%</strong></div>' +
-        '<div class="score-card-item"><span>Duplicate Prevention:</span> <strong>' + (sc.duplicatePrevention || 100) + '%</strong></div>';
-    }
-
-    if (btnCopyMarkdown) {
-      btnCopyMarkdown.onclick = () => {
-        const md = formatAuditMarkdown(fullReport);
-        copyToClipboard(md, btnCopyMarkdown);
-      };
-    }
-
-    if (btnExportCsv) {
-      btnExportCsv.onclick = () => {
-        const csv = formatAuditCsv(fullReport);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'openai-pixel-audit-' + targetWebsite + '-' + Date.now() + '.csv';
-        a.click();
-      };
-    }
-
-    if (btnExportPdf) {
-      btnExportPdf.onclick = () => {
-        chrome.storage.local.set({ active_audit_report: fullReport }, () => {
-          chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
+      if (report.overviewTable.length === 0) {
+        auditOverviewTableContainer.innerHTML = '<div class="empty-state-sm">No events detected yet.</div>';
+      } else {
+        let tableHtml = `
+          <table class="audit-table">
+            <thead>
+              <tr>
+                <th style="width:36%;">Event</th>
+                <th style="width:20%;">Type</th>
+                <th style="width:11%; text-align:center;">Fired</th>
+                <th style="width:11%; text-align:center;">Params</th>
+                <th style="width:11%; text-align:center;">Dup</th>
+                <th style="width:11%; text-align:right;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+        report.overviewTable.forEach((row) => {
+          tableHtml += `
+            <tr>
+              <td style="width:36%;"><span class="audit-event-name-cell">${escapeHtml(row.name)}</span></td>
+              <td style="width:20%;"><span class="audit-event-type-badge badge-type-${row.type.toLowerCase()}">${row.type}</span></td>
+              <td style="width:11%; text-align:center;">${row.trigger}</td>
+              <td style="width:11%; text-align:center;">${row.parameters}</td>
+              <td style="width:11%; text-align:center;">${row.duplicate}</td>
+              <td style="width:11%; text-align:right;"><span class="badge ${row.severity === 'valid' ? 'badge-success' : (row.severity === 'warning' ? 'badge-warning' : 'badge-error')}" style="font-size:9.5px; padding:1px 4px; white-space:nowrap;">${escapeHtml(row.status)}</span></td>
+            </tr>
+          `;
         });
-      };
+        tableHtml += '</tbody></table>';
+        auditOverviewTableContainer.innerHTML = tableHtml;
+      }
     }
 
-    // View Mode Toggle (Client View vs Technical View)
-    if (btnViewClient && btnViewTechnical) {
-      btnViewClient.onclick = () => {
-        viewMode = 'client';
-        btnViewClient.classList.add('active');
-        btnViewTechnical.classList.remove('active');
-        renderEventsList();
-        renderNetworkRequests();
-      };
-
-      btnViewTechnical.onclick = () => {
-        viewMode = 'technical';
-        btnViewTechnical.classList.add('active');
-        btnViewClient.classList.remove('active');
-        renderEventsList();
-        renderNetworkRequests();
-      };
+    // 3. Final Tracking Score Breakdown
+    if (auditScoresGrid) {
+      auditScoresGrid.innerHTML = `
+        <div class="score-card">
+          <span class="score-val">${report.scores.coverage}%</span>
+          <span class="score-label">Event Coverage</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.payloadQuality}%</span>
+          <span class="score-label">Payload Quality</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.ecommerceData}%</span>
+          <span class="score-label">Ecommerce Data</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.parameterQuality}%</span>
+          <span class="score-label">Parameter Quality</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.duplicatePrevention}%</span>
+          <span class="score-label">Duplicate Prevention</span>
+        </div>
+        <div class="score-card">
+          <span class="score-val">${report.scores.customEventQuality}%</span>
+          <span class="score-label">Custom Event</span>
+        </div>
+      `;
     }
 
-    // System Events and Diagnostics Visibility Checkboxes
-    if (chkShowSystem) {
-      chkShowSystem.onchange = () => {
-        showSystemEvents = chkShowSystem.checked;
-        renderEventsList();
-      };
+    // Key Tracking Insights Section
+    if (auditInsightsContainer) {
+      if (report.insights && report.insights.length > 0) {
+        auditInsightsContainer.innerHTML = report.insights.map(ins => `
+          <div class="audit-insight-card insight-${ins.type || 'neutral'}">
+            <span class="insight-icon-badge">${ins.icon || 'ℹ️'}</span>
+            <div class="insight-content-col">
+              <span class="insight-title-text">${escapeHtml(ins.title)}</span>
+              <span class="insight-desc-text">${escapeHtml(ins.desc)}</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        auditInsightsContainer.innerHTML = '<div class="empty-state-sm">No insights available.</div>';
+      }
     }
 
-    if (chkShowDiagnostics) {
-      chkShowDiagnostics.onchange = () => {
-        showDiagnostics = chkShowDiagnostics.checked;
-        renderEventsList();
-      };
+    // 12. Issues & 13. Recommended Actions Section
+    if (auditActionsContainer) {
+      let actionsHtml = '';
+      if (report.recommendations && report.recommendations.length > 0) {
+        actionsHtml = `
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            ${report.recommendations.map((rec, i) => `
+              <div class="action-step-item">
+                <span class="action-step-num">${i + 1}</span>
+                <span>${escapeHtml(rec)}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else {
+        actionsHtml = '<div class="empty-state-sm">No outstanding actions required. Implementation is healthy.</div>';
+      }
+      auditActionsContainer.innerHTML = actionsHtml;
     }
   }
 
-  loadActiveTabState();
+  // ==========================================
+  // 13. Action Handlers
+  // ==========================================
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', async () => {
+      btnRefresh.style.transform = 'rotate(180deg)';
+      setTimeout(() => { btnRefresh.style.transform = 'none'; }, 300);
+      if (activeTab) {
+        chrome.tabs.sendMessage(activeTab.id, { action: 'REQUEST_SCAN' }).catch(() => {});
+      }
+      await updateState();
+    });
+  }
+
+  if (btnClear) {
+    btnClear.addEventListener('click', async () => {
+      if (activeTab) {
+        expandedEventIds.clear();
+        expandedPayloadEventIds.clear();
+        expandedDlIndices.clear();
+        await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
+        await updateState();
+      }
+    });
+  }
+
+  if (btnCopyMarkdown) {
+    btnCopyMarkdown.addEventListener('click', () => {
+      if (!currentTabState) return;
+      const report = generateComprehensiveAudit(currentTabState);
+      const md = formatAuditMarkdown(report);
+      copyToClipboard(md, btnCopyMarkdown);
+    });
+  }
+
+  if (btnExportCsv) {
+    btnExportCsv.addEventListener('click', () => {
+      if (!currentTabState) return;
+      const report = generateComprehensiveAudit(currentTabState);
+      const csvContent = formatAuditCsv(report, currentTabState);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const filename = 'openai_pixel_audit_' + Date.now() + '.csv';
+      const blobUrl = URL.createObjectURL(blob);
+
+      if (typeof chrome !== 'undefined' && chrome.downloads && chrome.downloads.download) {
+        chrome.downloads.download({
+          url: blobUrl,
+          filename: filename,
+          saveAs: true
+        }, () => {
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        });
+      } else {
+        const dlAnchor = document.createElement('a');
+        dlAnchor.href = blobUrl;
+        dlAnchor.download = filename;
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        document.body.removeChild(dlAnchor);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      }
+    });
+  }
+
+  if (btnExportPdf) {
+    btnExportPdf.addEventListener('click', () => {
+      if (!currentTabState) return;
+      const report = generateComprehensiveAudit(currentTabState);
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ active_audit_report: report }, () => {
+          chrome.tabs.create({ url: chrome.runtime.getURL('popup/report.html') });
+        });
+      } else {
+        window.open(chrome.runtime.getURL('popup/report.html'), '_blank');
+      }
+    });
+  }
+
+  // Initial Load and Polling interval
+  await updateState();
+  setInterval(updateState, 2000);
 });

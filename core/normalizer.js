@@ -14,13 +14,12 @@
 
 import { generateUUID } from '../utils/formatting.js';
 import { validateEvent } from '../validators/event-validator.js';
-import { extractUserInfoFromPayload } from '../network/request-parser.js';
 
 export function normalizeEvent(rawEvent, tabContext = {}) {
   const timestamp = rawEvent.timestamp || Date.now();
   const rawArgs = rawEvent.args || [];
   
-  let eventName = rawEvent.name || rawEvent.eventName || '';
+  let eventName = rawEvent.name || '';
   let properties = {};
   let options = {};
 
@@ -35,8 +34,8 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     if (rawArgs.length >= 3 && typeof rawArgs[2] === 'object' && rawArgs[2] !== null) {
       options = Object.assign({}, rawArgs[2]);
     }
-  } else if (rawEvent.parameters || rawEvent.data) {
-    properties = Object.assign({}, rawEvent.parameters || rawEvent.data);
+  } else if (rawEvent.parameters) {
+    properties = Object.assign({}, rawEvent.parameters);
   }
 
   if (rawEvent.options && typeof rawEvent.options === 'object') {
@@ -54,7 +53,7 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
   }
 
   // Determine URL and Path
-  const pageUrl = rawEvent.sourceUrl || rawEvent.url || tabContext.url || '';
+  const pageUrl = rawEvent.url || tabContext.url || '';
   let pathname = rawEvent.pathname || '';
   let hostname = '';
 
@@ -68,60 +67,41 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
 
   const displayName = (eventName === 'custom' && options.custom_event_name) ? options.custom_event_name : eventName;
 
-  // Extract customer / user information from rawEvent.userInfo, properties, or raw payload
-  const combinedPayload = Object.assign({}, properties, options, rawEvent.rawPayload || {});
-  const detectedUserInfo = rawEvent.userInfo || extractUserInfoFromPayload(combinedPayload);
-
-  const isNetworkSource = rawEvent.source?.type === 'network' || rawEvent.source?.location === 'browser_network_request';
-
   const normalized = {
-    _id: generateUUID(), // Internal render key only
-    eventId: explicitEventId, // Real Advertiser Event ID or null (NEVER synthetic!)
+    _id: generateUUID(), // Internal React/DOM render key only
+    eventId: explicitEventId, // Real Event ID or null (NEVER generated!)
     hasEventId: Boolean(explicitEventId),
-    sdkEventId: rawEvent.sdkEventId || null, // Internal SDK Event UUID (e.g. 6aa34209-00f0...)
     name: eventName,
     displayName: displayName,
     timestamp: timestamp,
     url: pageUrl,
     pathname: pathname || '/',
     hostname: hostname,
-    sourceUrl: rawEvent.sourceUrl || pageUrl,
-    referrerUrl: rawEvent.referrerUrl || null,
-    optOut: rawEvent.optOut !== undefined ? rawEvent.optOut : null,
-    parentRequestId: rawEvent.parentRequestId || null,
     source: {
-      type: isNetworkSource ? 'network' : 'pixel',
-      location: isNetworkSource ? 'browser_network_request' : 'browser',
-      caller: rawEvent.caller || (isNetworkSource ? 'Browser Network Request (bzr.openai.com)' : 'oaiq("measure")'),
-      method: rawEvent.method || (rawEvent.caller && rawEvent.caller.includes('measureSingle') ? 'measureSingle' : 'measure')
+      type: 'pixel',
+      location: 'browser',
+      caller: rawEvent.caller || 'oaiq("measure")'
     },
-    evidence: isNetworkSource ? 'Browser Network Request' : 'JavaScript Interception',
-    jsObserved: isNetworkSource ? Boolean(rawEvent.jsObserved) : true,
     pixelId: rawEvent.pixelId || tabContext.pixelId || null,
-    targetPixelId: rawEvent.targetPixelId || null,
-    recipients: Array.isArray(rawEvent.recipients) ? rawEvent.recipients : (rawEvent.pixelId ? [rawEvent.pixelId] : []),
-    allPixelIds: Array.isArray(rawEvent.allPixelIds) ? rawEvent.allPixelIds : (rawEvent.pixelId ? [rawEvent.pixelId] : []),
     parameters: properties,
     options: options,
-    userInfo: detectedUserInfo, // Detected customer / user information
     attribution: {
       oppref: tabContext.oppref || null
     },
     network: {
-      detected: isNetworkSource || Boolean(rawEvent.network?.detected),
-      status: rawEvent.network?.status || (isNetworkSource ? 200 : null),
-      method: rawEvent.network?.method || (isNetworkSource ? 'POST' : null),
-      url: rawEvent.network?.url || rawEvent.requestUrl || null,
-      headers: rawEvent.network?.headers || {},
-      payload: rawEvent.rawPayload || properties,
-      responseTimestamp: rawEvent.network?.responseTimestamp || null,
-      userInfo: null
+      detected: false,
+      status: null,
+      method: null,
+      url: null,
+      headers: {},
+      payload: null,
+      responseTimestamp: null
     },
     // Journey & Duplicate Audit Fields
     isDuplicate: false,
     duplicateReason: null,
     requestCount: 1,
-    duplicateStatus: isNetworkSource ? '✅ Sent (Network Request)' : '⏳ Awaiting Network Transmission',
+    duplicateStatus: '✅ Correct',
     validation: null,
     raw: rawEvent
   };
@@ -138,9 +118,9 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
 export function computeEventLifecycle(event) {
   // 1. Pixel Call
   const pixelCall = {
-    status: event.jsObserved !== false ? 'fired' : 'not_available',
-    label: event.jsObserved !== false ? '✅ Observed' : 'ℹ️ Not Intercepted',
-    detail: event.jsObserved !== false ? 'Observed in browser JS runtime' : 'Captured directly via network monitor'
+    status: 'fired',
+    label: '✅ Fired',
+    detail: 'Executed in browser JS runtime via oaiq()'
   };
 
   // 2. Network Request
@@ -159,8 +139,8 @@ export function computeEventLifecycle(event) {
   } else {
     networkRequest = {
       status: 'not_observed',
-      label: '⚠️ Delivery Not Confirmed',
-      detail: 'Network request not observed during session'
+      label: '⚠️ Not Observed',
+      detail: 'Network POST not yet recorded'
     };
   }
 
@@ -210,14 +190,31 @@ export function computeEventLifecycle(event) {
     }
   }
 
-  // 5. Overall Status
-  let overall = 'pass';
-  if (!event.network || !event.network.detected) {
-    overall = 'warning';
+  // 5. Overall Validation
+  let validationStatus = {
+    status: 'passed',
+    label: '✅ Passed',
+    detail: 'Compliant with OpenAI specifications'
+  };
+
+  if (event.isDuplicate) {
+    validationStatus = {
+      status: 'failed',
+      label: '❌ Failed (Duplicate / Double Fired)',
+      detail: event.duplicateReason || 'Multiple identical tracking calls fired'
+    };
   } else if (event.validation && event.validation.status === 'error') {
-    overall = 'error';
+    validationStatus = {
+      status: 'failed',
+      label: '❌ Failed',
+      detail: 'Critical validation errors found'
+    };
   } else if (event.validation && event.validation.status === 'warning') {
-    overall = 'warning';
+    validationStatus = {
+      status: 'warning',
+      label: '⚠️ Warning',
+      detail: 'Minor formatting issues detected'
+    };
   }
 
   return {
@@ -225,6 +222,6 @@ export function computeEventLifecycle(event) {
     networkRequest,
     serverResponse,
     parametersStatus,
-    overall
+    validationStatus
   };
 }

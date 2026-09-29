@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const settings = await getSettings();
   customEventValidationInput.checked = settings.customEventValidation !== false;
   networkInterceptionInput.checked = settings.networkInterception !== false;
-  debugLoggingInput.checked = settings.debugLogging !== false;
+  debugLoggingInput.checked = Boolean(settings.debugLogging);
 
   btnSave.addEventListener('click', async () => {
     const newSettings = {

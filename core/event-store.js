@@ -1,31 +1,14 @@
 /**
- * OpenAI Ads Pixel Inspector - Event Store, Pixel Registry & Multi-Pixel Analyzer
+ * OpenAI Ads Pixel Inspector - Event Store & Journey Engine
  * 
- * Single source of truth for:
- * 1. Runtime Multi-Pixel Registry
- * 2. Network-First Event Lifecycle & Session Journey
- * 3. Batch Request Processing & Event Classification
- * 4. Same-Pixel Duplicate Detection vs Multi-Pixel Delivery
- * 5. Cross-Pixel Payload Consistency Comparison
- * 6. SDK Diagnostics & User Matching Storage
- * 7. Documented Audit Score Calculation
+ * Maintains full session journey history across all page navigations and reloads.
+ * Implements intelligent action-based duplicate detection (distinguishing intentional repeated actions from double-fires).
  */
-
-import { OFFICIAL_DOCS } from '../validators/schemas.js';
-import { normalizeEvent } from './normalizer.js';
-import { validateEvent } from '../validators/event-validator.js';
 
 export class EventStore {
   constructor() {
     this.events = [];
     this.duplicates = [];
-    this.parentRequests = [];
-    this.capturedRequests = []; // Stores up to 500 normalized OpenAIRequest containers
-    this.maxRequests = 500;
-    this.sdkEvents = [];
-    this.latestDiagnostics = null;
-    this.latestUserMatching = null;
-    this.pixelRegistry = {}; // { [pixelId]: { pixelId, events: [], eventCounts: {}, requestsCount: 0, firstSeen, lastSeen } }
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
   }
@@ -33,272 +16,51 @@ export class EventStore {
   clear() {
     this.events = [];
     this.duplicates = [];
-    this.parentRequests = [];
-    this.capturedRequests = [];
-    this.sdkEvents = [];
-    this.latestDiagnostics = null;
-    this.latestUserMatching = null;
-    this.pixelRegistry = {};
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
   }
 
   /**
-   * Register a pixel ID into the multi-pixel runtime registry
-   */
-  registerPixelId(pixelId, timestamp = Date.now()) {
-    if (!pixelId || typeof pixelId !== 'string') return;
-    const cleanId = pixelId.trim();
-    if (!this.pixelRegistry[cleanId]) {
-      this.pixelRegistry[cleanId] = {
-        pixelId: cleanId,
-        events: [],
-        eventCounts: {},
-        requestsCount: 0,
-        firstSeen: timestamp,
-        lastSeen: timestamp
-      };
-    } else {
-      this.pixelRegistry[cleanId].lastSeen = timestamp;
-    }
-  }
-
-  /**
-   * Processes an incoming parsed OpenAI Network Batch
-   * 
-   * @param {object} batch - { parentRequest, measurementEvents, internalEvents, diagnostics, userMatching }
-   * @param {object} tabContext
-   */
-  addNetworkBatch(batch, tabContext = {}) {
-    if (!batch) return;
-
-    if (batch.parentRequest) {
-      this.parentRequests.push(batch.parentRequest);
-      if (batch.openAIRequest) {
-        this.capturedRequests.push(batch.openAIRequest);
-        if (this.capturedRequests.length > this.maxRequests) {
-          this.capturedRequests.shift();
-        }
-      }
-      if (this.parentRequests.length > this.maxRequests) {
-        this.parentRequests.shift();
-      }
-      const pid = batch.parentRequest.pixelId || 'DEFAULT_PIXEL';
-      this.registerPixelId(pid, batch.parentRequest.timestamp);
-      if (this.pixelRegistry[pid]) {
-        this.pixelRegistry[pid].requestsCount = (this.pixelRegistry[pid].requestsCount || 0) + 1;
-      }
-    }
-
-    if (batch.diagnostics) {
-      this.latestDiagnostics = batch.diagnostics;
-    }
-
-    if (batch.userMatching) {
-      this.latestUserMatching = batch.userMatching;
-    }
-
-    if (Array.isArray(batch.internalEvents)) {
-      batch.internalEvents.forEach(ie => this.sdkEvents.push(ie));
-    }
-
-    if (Array.isArray(batch.measurementEvents)) {
-      batch.measurementEvents.forEach(mEvt => {
-        // Correlate with existing event or add as a new network event
-        const matched = this.correlateNetworkEvent(mEvt);
-        if (!matched) {
-          const normalized = normalizeEvent({
-            name: mEvt.name,
-            parameters: mEvt.parameters,
-            pixelId: mEvt.pixelId || batch.parentRequest?.pixelId || null,
-            sdkEventId: mEvt.sdkEventId,
-            sourceUrl: mEvt.sourceUrl,
-            referrerUrl: mEvt.referrerUrl,
-            optOut: mEvt.optOut,
-            parentRequestId: mEvt.parentRequestId,
-            userInfo: mEvt.userInfo || batch.userMatching,
-            timestamp: mEvt.timestamp,
-            source: {
-              type: 'network',
-              location: 'browser_network_request',
-              caller: 'Browser Network Request (bzr.openai.com)'
-            },
-            network: {
-              detected: true,
-              status: 200,
-              method: 'POST',
-              url: batch.parentRequest?.requestUrl || 'bzr.openai.com/v1/sdk/events',
-              payload: mEvt.data
-            }
-          }, tabContext);
-
-          this.addEvent(normalized);
-        }
-      });
-    }
-  }
-
-  /**
-   * Correlates an incoming network measurement event with an existing JS-intercepted event
-   */
-  correlateNetworkEvent(netEvt) {
-    for (let i = this.events.length - 1; i >= 0; i--) {
-      const evt = this.events[i];
-      const timeDiff = Math.abs(evt.timestamp - netEvt.timestamp);
-
-      if (timeDiff < 3500 && evt.name === netEvt.name) {
-        // If not yet correlated with a network request, correlate it
-        if (!evt.network || !evt.network.detected || evt.evidence !== 'Browser Network Request') {
-          evt.evidence = 'Browser Network Request';
-          evt.jsObserved = true;
-          evt.sdkEventId = netEvt.sdkEventId;
-          evt.sourceUrl = netEvt.sourceUrl || evt.url;
-          evt.referrerUrl = netEvt.referrerUrl;
-          evt.optOut = netEvt.optOut;
-          evt.parentRequestId = netEvt.parentRequestId;
-          evt.network.detected = true;
-          evt.network.status = 200;
-          evt.network.method = 'POST';
-          evt.network.payload = netEvt.parameters;
-          evt.duplicateStatus = '✅ Sent (Network Request)';
-
-          // Update parameters and user info to actual network payload and re-run validation on network data
-          evt.parameters = netEvt.parameters;
-          evt.userInfo = netEvt.userInfo || evt.userInfo;
-          evt.validation = validateEvent(evt);
-
-          return evt;
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Updates network completion/error status on tracked requests and events
-   */
-  correlateNetworkRequest(netEntry) {
-    if (!netEntry) return false;
-    const reqUrl = netEntry.url || '';
-    const status = netEntry.status;
-
-    let matched = false;
-    for (const evt of this.events) {
-      if (
-        (netEntry.requestId && evt.parentRequestId === netEntry.requestId) ||
-        (evt.network && evt.network.url === reqUrl)
-      ) {
-        if (!evt.network) evt.network = {};
-        evt.network.detected = true;
-        evt.network.status = status;
-        evt.network.responseTimestamp = netEntry.responseTimestamp || Date.now();
-        if (netEntry.error) {
-          evt.network.error = netEntry.error;
-        }
-        matched = true;
-      }
-    }
-
-    const parentReq = this.parentRequests.find(pr => pr.requestId === netEntry.requestId);
-    if (parentReq) {
-      parentReq.status = status;
-      parentReq.responseTimestamp = netEntry.responseTimestamp || Date.now();
-      if (netEntry.error) {
-        parentReq.error = netEntry.error;
-      }
-    }
-
-    return matched;
-  }
-
-  /**
-   * Add normalized event into session journey, update pixel registry, and evaluate duplicates
+   * Add normalized event into session journey and evaluate action duplicates
    */
   addEvent(normalizedEvent) {
-    const pixelId = normalizedEvent.pixelId || 'DEFAULT_PIXEL';
-    this.registerPixelId(pixelId, normalizedEvent.timestamp);
+    const matched = this.detectActionDuplicate(normalizedEvent);
+    
+    if (matched) {
+      normalizedEvent.isDuplicate = true;
+      normalizedEvent.duplicateOf = matched._id;
+      normalizedEvent.duplicateReason = matched.reason;
+      normalizedEvent.duplicateStatus = '❌ Double Fired / Duplicate';
+      
+      // Increment request count on matched primary event
+      matched.event.requestCount = (matched.event.requestCount || 1) + 1;
+      matched.event.duplicateStatus = `❌ Double Fired (${matched.event.requestCount}x)`;
+      
+      this.duplicates.push({
+        event: normalizedEvent,
+        matchedWithId: matched.event._id,
+        reason: matched.reason,
+        timestamp: Date.now()
+      });
 
-    // Update Pixel Registry stats
-    if (this.pixelRegistry[pixelId]) {
-      this.pixelRegistry[pixelId].events.push(normalizedEvent);
-      this.pixelRegistry[pixelId].eventCounts[normalizedEvent.name] = (this.pixelRegistry[pixelId].eventCounts[normalizedEvent.name] || 0) + 1;
-      this.pixelRegistry[pixelId].lastSeen = normalizedEvent.timestamp;
-    }
-
-    // Evaluate duplicates & multi-pixel delivery
-    const duplicateMatch = this.detectActionDuplicate(normalizedEvent);
-
-    if (duplicateMatch) {
-      if (duplicateMatch.type === 'same_pixel_duplicate') {
-        normalizedEvent.isDuplicate = true;
-        normalizedEvent.duplicateOf = duplicateMatch.event._id;
-        normalizedEvent.duplicateReason = duplicateMatch.reason;
-        normalizedEvent.duplicateStatus = '⚠️ Possible Duplicate';
-
-        duplicateMatch.event.requestCount = (duplicateMatch.event.requestCount || 1) + 1;
-        duplicateMatch.event.duplicateStatus = `⚠️ Possible Duplicate (${duplicateMatch.event.requestCount}x)`;
-
-        this.duplicates.push({
-          event: normalizedEvent,
-          matchedWithId: duplicateMatch.event._id,
-          reason: duplicateMatch.reason,
-          timestamp: Date.now()
+      // Add audit issue
+      if (normalizedEvent.validation) {
+        normalizedEvent.validation.issues.push({
+          code: 'DUPLICATE_EVENT_DETECTED',
+          severity: 'warning',
+          event: normalizedEvent.name,
+          message: `Event "${normalizedEvent.displayName || normalizedEvent.name}" double-fired on the same user action (${matched.reason}).`,
+          recommendation: 'Check your trigger configurations in Google Tag Manager or website JS to ensure this action only fires once per trigger.'
         });
-
-        if (normalizedEvent.validation) {
-          normalizedEvent.validation.findings.push({
-            severity: 'warning',
-            category: 'duplicate',
-            eventName: normalizedEvent.name,
-            pixelId: pixelId,
-            path: 'event',
-            code: 'POSSIBLE_DUPLICATE_EVENT',
-            title: 'Possible Duplicate Event',
-            detected: `Fired ${duplicateMatch.timeDiff}ms after previous call`,
-            expected: 'Single event execution per user trigger',
-            message: `Event "${normalizedEvent.displayName || normalizedEvent.name}" fired multiple times in close succession on pixel "${pixelId}" (${duplicateMatch.reason}).`,
-            documentationReference: OFFICIAL_DOCS.MEASUREMENT_PIXEL,
-            recommendedFix: 'Check trigger rules in Tag Manager or JS event listeners to prevent accidental multiple executions.'
-          });
-          normalizedEvent.validation.warningsCount++;
-          if (normalizedEvent.validation.status === 'valid') {
-            normalizedEvent.validation.status = 'warning';
-          }
-        }
-      } else if (duplicateMatch.type === 'multi_pixel_delivery') {
-        normalizedEvent.isMultiPixelDelivery = true;
-        normalizedEvent.multiPixelPartner = duplicateMatch.event._id;
-        normalizedEvent.duplicateStatus = 'ℹ️ Multi-Pixel Broadcast';
-
-        // Check if payloads between the two pixels match
-        const payloadDiff = this.comparePayloads(duplicateMatch.event, normalizedEvent);
-        if (payloadDiff.hasMismatch && normalizedEvent.validation) {
-          normalizedEvent.validation.findings.push({
-            severity: 'warning',
-            category: 'multi_pixel',
-            eventName: normalizedEvent.name,
-            pixelId: pixelId,
-            path: payloadDiff.mismatchedKeys.join(', '),
-            code: 'MULTI_PIXEL_PAYLOAD_MISMATCH',
-            title: 'Inconsistent Multi-Pixel Event Payload',
-            detected: JSON.stringify(normalizedEvent.parameters),
-            expected: JSON.stringify(duplicateMatch.event.parameters),
-            message: `The same event "${normalizedEvent.name}" was sent to multiple pixels with inconsistent payloads (${payloadDiff.summary}).`,
-            documentationReference: OFFICIAL_DOCS.MULTIPLE_PIXELS,
-            recommendedFix: 'Align parameters between all initialized Pixel IDs for consistent data quality.'
-          });
-          normalizedEvent.validation.warningsCount++;
-          if (normalizedEvent.validation.status === 'valid') {
-            normalizedEvent.validation.status = 'warning';
-          }
+        normalizedEvent.validation.warningsCount++;
+        if (normalizedEvent.validation.status === 'valid') {
+          normalizedEvent.validation.status = 'warning';
         }
       }
     } else {
       normalizedEvent.isDuplicate = false;
       normalizedEvent.requestCount = 1;
-      if (!normalizedEvent.duplicateStatus || normalizedEvent.duplicateStatus.includes('Awaiting')) {
-        normalizedEvent.duplicateStatus = normalizedEvent.evidence === 'Browser Network Request' ? '✅ Sent (Network Request)' : '⏳ Awaiting Network Transmission';
-      }
+      normalizedEvent.duplicateStatus = '✅ Correct';
     }
 
     this.events.push(normalizedEvent);
@@ -306,73 +68,45 @@ export class EventStore {
   }
 
   /**
-   * Distinguishes Same-Pixel Duplicates from Multi-Pixel Delivery
+   * Action-Based Duplicate Detection
+   * Compares Event Name, URL/Pathname, Content/Product, Parameters, and Timestamp
    */
   detectActionDuplicate(newEvent) {
     if (!newEvent.name) return null;
-    const windowMs = 3000;
+    const windowMs = 3000; // 3.0-second action threshold for accidental double-fires
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const existing = this.events[i];
       const timeDiff = Math.abs(newEvent.timestamp - existing.timestamp);
 
-      if (timeDiff > windowMs) continue;
+      // Rule 1: Exact matching explicit event_id (Only when event_id was actually sent)
+      if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId && newEvent.name === existing.name) {
+        return {
+          event: existing,
+          reason: `Matching Event ID "${newEvent.eventId}"`
+        };
+      }
 
-      if (existing.name === newEvent.name) {
-        const samePixel = (existing.pixelId === newEvent.pixelId);
+      // Rule 2: Same event name on the same URL within 3 seconds with identical content/amount/parameters
+      if (existing.name === newEvent.name && timeDiff < windowMs) {
         const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : true;
+        
+        // Compare contents if present
+        const existingParams = JSON.stringify(existing.parameters || {});
+        const newParams = JSON.stringify(newEvent.parameters || {});
 
-        if (samePixel) {
-          // Same Pixel Duplicate Check
-          if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId) {
-            return {
-              type: 'same_pixel_duplicate',
-              event: existing,
-              timeDiff: timeDiff,
-              reason: `Matching Event ID "${newEvent.eventId}"`
-            };
-          }
-
-          const existingParams = JSON.stringify(existing.parameters || {});
-          const newParams = JSON.stringify(newEvent.parameters || {});
-
-          if (samePath && existingParams === newParams) {
-            return {
-              type: 'same_pixel_duplicate',
-              event: existing,
-              timeDiff: timeDiff,
-              reason: `Fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
-            };
-          }
-
-          if (newEvent.name === 'page_viewed' && samePath) {
-            return {
-              type: 'same_pixel_duplicate',
-              event: existing,
-              timeDiff: timeDiff,
-              reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
-            };
-          }
-
-          // Rapid burst frequency detection (e.g. 3+ events within 1000ms)
-          if (timeDiff < 1000) {
-            const burstCount = this.events.filter(e => e.name === newEvent.name && e.pixelId === newEvent.pixelId && Math.abs(newEvent.timestamp - e.timestamp) < 1000).length;
-            if (burstCount >= 2) {
-              return {
-                type: 'same_pixel_duplicate',
-                event: existing,
-                timeDiff: timeDiff,
-                reason: `Rapid burst frequency anomaly: ${burstCount + 1} "${newEvent.name}" events fired within 1000ms`
-              };
-            }
-          }
-        } else {
-          // Multi-Pixel Delivery Check (Same user action broadcast to different Pixel IDs)
+        if (samePath && existingParams === newParams) {
           return {
-            type: 'multi_pixel_delivery',
             event: existing,
-            timeDiff: timeDiff,
-            reason: `Broadcast to ${existing.pixelId} and ${newEvent.pixelId}`
+            reason: `Fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
+          };
+        }
+
+        // Special check for page_viewed: 2 page_viewed calls on the same page load
+        if (newEvent.name === 'page_viewed' && samePath) {
+          return {
+            event: existing,
+            reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
           };
         }
       }
@@ -382,297 +116,119 @@ export class EventStore {
   }
 
   /**
-   * Compares payloads between two events sent to different pixels
+   * Retrieve Full Chronological User Journey
    */
-  comparePayloads(eventA, eventB) {
-    const paramsA = eventA.parameters || {};
-    const paramsB = eventB.parameters || {};
-    const allKeys = Array.from(new Set([...Object.keys(paramsA), ...Object.keys(paramsB)]));
-
-    const mismatchedKeys = [];
-    const diffs = [];
-
-    for (const key of allKeys) {
-      const valA = paramsA[key];
-      const valB = paramsB[key];
-
-      const strA = JSON.stringify(valA);
-      const strB = JSON.stringify(valB);
-
-      if (strA !== strB) {
-        mismatchedKeys.push(key);
-        diffs.push(`${key}: [Pixel ${eventA.pixelId || 'A'}: ${strA}] vs [Pixel ${eventB.pixelId || 'B'}: ${strB}]`);
-      }
-    }
-
-    return {
-      hasMismatch: mismatchedKeys.length > 0,
-      mismatchedKeys: mismatchedKeys,
-      diffs: diffs,
-      summary: diffs.join(', ')
-    };
-  }
-
-  /**
-   * Returns Multi-Pixel Summary Analysis
-   */
-  getMultiPixelSummary() {
-    const pixelIds = Object.keys(this.pixelRegistry);
-    if (pixelIds.length <= 1) {
-      return {
-        multiplePixelsDetected: false,
-        pixelCount: pixelIds.length,
-        pixels: pixelIds,
-        sharedEvents: [],
-        uniqueEventsByPixel: {},
-        routingAnalysis: [],
-        payloadMismatches: []
-      };
-    }
-
-    const eventsByPixel = {};
-    pixelIds.forEach((pid) => {
-      eventsByPixel[pid] = new Set(this.pixelRegistry[pid].events.map((e) => e.name));
-    });
-
-    const allEventNames = Array.from(new Set(this.events.map((e) => e.name)));
-    const sharedEvents = allEventNames.filter((name) => pixelIds.every((pid) => eventsByPixel[pid]?.has(name)));
-
-    const uniqueEventsByPixel = {};
-    pixelIds.forEach((pid) => {
-      const otherPixels = pixelIds.filter((p) => p !== pid);
-      uniqueEventsByPixel[pid] = Array.from(eventsByPixel[pid] || []).filter((name) => !otherPixels.some((op) => eventsByPixel[op]?.has(name)));
-    });
-
-    const routingAnalysis = this.events.map((e) => ({
-      eventName: e.name,
-      timestamp: e.timestamp,
-      method: e.source?.method || 'measure',
-      targetPixelId: e.targetPixelId || e.pixelId,
-      recipients: e.recipients || (e.pixelId ? [e.pixelId] : [])
+  getJourney() {
+    return this.events.map((evt, idx) => ({
+      step: idx + 1,
+      name: evt.displayName || evt.name,
+      canonicalName: evt.name,
+      dataShape: evt.validation ? evt.validation.dataShape : 'contents',
+      url: evt.url || '/',
+      pathname: evt.pathname || '/',
+      timestamp: evt.timestamp,
+      eventId: evt.eventId || 'Not Sent',
+      parameters: evt.parameters || {},
+      requestCount: evt.requestCount || 1,
+      duplicateStatus: evt.duplicateStatus || '✅ Correct',
+      auditStatus: evt.validation ? evt.validation.status : 'valid',
+      issues: evt.validation ? evt.validation.issues : []
     }));
-
-    return {
-      multiplePixelsDetected: true,
-      pixelCount: pixelIds.length,
-      pixels: pixelIds,
-      pixelRegistry: this.pixelRegistry,
-      sharedEvents: sharedEvents,
-      uniqueEventsByPixel: uniqueEventsByPixel,
-      routingAnalysis: routingAnalysis
-    };
   }
 
   /**
-   * Calculates professional Audit Health Score (0–100) based strictly on findings
+   * Summarize Journey by Event Name
    */
-  calculateAuditScore() {
-    let errorCount = 0;
-    let warningCount = 0;
-
+  getJourneySummary() {
+    const summaryMap = {};
     for (const evt of this.events) {
-      if (evt.validation) {
-        errorCount += evt.validation.errorsCount || 0;
-        warningCount += evt.validation.warningsCount || 0;
+      const name = evt.name;
+      if (!summaryMap[name]) {
+        summaryMap[name] = {
+          name: name,
+          displayName: evt.displayName || name,
+          isCustom: evt.validation ? evt.validation.isCustom : false,
+          totalDetected: 0,
+          uniquePages: new Set(),
+          duplicateCount: 0,
+          validCount: 0,
+          warningCount: 0,
+          errorCount: 0
+        };
       }
+      const entry = summaryMap[name];
+      entry.totalDetected++;
+      if (evt.pathname) entry.uniquePages.add(evt.pathname);
+      if (evt.isDuplicate) entry.duplicateCount++;
+      
+      const status = evt.validation ? evt.validation.status : 'valid';
+      if (status === 'valid') entry.validCount++;
+      else if (status === 'warning') entry.warningCount++;
+      else if (status === 'error') entry.errorCount++;
     }
 
-    const penalty = (errorCount * 15) + (warningCount * 5);
-    const score = Math.max(0, Math.min(100, 100 - penalty));
-
-    let grade = 'A';
-    let statusText = 'Excellent';
-
-    if (score >= 90) { grade = 'A'; statusText = 'Excellent'; }
-    else if (score >= 75) { grade = 'B'; statusText = 'Good'; }
-    else if (score >= 60) { grade = 'C'; statusText = 'Needs Attention'; }
-    else if (score >= 40) { grade = 'D'; statusText = 'Poor'; }
-    else { grade = 'F'; statusText = 'Critical Action Required'; }
-
-    return {
-      score: score,
-      grade: grade,
-      statusText: statusText,
-      errorsCount: errorCount,
-      warningsCount: warningCount,
-      totalEvents: this.events.length,
-      networkRequestsCount: this.parentRequests.length
-    };
-  }
-
-  /**
-   * Calculates comprehensive Debugger QA Score (0-100) with categorical breakdown:
-   * - Network Layer (15 pts)
-   * - Schema Validity (30 pts)
-   * - Required Fields (20 pts)
-   * - Payload Consistency (15 pts)
-   * - Customer Matching (10 pts)
-   * - Diagnostics Telemetry (10 pts)
-   */
-  calculateDebuggerQAScore() {
-    let networkScore = 15;
-    let schemaScore = 30;
-    let requiredScore = 20;
-    let consistencyScore = 15;
-    let matchingScore = 10;
-    let diagnosticsScore = 10;
-
-    const breakdown = {
-      network: { score: 15, max: 15, deductions: [] },
-      schema: { score: 30, max: 30, deductions: [] },
-      requiredFields: { score: 20, max: 20, deductions: [] },
-      consistency: { score: 15, max: 15, deductions: [] },
-      matching: { score: 10, max: 10, deductions: [] },
-      diagnostics: { score: 10, max: 10, deductions: [] }
-    };
-
-    // 1. Network Layer checks
-    for (const req of this.capturedRequests) {
-      if (req.validation?.errors?.length > 0) {
-        networkScore = Math.max(0, networkScore - 5);
-        breakdown.network.deductions.push(...req.validation.errors);
+    return Object.values(summaryMap).map((entry) => {
+      let auditText = '✅ Valid';
+      if (entry.duplicateCount > 0) {
+        auditText = `❌ ${entry.duplicateCount} duplicate(s) detected`;
+      } else if (entry.errorCount > 0) {
+        auditText = `❌ ${entry.errorCount} error(s)`;
+      } else if (entry.name === 'page_viewed') {
+        auditText = `✅ Valid across ${entry.uniquePages.size} page(s)`;
       }
-    }
-    breakdown.network.score = networkScore;
-
-    // 2. Events checks across Schema, Required, Consistency
-    for (const evt of this.events) {
-      const findings = evt.validation?.findings || [];
-      for (const f of findings) {
-        if (f.ruleSource === 'Official OpenAI Schema' || f.category === 'schema' || f.category === 'shape') {
-          if (f.severity === 'error') {
-            schemaScore = Math.max(0, schemaScore - 8);
-            breakdown.schema.deductions.push(f.message);
-          } else {
-            schemaScore = Math.max(0, schemaScore - 3);
-            breakdown.schema.deductions.push(f.message);
-          }
-        } else if (f.category === 'required_field' || f.code?.includes('REQUIRED')) {
-          requiredScore = Math.max(0, requiredScore - 5);
-          breakdown.requiredFields.deductions.push(f.message);
-        } else if (f.ruleSource === 'Debugger Semantic QA' || f.category === 'consistency' || f.category === 'item_sum') {
-          consistencyScore = Math.max(0, consistencyScore - 4);
-          breakdown.consistency.deductions.push(f.message);
-        } else if (f.ruleSource === 'Heuristic QA' || f.category === 'duplicate' || f.category === 'burst') {
-          consistencyScore = Math.max(0, consistencyScore - 3);
-          breakdown.consistency.deductions.push(f.message);
-        }
-      }
-    }
-    breakdown.schema.score = schemaScore;
-    breakdown.requiredFields.score = requiredScore;
-    breakdown.consistency.score = consistencyScore;
-
-    // 3. User Matching Coverage
-    if (this.latestUserMatching && this.latestUserMatching.detected) {
-      if (this.latestUserMatching.rawPiiDetected) {
-        matchingScore = Math.max(0, matchingScore - 10);
-        breakdown.matching.deductions.push('Unmasked raw PII detected in user matching envelope');
-      } else {
-        const hasEmail = this.latestUserMatching.fields?.some(f => f.type === 'email');
-        const hasPhoneOrEid = this.latestUserMatching.fields?.some(f => f.type === 'phone' || f.type === 'external_id');
-        if (!hasEmail && !hasPhoneOrEid) {
-          matchingScore = 4;
-          breakdown.matching.deductions.push('Weak matching: No email, phone, or external ID provided');
-        }
-      }
-    } else {
-      matchingScore = 5; // Neutral baseline when not provided
-    }
-    breakdown.matching.score = matchingScore;
-
-    // 4. SDK Diagnostics
-    if (this.latestDiagnostics) {
-      const dropped = this.latestDiagnostics.droppedEventCount || 0;
-      if (dropped > 0) {
-        diagnosticsScore = Math.max(0, diagnosticsScore - Math.min(10, dropped * 2));
-        breakdown.diagnostics.deductions.push(`${dropped} events dropped by SDK`);
-      }
-    }
-    breakdown.diagnostics.score = diagnosticsScore;
-
-    const totalScore = networkScore + schemaScore + requiredScore + consistencyScore + matchingScore + diagnosticsScore;
-
-    return {
-      score: Math.max(0, Math.min(100, totalScore)),
-      breakdown: breakdown
-    };
-  }
-
-  getNetworkActivitySummary() {
-    const pixelIds = Object.keys(this.pixelRegistry);
-    const perPixelSummary = {};
-    pixelIds.forEach(pid => {
-      perPixelSummary[pid] = {
-        requestsCount: this.pixelRegistry[pid].requestsCount || 0,
-        eventCounts: this.pixelRegistry[pid].eventCounts || {}
+      return {
+        name: entry.name,
+        displayName: entry.displayName,
+        isCustom: entry.isCustom,
+        detected: entry.totalDetected,
+        duplicateCount: entry.duplicateCount,
+        audit: auditText,
+        uniquePagesCount: entry.uniquePages.size
       };
     });
-
-    return {
-      totalNetworkRequests: this.parentRequests.length,
-      totalEventsSent: this.events.filter(e => e.evidence === 'Browser Network Request').length,
-      totalSdkEvents: this.sdkEvents.length,
-      uniqueEventsCount: new Set(this.events.map(e => e.name)).size,
-      pixelsCount: pixelIds.length,
-      pixels: pixelIds,
-      perPixelSummary: perPixelSummary,
-      latestDiagnostics: this.latestDiagnostics,
-      latestUserMatching: this.latestUserMatching
-    };
   }
 
-  getJourneySummary() {
-    return {
-      totalEvents: this.events.length,
-      uniqueEventTypes: new Set(this.events.map((e) => e.name)).size,
-      pixelsDetected: Object.keys(this.pixelRegistry),
-      networkSummary: this.getNetworkActivitySummary(),
-      multiPixelSummary: this.getMultiPixelSummary(),
-      auditScore: this.calculateAuditScore(),
-      duplicateCount: this.duplicates.length,
-      startedAt: this.startedAt,
-      durationMs: Date.now() - this.startedAt
-    };
-  }
-
-  getFilteredEvents(filter = 'all', query = '', selectedPixel = 'all') {
+  filterEvents({ filter = 'all', query = '' } = {}) {
     return this.events.filter((evt) => {
-      // Pixel ID filter
-      if (selectedPixel && selectedPixel !== 'all') {
-        if (evt.pixelId !== selectedPixel) return false;
-      }
+      // Category filter
+      if (filter === 'standard' && evt.validation && evt.validation.isCustom) return false;
+      if (filter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
+      if (filter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
+      if (filter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
+      if (filter === 'duplicates' && !evt.isDuplicate) return false;
+      if (filter === 'network' && !evt.network.detected) return false;
 
-      // Status filter
-      if (filter === 'standard') {
-        if (evt.validation?.isCustom) return false;
-      } else if (filter === 'custom') {
-        if (!evt.validation?.isCustom) return false;
-      } else if (filter === 'errors') {
-        if (!evt.validation || evt.validation.status !== 'error') return false;
-      } else if (filter === 'warnings') {
-        if (!evt.validation || evt.validation.status !== 'warning') return false;
-      } else if (filter === 'duplicates') {
-        if (!evt.isDuplicate) return false;
-      } else if (filter === 'passed') {
-        if (!evt.validation || evt.validation.status !== 'valid') return false;
-      }
-
-      // Search query
+      // Text search query
       if (query && query.trim() !== '') {
         const q = query.toLowerCase().trim();
         const nameMatch = (evt.displayName || evt.name).toLowerCase().includes(q);
         const urlMatch = (evt.url || evt.pathname || '').toLowerCase().includes(q);
-        const idMatch = (evt.eventId || evt.sdkEventId || '').toLowerCase().includes(q);
-        const pixelMatch = (evt.pixelId || '').toLowerCase().includes(q);
-        const paramsMatch = JSON.stringify(evt.parameters || {}).toLowerCase().includes(q);
-        const findingsMatch = evt.validation?.findings?.some((f) => f.code.toLowerCase().includes(q) || f.message.toLowerCase().includes(q));
-
-        return nameMatch || urlMatch || idMatch || pixelMatch || paramsMatch || findingsMatch;
+        const idMatch = (evt.eventId || '').toLowerCase().includes(q);
+        const paramsMatch = JSON.stringify(evt.parameters).toLowerCase().includes(q);
+        return nameMatch || urlMatch || idMatch || paramsMatch;
       }
 
       return true;
     });
+  }
+
+  correlateNetworkRequest(netReq) {
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      const evt = this.events[i];
+      if (
+        (netReq.payload && netReq.payload.event_id && evt.eventId && netReq.payload.event_id === evt.eventId) ||
+        (netReq.payload && (netReq.payload.name || netReq.payload.event) === evt.name) ||
+        Math.abs(evt.timestamp - netReq.timestamp) < 2500
+      ) {
+        evt.network.detected = true;
+        evt.network.status = netReq.status || 200;
+        evt.network.method = netReq.method || 'POST';
+        evt.network.url = netReq.url;
+        evt.network.responseTimestamp = netReq.responseTimestamp || Date.now();
+        return evt;
+      }
+    }
+    return null;
   }
 
   exportCSV() {
@@ -680,17 +236,17 @@ export class EventStore {
       'Step',
       'Timestamp',
       'Event Name',
-      'Evidence',
-      'Pixel ID',
-      'SDK Event ID',
-      'Advertiser Event ID',
       'Data Type',
       'Page URL',
+      'Page Path',
+      'Event ID',
+      'Pixel ID',
       'Duplicate Status',
       'Audit Status',
       'Amount',
       'Currency',
-      'Parameters JSON'
+      'Parameters JSON',
+      'oppref'
     ];
 
     const rows = [headers];
@@ -699,17 +255,17 @@ export class EventStore {
         idx + 1,
         new Date(evt.timestamp).toISOString(),
         `"${evt.displayName || evt.name}"`,
-        `"${evt.evidence || 'Browser Network Request'}"`,
-        `"${evt.pixelId || ''}"`,
-        `"${evt.sdkEventId || ''}"`,
-        `"${evt.eventId || 'Not Sent'}"`,
         evt.validation ? evt.validation.dataShape : 'contents',
         `"${evt.url || ''}"`,
+        `"${evt.pathname || ''}"`,
+        `"${evt.eventId || 'Not Sent'}"`,
+        `"${evt.pixelId || ''}"`,
         `"${evt.duplicateStatus || '✅ Correct'}"`,
         evt.validation ? evt.validation.status.toUpperCase() : 'VALID',
         evt.parameters.amount !== undefined ? evt.parameters.amount : '',
         evt.parameters.currency || '',
-        `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`
+        `"${JSON.stringify(evt.parameters).replace(/"/g, '""')}"`,
+        `"${evt.attribution.oppref || ''}"`
       ]);
     });
 
@@ -722,14 +278,9 @@ export class EventStore {
       startedAt: new Date(this.startedAt).toISOString(),
       exportedAt: new Date().toISOString(),
       totalEvents: this.events.length,
-      networkActivity: this.getNetworkActivitySummary(),
-      pixelsDetected: Object.keys(this.pixelRegistry),
-      multiPixelSummary: this.getMultiPixelSummary(),
-      auditScore: this.calculateAuditScore(),
+      journey: this.getJourney(),
       summary: this.getJourneySummary(),
-      rawEvents: this.events,
-      sdkEvents: this.sdkEvents,
-      parentRequests: this.parentRequests
+      rawEvents: this.events
     }, null, 2);
   }
 }

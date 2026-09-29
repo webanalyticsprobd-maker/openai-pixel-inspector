@@ -2,7 +2,7 @@
  * OpenAI Ads Pixel Inspector - Content Script (ISOLATED World)
  * 
  * Runs at document_start. Coordinates DOM detection, attribution parsing, 
- * page-bridge injection, and forwards events to the background service worker.
+ * page-bridge injection, and forwards normalized events to the background service worker.
  */
 
 (function () {
@@ -13,6 +13,9 @@
 
   let isBridgeConnected = false;
 
+  /**
+   * DOM Script Detector (bundled inline for isolated script execution)
+   */
   function scanDOMForPixel() {
     const result = {
       detected: false,
@@ -58,6 +61,9 @@
     return result;
   }
 
+  /**
+   * Attribution & oppref Inspector (bundled inline for isolated script execution)
+   */
   function scanAttribution() {
     const attribution = {
       oppref: null,
@@ -116,6 +122,9 @@
     return attribution;
   }
 
+  /**
+   * Injects page-context bridge into MAIN world
+   */
   function injectBridge() {
     try {
       const script = document.createElement('script');
@@ -147,16 +156,7 @@
     );
   }
 
-  function isContextValid() {
-    try {
-      return typeof chrome !== 'undefined' && !!chrome?.runtime?.id;
-    } catch {
-      return false;
-    }
-  }
-
   function sendToBackground(action, data = {}) {
-    if (!isContextValid()) return;
     try {
       chrome.runtime.sendMessage({
         action: action,
@@ -166,7 +166,7 @@
         data: data
       }).catch(() => {});
     } catch (err) {
-      // Ignore extension context invalidation
+      console.debug('[OpenAI Pixel Inspector] Background message dispatch error:', err);
     }
   }
 
@@ -182,6 +182,7 @@
     });
   }
 
+  // Handle messages from Page Bridge
   window.addEventListener('message', (event) => {
     if (event.source !== window || !event.data || event.data.source !== BRIDGE_SOURCE) {
       return;
@@ -228,6 +229,7 @@
     }
   });
 
+  // Handle messages from Popup or Background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || !message.action) return false;
 
@@ -253,6 +255,7 @@
     return true;
   });
 
+  // Initialize
   injectBridge();
 
   if (document.readyState === 'loading') {
