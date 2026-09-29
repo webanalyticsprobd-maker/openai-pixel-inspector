@@ -59,11 +59,28 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     };
   }
 
-  // 3. Data Type Validation
+  // 3. Amount & Minor Unit Integer Check
+  if (rule.minorUnit && typeof paramValue === 'number' && !Number.isInteger(paramValue)) {
+    return {
+      valid: false,
+      severity: 'error',
+      code: 'PARAM_AMOUNT_NOT_INTEGER',
+      ruleSource: 'Official OpenAI Schema',
+      message: `"${paramName}" (${paramValue}) must be an integer in minor currency units (no decimals). For example, send 12599 for $125.99 USD.`
+    };
+  }
+
+  // 4. Data Type Validation
   if (rule.type) {
     const typeResult = checkDataType(paramName, paramValue, rule.type);
     if (!typeResult.valid) {
-      return typeResult;
+      return {
+        valid: false,
+        severity: 'error',
+        code: 'INVALID_PARAMETER_TYPE',
+        ruleSource: 'Official OpenAI Schema',
+        message: typeResult.message
+      };
     }
   }
 
@@ -72,7 +89,8 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
     return {
       valid: false,
       severity: 'error',
-      code: 'PARAM_INVALID_DATA_SHAPE_TYPE',
+      code: 'INCORRECT_DATA_SHAPE',
+      ruleSource: 'Official OpenAI Schema',
       message: `Parameter "${paramName}" must be exactly "${rule.expected}", got "${paramValue}".`
     };
   }
@@ -84,6 +102,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
         valid: false,
         severity: 'error',
         code: 'PARAM_NUM_MIN_OUT_OF_RANGE',
+        ruleSource: 'Official OpenAI Schema',
         message: `Parameter "${paramName}" (${paramValue}) cannot be negative. Must be >= ${rule.min}.`
       };
     }
@@ -95,6 +114,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           valid: false,
           severity: 'error',
           code: 'PARAM_AMOUNT_NOT_INTEGER',
+          ruleSource: 'Official OpenAI Schema',
           message: `"${paramName}" (${paramValue}) must be an integer in minor currency units (no decimals). For example, send 12599 for $125.99 USD.`
         };
       }
@@ -105,6 +125,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           valid: false,
           severity: 'error',
           code: 'PARAM_AMOUNT_MISSING_CURRENCY',
+          ruleSource: 'Official OpenAI Schema',
           message: `Parameter "currency" is strictly required whenever "${paramName}" is provided.`
         };
       }
@@ -256,12 +277,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
   }
 
   // All checks passed
-  return {
-    valid: true,
-    severity: 'valid',
-    code: 'PARAM_VALID',
-    message: `Valid parameter "${paramName}".`
-  };
+  return null;
 }
 
 /**
@@ -325,4 +341,25 @@ function checkDataType(paramName, value, expectedType) {
   }
 
   return { valid: true };
+}
+
+export function validateContentsArray(contents, allParams = {}, eventName = '') {
+  const findings = [];
+  if (!Array.isArray(contents)) return findings;
+
+  contents.forEach((item, idx) => {
+    if (typeof item === 'object' && item !== null) {
+      if (item.group_id) {
+        findings.push({
+          code: 'CAPI_ONLY_CONTENT_FIELD',
+          severity: 'warning',
+          parameter: `contents[${idx}].group_id`,
+          message: `group_id is supported on Conversions API (server-side) only.`,
+          ruleSource: 'Official OpenAI Schema'
+        });
+      }
+    }
+  });
+
+  return findings;
 }

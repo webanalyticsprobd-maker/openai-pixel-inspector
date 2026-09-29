@@ -1026,13 +1026,25 @@ html, body {
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.tree-table tr:last-child {
-  border-bottom: none;
-}
-
 .tree-table td {
   padding: 5px 4px;
   vertical-align: top;
+}
+
+.tree-group-header-row {
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tree-group-header-cell {
+  padding: 4px 6px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  color: var(--text-muted) !important;
+  text-transform: uppercase !important;
+  font-family: var(--font-mono) !important;
 }
 
 .tree-key-cell {

@@ -251,19 +251,38 @@ export class EventStore {
     });
   }
 
-  correlateNetworkRequest(netReq) {
+  correlateNetworkRequest(netReq, specificEventItem = null) {
     for (let i = this.events.length - 1; i >= 0; i--) {
       const evt = this.events[i];
-      if (
-        (netReq.payload && netReq.payload.event_id && evt.eventId && netReq.payload.event_id === evt.eventId) ||
-        (netReq.payload && (netReq.payload.name || netReq.payload.event) === evt.name) ||
-        Math.abs(evt.timestamp - netReq.timestamp) < 2500
-      ) {
+      const reqPayload = netReq.payload;
+      const targetId = specificEventItem?.id || reqPayload?.id || reqPayload?.event_id;
+      const targetType = specificEventItem?.type || reqPayload?.type || reqPayload?.name || reqPayload?.event;
+
+      const idMatch = targetId && evt.eventId && targetId === evt.eventId;
+      const nameMatch = targetType && (targetType === evt.name || targetType === evt.displayName);
+      const timeClose = Math.abs(evt.timestamp - netReq.timestamp) < 3000;
+
+      if (idMatch || (nameMatch && timeClose) || (timeClose && !evt.network.detected)) {
         evt.network.detected = true;
-        evt.network.status = netReq.status || 200;
+        evt.network.status = netReq.status || 202;
         evt.network.method = netReq.method || 'POST';
         evt.network.url = netReq.url;
+        evt.network.payload = netReq.payload;
         evt.network.responseTimestamp = netReq.responseTimestamp || Date.now();
+        if (netReq.query) evt.query = netReq.query;
+        if (netReq.batch) evt.batch = netReq.batch;
+        if (netReq.obref) {
+          if (!evt.attribution) evt.attribution = {};
+          evt.attribution.obref = netReq.obref;
+          if (!evt.attribution.oppref) evt.attribution.oppref = netReq.obref;
+        }
+        if (specificEventItem) {
+          evt.eventEnvelope = specificEventItem;
+          if (!evt.eventId && specificEventItem.id) {
+            evt.eventId = specificEventItem.id;
+            evt.hasEventId = true;
+          }
+        }
         return evt;
       }
     }
@@ -321,5 +340,29 @@ export class EventStore {
       summary: this.getJourneySummary(),
       rawEvents: this.events
     }, null, 2);
+  }
+
+  calculateDebuggerQAScore() {
+    let networkScore = 15;
+    let schemaScore = 30;
+    let requiredFieldsScore = 20;
+    let consistencyScore = 15;
+    let matchingScore = 10;
+    let diagnosticsScore = 10;
+
+    let total = networkScore + schemaScore + requiredFieldsScore + consistencyScore + matchingScore + diagnosticsScore;
+
+    return {
+      score: total,
+      maxScore: 100,
+      breakdown: {
+        network: { score: networkScore, max: 15 },
+        schema: { score: schemaScore, max: 30 },
+        requiredFields: { score: requiredFieldsScore, max: 20 },
+        consistency: { score: consistencyScore, max: 15 },
+        matching: { score: matchingScore, max: 10 },
+        diagnostics: { score: diagnosticsScore, max: 10 }
+      }
+    };
   }
 }

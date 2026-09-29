@@ -44,6 +44,7 @@ export function validateEvent(event) {
     dataShape: schema.dataShape || 'contents',
     parameterResults: {},
     issues: [],
+    findings: [],
     piiIssues: [],
     errorsCount: 0,
     warningsCount: 0,
@@ -55,14 +56,17 @@ export function validateEvent(event) {
     schema.required.forEach((reqField) => {
       if (parameters[reqField] === undefined || parameters[reqField] === null) {
         validation.errorsCount++;
-        validation.issues.push({
+        const issue = {
           code: `MISSING_REQUIRED_${reqField.toUpperCase()}`,
           severity: 'error',
           event: eventName,
           parameter: reqField,
+          ruleSource: 'Official OpenAI Schema',
           message: `Missing required parameter "${reqField}" for event "${eventName}".`,
           recommendation: `Include "${reqField}" with expected value (e.g., { ${reqField}: "${schema.parameters[reqField]?.expected || 'value'}" }).`
-        });
+        };
+        validation.issues.push(issue);
+        validation.findings.push(issue);
         validation.parameterResults[reqField] = {
           valid: false,
           severity: 'error',
@@ -80,14 +84,17 @@ export function validateEvent(event) {
         cond.require.forEach((reqField) => {
           if (parameters[reqField] === undefined || parameters[reqField] === null || parameters[reqField] === '') {
             validation.errorsCount++;
-            validation.issues.push({
+            const issue = {
               code: `MISSING_CONDITIONAL_${reqField.toUpperCase()}`,
               severity: 'error',
               event: eventName,
               parameter: reqField,
+              ruleSource: 'Official OpenAI Schema',
               message: cond.message || `Parameter "${reqField}" is required when "${cond.when}" is provided.`,
               recommendation: `Provide "${reqField}" whenever "${cond.when}" is sent.`
-            });
+            };
+            validation.issues.push(issue);
+            validation.findings.push(issue);
             validation.parameterResults[reqField] = {
               valid: false,
               severity: 'error',
@@ -105,11 +112,16 @@ export function validateEvent(event) {
     const paramRule = schema.parameters ? schema.parameters[paramKey] : null;
     const res = validateParameter(paramKey, paramVal, paramRule, parameters);
     
-    validation.parameterResults[paramKey] = res;
+    validation.parameterResults[paramKey] = res || {
+      valid: true,
+      severity: 'valid',
+      code: 'PARAM_VALID',
+      message: `Valid parameter "${paramKey}".`
+    };
 
-    if (res.severity === 'error') {
+    if (res && res.severity === 'error') {
       validation.errorsCount++;
-      validation.issues.push({
+      const issue = {
         code: res.code || 'PARAM_VALIDATION_ERROR',
         severity: 'error',
         event: eventName,
@@ -117,11 +129,14 @@ export function validateEvent(event) {
         received: res.received !== undefined ? res.received : paramVal,
         expected: res.expected !== undefined ? res.expected : null,
         message: res.message,
+        ruleSource: res.ruleSource || 'Official OpenAI Schema',
         recommendation: res.recommendation || `Fix "${paramKey}" to match OpenAI Ads Pixel specification.`
-      });
-    } else if (res.severity === 'warning') {
+      };
+      validation.issues.push(issue);
+      validation.findings.push(issue);
+    } else if (res && res.severity === 'warning') {
       validation.warningsCount++;
-      validation.issues.push({
+      const issue = {
         code: res.code || 'PARAM_VALIDATION_WARNING',
         severity: 'warning',
         event: eventName,
@@ -129,9 +144,12 @@ export function validateEvent(event) {
         received: res.received !== undefined ? res.received : paramVal,
         expected: res.expected !== undefined ? res.expected : null,
         message: res.message,
+        ruleSource: res.ruleSource || 'Official OpenAI Schema',
         recommendation: res.recommendation || `Review "${paramKey}" formatting.`
-      });
-    } else if (res.severity === 'info') {
+      };
+      validation.issues.push(issue);
+      validation.findings.push(issue);
+    } else if (res && res.severity === 'info') {
       validation.infoCount++;
     }
   }

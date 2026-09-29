@@ -36,6 +36,8 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     }
   } else if (rawEvent.parameters) {
     properties = Object.assign({}, rawEvent.parameters);
+  } else if (rawEvent.data && typeof rawEvent.data === 'object') {
+    properties = Object.assign({}, rawEvent.data);
   }
 
   if (rawEvent.options && typeof rawEvent.options === 'object') {
@@ -85,17 +87,21 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     pixelId: rawEvent.pixelId || tabContext.pixelId || null,
     parameters: properties,
     options: options,
+    query: rawEvent.query || tabContext.query || null,
+    batch: rawEvent.batch || (tabContext.obref ? { obref: tabContext.obref } : null),
+    eventEnvelope: rawEvent.eventEnvelope || null,
     attribution: {
-      oppref: tabContext.oppref || null
+      oppref: rawEvent.obref || tabContext.obref || tabContext.oppref || null,
+      obref: rawEvent.obref || tabContext.obref || tabContext.oppref || null
     },
     network: {
-      detected: false,
-      status: null,
-      method: null,
-      url: null,
-      headers: {},
-      payload: null,
-      responseTimestamp: null
+      detected: Boolean(rawEvent.network?.detected),
+      status: rawEvent.network?.status || null,
+      method: rawEvent.network?.method || null,
+      url: rawEvent.network?.url || null,
+      headers: rawEvent.network?.headers || {},
+      payload: rawEvent.network?.payload || null,
+      responseTimestamp: rawEvent.network?.responseTimestamp || null
     },
     // Journey & Duplicate Audit Fields
     isDuplicate: false,

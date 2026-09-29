@@ -60,6 +60,8 @@ export const STANDARD_EVENT_NAMES = [
   'trial_started',
   'app_installed',
   'app_opened',
+  'openai::sdk_init',
+  'oai::diagnostic',
   'custom'
 ];
 
@@ -307,6 +309,34 @@ export const EVENT_SCHEMAS = {
     },
     options: {
       required: ['custom_event_name'],
+      optional: ['event_id', 'opt_out']
+    }
+  },
+
+  // 12. SDK Initialization (Internal Lifecycle)
+  'openai::sdk_init': {
+    dataShape: 'sdk_lifecycle',
+    category: 'sdk',
+    required: [],
+    optional: ['type'],
+    parameters: {
+      type: { type: 'string', expected: 'sdk_lifecycle', required: false, description: 'SDK lifecycle event type' }
+    },
+    options: {
+      optional: ['event_id', 'opt_out']
+    }
+  },
+
+  // 13. SDK Diagnostic / Health
+  'oai::diagnostic': {
+    dataShape: 'diagnostic',
+    category: 'diagnostic',
+    required: [],
+    optional: ['type'],
+    parameters: {
+      type: { type: 'string', required: false, description: 'Diagnostic event type' }
+    },
+    options: {
       optional: ['event_id', 'opt_out']
     }
   }

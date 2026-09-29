@@ -123,21 +123,22 @@ function updateBadge(tabId, state) {
   }
 }
 
-/**
- * Scan browser cookie jar for __oppref
- */
 async function scanBrowserCookiesForTab(tabId, url) {
   if (!url || !url.startsWith('http') || typeof chrome.cookies === 'undefined' || !tabId || tabId < 0) return;
   try {
-    const cookie = await chrome.cookies.get({ url: url, name: '__oppref' }).catch(() => null);
+    const cookieOppref = await chrome.cookies.get({ url: url, name: '__oppref' }).catch(() => null);
+    const cookieObref = await chrome.cookies.get({ url: url, name: '__obref' }).catch(() => null);
+    const cookie = cookieObref || cookieOppref;
     const state = getOrCreateTabState(tabId);
     if (cookie && cookie.value) {
       state.attribution.cookieDetected = true;
-      if (!state.attribution.oppref) {
-        state.attribution.oppref = decodeURIComponent(cookie.value);
+      const decoded = decodeURIComponent(cookie.value);
+      state.attribution.obref = decoded;
+      state.attribution.oppref = decoded;
+      if (!state.attribution.source) {
         state.attribution.source = 'cookie';
       }
-      state.attribution.details.cookieValue = decodeURIComponent(cookie.value);
+      state.attribution.details.cookieValue = decoded;
       state.attribution.details.expirationDate = cookie.expirationDate;
       state.lastUpdated = Date.now();
       updateBadge(tabId, state);
@@ -213,6 +214,31 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           }
         }
 
+        // Extract URL Query Parameters (pid, st, sv, t, ec)
+        const queryParams = {};
+        try {
+          const parsedUrl = new URL(url);
+          for (const [k, v] of parsedUrl.searchParams.entries()) {
+            queryParams[k] = v;
+          }
+        } catch {}
+
+        if (queryParams.pid) {
+          state.pixel.detected = true;
+          state.pixel.confidence = 'high';
+          if (!state.pixel.pixelIds.includes(queryParams.pid)) {
+            state.pixel.pixelIds.push(queryParams.pid);
+          }
+        }
+
+        // Extract obref from Network Payload
+        if (parsedPayload && parsedPayload.obref) {
+          state.attribution.obref = parsedPayload.obref;
+          state.attribution.oppref = parsedPayload.obref;
+          state.attribution.source = 'network';
+          state.attribution.details.networkPayload = parsedPayload.obref;
+        }
+
         const netEntry = {
           requestId: requestId,
           url: url,
@@ -220,6 +246,9 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           status: 'pending',
           timestamp: Date.now(),
           payload: parsedPayload,
+          query: queryParams,
+          batch: { obref: parsedPayload?.obref || null },
+          obref: parsedPayload?.obref || null,
           source: 'webRequest'
         };
 
@@ -231,30 +260,81 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
 
         state.network.push(netEntry);
 
-        // If the request contains an event name, correlate or record
-        if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event)) {
-          const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event;
-          
-          // Correlate with existing event or add if not captured via JS bridge
+        // Process Batched or Single Events from Network Payload
+        if (parsedPayload && Array.isArray(parsedPayload.events) && parsedPayload.events.length > 0) {
+          // Batch of events: loop each event in the batch
+          parsedPayload.events.forEach((evtItem) => {
+            const evtName = evtItem.type || evtItem.name || 'openai::event';
+            const evtId = evtItem.id || evtItem.event_id || null;
+            const evtTs = evtItem.timestamp_ms || evtItem.timestamp || Date.now();
+            const evtSrc = evtItem.source_url || state.url;
+            const dataPayload = evtItem.data || {};
+
+            const correlated = store.correlateNetworkRequest(netEntry, evtItem);
+            if (!correlated) {
+              const normalized = normalizeEvent({
+                name: evtName,
+                parameters: dataPayload,
+                event_id: evtId,
+                pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+                url: evtSrc,
+                timestamp: evtTs,
+                caller: 'network (webRequest)',
+                query: queryParams,
+                batch: { obref: parsedPayload.obref || null },
+                eventEnvelope: evtItem,
+                obref: parsedPayload.obref || null
+              }, {
+                url: evtSrc,
+                pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+                oppref: parsedPayload.obref || state.attribution.oppref || null,
+                obref: parsedPayload.obref || state.attribution.obref || null
+              });
+
+              normalized.network.detected = true;
+              normalized.network.url = url;
+              normalized.network.method = method;
+              normalized.network.payload = parsedPayload;
+              normalized.query = queryParams;
+              normalized.batch = { obref: parsedPayload.obref || null };
+              normalized.eventEnvelope = evtItem;
+              normalized.attribution.obref = parsedPayload.obref || null;
+              normalized.attribution.oppref = parsedPayload.obref || null;
+              store.addEvent(normalized);
+            }
+          });
+          state.events = store.events;
+        } else if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type)) {
+          // Single event payload
+          const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type;
           const correlated = store.correlateNetworkRequest(netEntry);
           if (!correlated) {
             const normalized = normalizeEvent({
               name: evtName,
               parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
-              event_id: parsedPayload.event_id || null, // Real event_id only
-              pixelId: parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
+              event_id: parsedPayload.event_id || parsedPayload.id || null,
+              pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
               url: state.url,
               timestamp: Date.now(),
-              caller: 'network (webRequest)'
+              caller: 'network (webRequest)',
+              query: queryParams,
+              batch: { obref: parsedPayload.obref || null },
+              obref: parsedPayload.obref || null
             }, {
               url: state.url,
-              pixelId: state.pixel.pixelIds[0] || null,
-              oppref: state.attribution.oppref || null
+              pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+              oppref: parsedPayload.obref || state.attribution.oppref || null,
+              obref: parsedPayload.obref || state.attribution.obref || null
             });
 
             normalized.network.detected = true;
             normalized.network.url = url;
             normalized.network.method = method;
+            normalized.network.payload = parsedPayload;
+            normalized.query = queryParams;
+            normalized.batch = { obref: parsedPayload.obref || null };
+            normalized.attribution.obref = parsedPayload.obref || null;
+            normalized.attribution.oppref = parsedPayload.obref || null;
             store.addEvent(normalized);
           }
           state.events = store.events;
@@ -262,6 +342,33 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           store.correlateNetworkRequest(netEntry);
           state.events = store.events;
         }
+
+        // Recalculate stats
+        let total = state.events.length;
+        let standard = 0;
+        let custom = 0;
+        let valid = 0;
+        let warning = 0;
+        let error = 0;
+        let duplicate = 0;
+
+        for (const evt of state.events) {
+          if (evt.validation?.isCustom) custom++; else standard++;
+          if (evt.isDuplicate) duplicate++;
+          if (evt.validation?.status === 'valid') valid++;
+          if (evt.validation?.status === 'warning') warning++;
+          if (evt.validation?.status === 'error') error++;
+        }
+
+        state.stats = {
+          totalEvents: total,
+          standardEvents: standard,
+          customEvents: custom,
+          validEvents: valid,
+          warningEvents: warning,
+          errorEvents: error,
+          duplicateEvents: duplicate
+        };
 
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);

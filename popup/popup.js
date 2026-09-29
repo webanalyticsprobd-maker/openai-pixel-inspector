@@ -443,9 +443,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       valPixelId.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
     }
 
-    // Attribution (oppref) Row
-    if (attribution.oppref) {
-      valOppref.innerHTML = makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(' + escapeHtml(truncateString(attribution.oppref, 14)) + ')</span>');
+    // Attribution (obref / oppref) Row
+    const activeRef = attribution.obref || attribution.oppref || null;
+    if (activeRef) {
+      valOppref.innerHTML = makeCopyable(activeRef, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(' + escapeHtml(truncateString(activeRef, 14)) + ')</span>');
     } else {
       valOppref.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
     }
@@ -852,16 +853,106 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       const secAttribution = renderEventSection('attribution', 'Attribution', itemKey, attrTableHtml, attrJsonData);
 
-      // Section 3: Parameters / Conversion / Order
-      const paramRows = Object.entries(params).map(([k, v]) =>
-        renderParameterValue(k, v, valResults, itemKey, '', params.currency || 'USD')
-      ).join('');
-      const paramsTableHtml = Object.keys(params).length > 0
-        ? `<table class="tree-table"><tbody>${paramRows}</tbody></table>`
-        : `<div style="color:var(--text-muted); text-align:center; padding:8px; font-size:11.5px;">No parameters passed</div>`;
+      // Section 3: Parameters / Payload Hierarchy (QUERY, BATCH, EVENT, DATA)
+      const qParams = evt.query || {};
+      const batchParams = evt.batch || (obref ? { obref: obref } : {});
+      const envParams = evt.eventEnvelope || {
+        type: evt.displayName || evt.name,
+        id: evt.eventId || null,
+        timestamp_ms: evt.timestamp,
+        source_url: evt.url || currentTabState.url
+      };
+      const dataParams = params || {};
+
+      let combinedHierarchyRows = '';
+
+      // 1. QUERY Parameters
+      const qEntries = Object.entries(qParams);
+      if (qEntries.length > 0) {
+        combinedHierarchyRows += `<tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">QUERY</td></tr>`;
+        for (const [qk, qv] of qEntries) {
+          combinedHierarchyRows += `
+            <tr>
+              <td class="tree-key-cell mono" style="color:var(--text-secondary);"><span style="color:var(--text-muted);">query.</span>${escapeHtml(qk)}</td>
+              <td class="tree-val-cell mono">${makeCopyable(String(qv), escapeHtml(String(qv)))}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+          `;
+        }
+      }
+
+      // 2. BATCH Parameters
+      if (batchParams.obref || obref) {
+        const bObref = batchParams.obref || obref;
+        combinedHierarchyRows += `
+          <tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">BATCH</td></tr>
+          <tr>
+            <td class="tree-key-cell mono" style="color:var(--text-secondary);"><span style="color:var(--text-muted);">batch.</span>obref</td>
+            <td class="tree-val-cell mono">${makeCopyable(bObref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(bObref) + '</span>')}</td>
+            <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓ Present</span></td>
+          </tr>
+        `;
+      }
+
+      // 3. EVENT Parameters (Envelope)
+      combinedHierarchyRows += `<tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">EVENT</td></tr>`;
+      combinedHierarchyRows += `
+        <tr>
+          <td class="tree-key-cell mono">type</td>
+          <td class="tree-val-cell mono">${escapeHtml(envParams.type || evt.displayName || evt.name)}</td>
+          <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+        </tr>
+        <tr>
+          <td class="tree-key-cell mono">id</td>
+          <td class="tree-val-cell mono">${(envParams.id || evt.eventId) ? makeCopyable(envParams.id || evt.eventId, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(envParams.id || evt.eventId) + '</span>') : '<span style="color:var(--text-muted)">Not Sent</span>'}</td>
+          <td class="tree-status-cell">${(envParams.id || evt.eventId) ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not Sent</span>'}</td>
+        </tr>
+        <tr>
+          <td class="tree-key-cell mono">timestamp_ms</td>
+          <td class="tree-val-cell mono">${envParams.timestamp_ms || evt.timestamp}</td>
+          <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+        </tr>
+        <tr>
+          <td class="tree-key-cell mono">source_url</td>
+          <td class="tree-val-cell mono">${makeCopyable(envParams.source_url || evt.url || currentTabState.url || '', '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(envParams.source_url || evt.url || currentTabState.url || '') + '</span>')}</td>
+          <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+        </tr>
+      `;
+      if (envParams.opt_out !== undefined) {
+        combinedHierarchyRows += `
+          <tr>
+            <td class="tree-key-cell mono">opt_out</td>
+            <td class="tree-val-cell mono">${String(envParams.opt_out)}</td>
+            <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+          </tr>
+        `;
+      }
+
+      // 4. DATA Parameters
+      const dataEntries = Object.entries(dataParams);
+      if (dataEntries.length > 0) {
+        combinedHierarchyRows += `<tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">DATA</td></tr>`;
+        const paramRows = dataEntries.map(([k, v]) =>
+          renderParameterValue(`data.${k}`, v, valResults, itemKey, '', dataParams.currency || 'USD')
+        ).join('');
+        combinedHierarchyRows += paramRows;
+      }
+
+      const paramsTableHtml = `<table class="tree-table"><tbody>${combinedHierarchyRows}</tbody></table>`;
       
-      const paramSecTitle = (params.amount !== undefined || params.value !== undefined || params.contents) ? 'Conversion & Parameters' : 'Parameters';
-      const secParams = renderEventSection('params', paramSecTitle, itemKey, paramsTableHtml, params);
+      const combinedJsonData = {
+        query: Object.keys(qParams).length > 0 ? qParams : undefined,
+        batch: (batchParams.obref || obref) ? { obref: batchParams.obref || obref } : undefined,
+        event: {
+          type: envParams.type || evt.displayName || evt.name,
+          id: envParams.id || evt.eventId || null,
+          timestamp_ms: envParams.timestamp_ms || evt.timestamp,
+          source_url: envParams.source_url || evt.url || currentTabState.url,
+          opt_out: envParams.opt_out !== undefined ? envParams.opt_out : false
+        },
+        data: dataParams
+      };
+      const secParams = renderEventSection('params', 'Parameters & Payload Hierarchy', itemKey, paramsTableHtml, combinedJsonData);
 
       // Section 4: Page
       const pageUrl = evt.url || currentTabState.url || '/';
@@ -1318,8 +1409,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderAttribution() {
     if (!currentTabState) return;
     const attribution = currentTabState.attribution || {};
+    const activeRef = attribution.obref || attribution.oppref || null;
 
-    if (attribution.oppref) {
+    if (activeRef) {
       opprefStatusBadge.textContent = 'Detected';
       opprefStatusBadge.className = 'badge badge-success';
     } else {
@@ -1330,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     attrUrlVal.innerHTML = attribution.urlDetected ? makeCopyable(attribution.details.urlParam, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.urlParam) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
     attrCookieVal.innerHTML = attribution.cookieDetected ? makeCopyable(attribution.details.cookieValue, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.cookieValue) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
     attrStorageVal.innerHTML = attribution.storageDetected ? makeCopyable(attribution.details.localStorage, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.localStorage) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
-    attrActiveKey.innerHTML = attribution.oppref ? makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.oppref) + '</span>') : '<span style="color:var(--text-muted);">None</span>';
+    attrActiveKey.innerHTML = activeRef ? makeCopyable(activeRef, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(activeRef) + '</span>') : '<span style="color:var(--text-muted);">None</span>';
 
     attachCopyListeners(attrUrlVal);
     attachCopyListeners(attrCookieVal);
