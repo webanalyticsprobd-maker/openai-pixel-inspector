@@ -742,39 +742,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
   }
 
-  // Section Builder Helper (Supports CARDS | TABLE | JSON)
-  function renderEventSection(secName, title, itemKey, tableHtml, jsonData, isRaw = false, cardsHtml = null) {
+  // Section Builder Helper (Supports TABLE ↔ JSON Dual Mode)
+  function renderEventSection(secName, title, itemKey, tableHtml, jsonData, isRaw = false) {
     const secKey = `${itemKey}__${secName}`;
     const isSectionExpanded = isRaw ? openRawSectionKeys.has(secKey) : !collapsedSectionKeys.has(secKey);
-    const defaultMode = cardsHtml ? 'cards' : (isRaw ? 'json' : 'table');
+    const defaultMode = isRaw ? 'json' : 'table';
     const viewMode = sectionViewModes.get(secKey) || defaultMode;
 
     let bodyContent = tableHtml;
-    if (viewMode === 'cards' && cardsHtml) {
-      bodyContent = cardsHtml;
-    } else if (viewMode === 'json') {
+    if (viewMode === 'json') {
       bodyContent = renderInteractiveJson(jsonData, `${secKey}_json`);
     } else {
       bodyContent = tableHtml;
     }
 
-    let toggleBtns = '';
-    if (cardsHtml) {
-      toggleBtns = `
-        <div class="tree-view-toggle">
-          <button class="view-toggle-btn ${viewMode === 'cards' ? 'active' : ''}" data-set-view="cards" data-sec-key="${escapeHtml(secKey)}">CARDS</button>
-          <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
-          <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
-        </div>
-      `;
-    } else {
-      toggleBtns = `
-        <div class="tree-view-toggle">
-          <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
-          <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
-        </div>
-      `;
-    }
+    const toggleBtns = `
+      <div class="tree-view-toggle">
+        <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
+        <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
+      </div>
+    `;
 
     return `
       <div class="tree-section ${isSectionExpanded ? 'open' : ''}" data-section-key="${escapeHtml(secKey)}">
@@ -841,19 +828,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // 1. Status Indicator & Subtitle Tags
       let statusDotClass = 'dot-green';
+      let statusDotColor = '#10b981';
       let statusTagHtml = '';
 
       if (evt.isDuplicate) {
         statusDotClass = 'dot-yellow';
+        statusDotColor = '#f59e0b';
         statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} Double Fired (${evt.requestCount || 2}x)</span>`;
       } else if (validation.status === 'error' || (validation.errorsCount && validation.errorsCount > 0)) {
         statusDotClass = 'dot-red';
+        statusDotColor = '#ef4444';
         statusTagHtml = `<span class="tree-event-status-tag status-error">${ICONS.cross} Validation issue</span>`;
       } else if (validation.status === 'warning' || (validation.warningsCount && validation.warningsCount > 0)) {
         statusDotClass = 'dot-yellow';
+        statusDotColor = '#f59e0b';
         statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} ${validation.warningsCount} warning</span>`;
       } else {
         statusDotClass = 'dot-green';
+        statusDotColor = '#10b981';
         statusTagHtml = `<span class="tree-event-status-tag status-success">${ICONS.check} Sent successfully</span>`;
       }
 
@@ -921,7 +913,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         timestamp: timeStr,
         source: evt.source?.caller || (evt.source?.location === 'server' ? 'conversions_api' : 'browser_pixel')
       };
-      const secEvent = renderEventSection('event', 'Event Definition & Metadata', itemKey, eventTableHtml, eventJsonData);
+      const secEvent = renderEventSection('event', 'Event', itemKey, eventTableHtml, eventJsonData);
 
       // Section 2: Attribution
       const oppref = evt.attribution?.oppref || currentTabState.attribution?.oppref || null;
@@ -1067,7 +1059,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
         data: dataParams
       };
-      const secParams = renderEventSection('params', 'Parameters & Payload Hierarchy', itemKey, paramsTableHtml, combinedJsonData, false, paramCardsHtml);
+      const secParams = renderEventSection('params', 'Conversion & Parameters', itemKey, paramsTableHtml, combinedJsonData);
 
       // Section 4: Page
       const pageUrl = evt.url || currentTabState.url || '/';
@@ -1264,13 +1256,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="tree-event-header-top">
             <div class="tree-event-title-group">
               <span class="tree-event-chevron">${ICONS.chevronRight}</span>
-              <span class="tree-status-dot" style="background-color: ${evtInfo.color};" title="${escapeHtml(evtInfo.label)}"></span>
+              <span class="tree-status-dot ${statusDotClass}" style="background-color: ${statusDotColor};" title="${statusDotClass}"></span>
               <span class="tree-event-name">${escapeHtml(evt.displayName || evt.name)}</span>
             </div>
             <span class="tree-event-time">${timeStr}</span>
           </div>
           <div class="tree-event-header-sub">
-            <span class="tree-event-subtitle">${escapeHtml(evtInfo.label)} &bull; ${escapeHtml(subtitleText)}</span>
+            <span class="tree-event-subtitle">${escapeHtml(subtitleText)}</span>
             ${statusTagHtml}
           </div>
         </div>
