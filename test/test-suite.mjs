@@ -197,6 +197,31 @@ test('Parses rich form matching user.fm with 8 fields and masks SHA-256 hashes',
   assert.strictEqual(countryField.value, 'bd');
 });
 
+// 11. User Identity Container (user.in with eid and em)
+test('Parses user.in identity matching container with eid and em hashes', () => {
+  const userObj = {
+    in: {
+      eid: '820175c4978946d36e1bb966ac541f11effad869df84f58280f7c845d155391f',
+      em: '0f693d1732735e24c5404e130f332847ec4565e898c52e791c514ccd7278b919'
+    }
+  };
+
+  const matching = extractUserMatchingEnvelope(userObj);
+  assert.strictEqual(matching.detected, true);
+  assert.strictEqual(matching.count, 2);
+  assert.strictEqual(matching.hasHashedData, true);
+
+  const eidField = matching.fields.find(f => f.key === 'eid');
+  assert.strictEqual(eidField.type, 'external_id');
+  assert.strictEqual(eidField.isHashed, true);
+  assert.strictEqual(eidField.masked, 'SHA-256 (820175...391f)');
+
+  const emField = matching.fields.find(f => f.key === 'em');
+  assert.strictEqual(emField.type, 'email');
+  assert.strictEqual(emField.isHashed, true);
+  assert.strictEqual(emField.masked, 'SHA-256 (0f693d...b919)');
+});
+
 // 11. Checkout Value Mismatch Test ($350.00 vs $3.50)
 test('Detects and reconciles item-level vs event-level value discrepancy', () => {
   const eventAmount = 35000; // $350.00 in minor units

@@ -606,6 +606,118 @@ export const PARAMETER_DICTIONARY = {
     type: 'string',
     description: 'ZIP or Postal Code for customer location matching.',
     details: 'e.g. "94103", "10115", "3500".'
+  },
+
+  // --- IDENTITY & ADVANCED MATCHING SIGNALS (user.in / user.fm) ---
+  'user.in': {
+    key: 'user.in',
+    name: 'User Identity & Matching Container (user.in)',
+    category: 'USER',
+    official: false, // Inferred from observed network traffic
+    type: 'object',
+    description: 'Encrypted or hashed customer identity container holding external ID (eid) and email hash (em) matching signals.',
+    details: 'Inferred signal container dispatched alongside conversions to enable deterministic ad attribution.'
+  },
+  'user.in.eid': {
+    key: 'user.in.eid',
+    name: 'External User Identity Signal (eid)',
+    category: 'USER',
+    official: false, // Inferred from observed network traffic
+    type: 'string',
+    description: '64-character hexadecimal SHA-256 hash of the visitor\'s external account or customer identifier.',
+    details: 'Enables cross-device matching and customer journey tracking without exposing raw identity.'
+  },
+  'user.in.em': {
+    key: 'user.in.em',
+    name: 'Hashed Email Matching Signal (em)',
+    category: 'USER',
+    official: false, // Inferred from observed network traffic
+    type: 'string',
+    description: '64-character hexadecimal SHA-256 hash of the visitor\'s normalized email address.',
+    details: 'Used for privacy-preserving deterministic matching against OpenAI ad audiences.'
+  },
+  'eid': {
+    key: 'eid',
+    name: 'External User Identity Signal (eid)',
+    category: 'USER',
+    official: false,
+    type: 'string',
+    description: '64-character hexadecimal identifier representing the customer account or user ID.',
+    details: 'Derived from CRM or login session and hashed before network transmission.'
+  },
+  'em': {
+    key: 'em',
+    name: 'Hashed Email Signal (em)',
+    category: 'USER',
+    official: false,
+    type: 'string',
+    description: '64-character hexadecimal SHA-256 hash of customer email address.',
+    details: 'Safe matching token ensuring no raw PII leaks into network requests.'
+  },
+  'user.fm': {
+    key: 'user.fm',
+    name: 'Form Matching Data (user.fm)',
+    category: 'USER',
+    official: false,
+    type: 'object',
+    description: 'Form matching container holding customer demographic and contact hashes (em, ph, fn, ln, co, ct, rg, pc).',
+    details: 'Extracted automatically from checkout and lead forms when Automatic Advanced Matching is enabled.'
+  },
+
+  // --- DIAGNOSTIC & SDK CONFIGURATION PARAMETERS ---
+  'automatic_advanced_matching': {
+    key: 'automatic_advanced_matching',
+    name: 'Automatic Advanced Matching Setting',
+    category: 'DIAGNOSTIC',
+    official: false,
+    type: 'string',
+    description: 'Configuration flag indicating whether automatic form field scraping and hashing is active ("enabled" / "disabled").',
+    details: 'Reported in the oai::diagnostic event to confirm tracking capability status.'
+  },
+  'schema_version': {
+    key: 'schema_version',
+    name: 'SDK Schema Version',
+    category: 'DIAGNOSTIC',
+    official: false,
+    type: 'integer',
+    description: 'Version identifier of the OpenAI Ads Pixel serialization format (e.g. 1).',
+    details: 'Ensures payload compatibility with ingestion pipeline parsers.'
+  },
+  'dropped_event_count': {
+    key: 'dropped_event_count',
+    name: 'Dropped Event Counter',
+    category: 'DIAGNOSTIC',
+    official: false,
+    type: 'integer',
+    description: 'Number of events dropped client-side due to validation, size limits, or network timeouts.',
+    details: 'Zero indicates healthy, complete pipeline delivery.'
+  },
+  'dropped_event_reason_counts': {
+    key: 'dropped_event_reason_counts',
+    name: 'Dropped Event Reason Breakdown',
+    category: 'DIAGNOSTIC',
+    official: false,
+    type: 'object',
+    description: 'Dictionary mapping failure reasons to dropped event counts.',
+    details: 'Used for diagnostic debugging when events fail to reach the server.'
+  },
+  'dropped_event_name_counts': {
+    key: 'dropped_event_name_counts',
+    name: 'Dropped Events by Name',
+    category: 'DIAGNOSTIC',
+    official: false,
+    type: 'object',
+    description: 'Dictionary mapping event names to dropped counts.',
+    details: 'Pinpoints specific event triggers that encountered dispatch errors.'
+  },
+  'dropped_event_phase_counts': {
+    key: 'dropped_event_phase_counts',
+    name: 'Dropped Events by Processing Phase',
+    category: 'DIAGNOSTIC',
+    official: false,
+    type: 'object',
+    description: 'Breakdown of failures by SDK pipeline phase (e.g. validation, batching, transport).',
+    details: 'Identifies the pipeline stage responsible for dropped telemetry.'
   }
 };
 

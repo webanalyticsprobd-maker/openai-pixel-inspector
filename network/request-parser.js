@@ -131,12 +131,13 @@ export function extractUserMatchingEnvelope(userObj) {
     return { detected: false, count: 0, hasHashedData: false, fields: [] };
   }
 
-  const fm = userObj.fm || userObj;
+  const fm = userObj.in || userObj.fm || userObj;
   const fields = [];
   let count = 0;
   let hasHashedData = false;
 
   const keyToType = {
+    eid: 'external_id',
     em: 'email',
     ph: 'phone',
     fn: 'first_name',
