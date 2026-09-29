@@ -530,20 +530,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const isExpanded = !collapsedJsonPaths.has(nodeKey);
         const itemsHtml = val.map((item, idx) => renderNode(item, null, `${nodeKey}[${idx}]`, depth + 1)).join('');
-        return `
-          <div class="json-node">
-            <div class="json-line json-toggle-line" data-json-path="${escapeHtml(nodeKey)}">
-              <span class="json-toggle-icon">${isExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
-              <span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>
-              <span class="json-bracket">[</span>
-              ${!isExpanded ? `<span class="json-collapsed-preview">${val.length} item${val.length === 1 ? '' : 's'}</span><span class="json-bracket">]</span>` : ''}
-            </div>
-            <div class="json-children ${isExpanded ? 'open' : 'closed'}">
-              ${itemsHtml}
-              <div class="json-line"><span class="json-bracket">]</span></div>
-            </div>
-          </div>
-        `;
+        return `<div class="json-node ${isExpanded ? 'open' : ''}"><div class="json-line json-toggle-line" data-json-path="${escapeHtml(nodeKey)}"><span class="json-toggle-icon">${ICONS.chevronRight}</span><span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span><span class="json-bracket">[</span>${!isExpanded ? `<span class="json-collapsed-preview">${val.length} item${val.length === 1 ? '' : 's'}</span><span class="json-bracket">]</span>` : ''}</div><div class="json-children">${itemsHtml}<div class="json-line"><span class="json-bracket">]</span></div></div></div>`;
       }
 
       if (isObject) {
@@ -553,20 +540,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const isExpanded = !collapsedJsonPaths.has(nodeKey);
         const propsHtml = keys.map(k => renderNode(val[k], k, `${nodeKey}.${k}`, depth + 1)).join('');
-        return `
-          <div class="json-node">
-            <div class="json-line json-toggle-line" data-json-path="${escapeHtml(nodeKey)}">
-              <span class="json-toggle-icon">${isExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
-              <span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>
-              <span class="json-brace">{</span>
-              ${!isExpanded ? `<span class="json-collapsed-preview">${keys.length} key${keys.length === 1 ? '' : 's'}</span><span class="json-brace">}</span>` : ''}
-            </div>
-            <div class="json-children ${isExpanded ? 'open' : 'closed'}">
-              ${propsHtml}
-              <div class="json-line"><span class="json-brace">}</span></div>
-            </div>
-          </div>
-        `;
+        return `<div class="json-node ${isExpanded ? 'open' : ''}"><div class="json-line json-toggle-line" data-json-path="${escapeHtml(nodeKey)}"><span class="json-toggle-icon">${ICONS.chevronRight}</span><span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span><span class="json-brace">{</span>${!isExpanded ? `<span class="json-collapsed-preview">${keys.length} key${keys.length === 1 ? '' : 's'}</span><span class="json-brace">}</span>` : ''}</div><div class="json-children">${propsHtml}<div class="json-line"><span class="json-brace">}</span></div></div></div>`;
       }
 
       // Primitive values
@@ -583,25 +557,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         valHtml = `<span>${escapeHtml(String(val))}</span>`;
       }
 
-      return `
-        <div class="json-line">
-          <span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>
-          ${valHtml}
-        </div>
-      `;
+      return `<div class="json-line"><span class="json-key">${key !== null ? escapeHtml(JSON.stringify(key)) + ': ' : ''}</span>${valHtml}</div>`;
     }
 
-    return `
-      <div class="json-viewer-box">
-        <div class="json-viewer-header">
-          <span class="json-viewer-tag">JSON Payload</span>
-          <button class="btn-copy-inline btn-copy-json" data-copy="${escapeHtml(jsonStr)}" title="Copy JSON">${ICONS.copy} Copy JSON</button>
-        </div>
-        <div class="json-viewer-tree">
-          ${renderNode(data, null, rootId, 0)}
-        </div>
-      </div>
-    `;
+    return `<div class="json-viewer-box"><div class="json-viewer-header"><span class="json-viewer-tag">JSON Payload</span><button class="btn-copy-inline btn-copy-json" data-copy="${escapeHtml(jsonStr)}" title="Copy JSON">${ICONS.copy} Copy JSON</button></div><div class="json-viewer-tree">${renderNode(data, null, rootId, 0)}</div></div>`;
   }
 
   // Recursive Parameter Renderer (Primitives, Objects, Arrays)
@@ -654,7 +613,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="tree-array-item-card ${isItemOpen ? 'open' : ''}">
             <div class="tree-array-item-header" data-toggle-nested="${escapeHtml(itemKeyNested)}">
               <div style="display:flex; align-items:center;">
-                <span class="tree-nested-chevron">${isItemOpen ? ICONS.chevronDown : ICONS.chevronRight}</span>
+                <span class="tree-nested-chevron">${ICONS.chevronRight}</span>
                 <span style="font-weight:600; font-family:var(--font-mono); font-size:11.5px;">${escapeHtml(summaryText)}</span>
               </div>
             </div>
@@ -673,7 +632,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="tree-nested-array ${isArrayOpen ? 'open' : ''}">
               <div class="tree-nested-header" data-toggle-nested="${escapeHtml(isNestedKey)}">
                 <div style="display:flex; align-items:center;">
-                  <span class="tree-nested-chevron">${isArrayOpen ? ICONS.chevronDown : ICONS.chevronRight}</span>
+                  <span class="tree-nested-chevron">${ICONS.chevronRight}</span>
                   <span class="tree-key" style="font-weight:600; font-family:var(--font-mono);">${escapeHtml(key)}</span>
                   <span class="tree-section-badge">· ${val.length} item${val.length === 1 ? '' : 's'}</span>
                 </div>
@@ -701,7 +660,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="tree-nested-object ${isObjOpen ? 'open' : ''}">
               <div class="tree-nested-header" data-toggle-nested="${escapeHtml(isNestedKey)}">
                 <div style="display:flex; align-items:center;">
-                  <span class="tree-nested-chevron">${isObjOpen ? ICONS.chevronDown : ICONS.chevronRight}</span>
+                  <span class="tree-nested-chevron">${ICONS.chevronRight}</span>
                   <span class="tree-key" style="font-weight:600; font-family:var(--font-mono);">${escapeHtml(key)}</span>
                 </div>
                 <div>${valPill}</div>
@@ -748,7 +707,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="tree-section ${isSectionExpanded ? 'open' : ''}" data-section-key="${escapeHtml(secKey)}">
         <div class="tree-section-header">
           <div class="tree-section-title-group" data-toggle-section="${escapeHtml(secKey)}" data-is-raw="${isRaw ? 'true' : 'false'}">
-            <span class="tree-section-chevron">${isSectionExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
+            <span class="tree-section-chevron">${ICONS.chevronRight}</span>
             <span class="tree-section-title">${escapeHtml(title)}</span>
           </div>
           <div class="tree-view-toggle">
@@ -1025,22 +984,63 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       const secValidation = renderEventSection('validation', 'Validation', itemKey, checklistHtml, valJsonData);
 
-      // Section 7: Raw Request
-      const rawPayload = evt.network?.payload || evt.raw || { event: evt.name, parameters: params };
+      // Section 7: Raw Request (Full Network Inspection)
+      const rawReqUrl = evt.network?.url || (evt.url ? (evt.url) : 'https://bzr.openai.com/v1/sdk/events');
+      let urlQueryParams = {};
+      if (rawReqUrl) {
+        try {
+          const u = new URL(rawReqUrl);
+          for (const [pk, pv] of u.searchParams.entries()) {
+            urlQueryParams[pk] = pv;
+          }
+        } catch {}
+      }
+
+      const rawRequestObj = {
+        request_url: rawReqUrl,
+        request_method: evt.network?.method || 'POST',
+        status_code: evt.network?.status || 202,
+        query_parameters: Object.keys(urlQueryParams).length > 0 ? urlQueryParams : { pid: evt.pixelId || 'default' },
+        request_payload: evt.network?.payload || evt.raw || {
+          name: evt.name,
+          event_id: evt.eventId,
+          pixel_id: evt.pixelId,
+          parameters: params
+        }
+      };
+
       const rawTableHtml = `
         <table class="tree-table">
           <tbody>
-            ${Object.entries(rawPayload).map(([rk, rv]) => `
-              <tr>
-                <td class="tree-key-cell">${escapeHtml(rk)}</td>
-                <td class="tree-val-cell mono">${typeof rv === 'object' ? escapeHtml(JSON.stringify(rv)) : escapeHtml(String(rv))}</td>
-                <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
-              </tr>
-            `).join('')}
+            <tr>
+              <td class="tree-key-cell">Request URL</td>
+              <td class="tree-val-cell mono">${makeCopyable(rawRequestObj.request_url, '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(rawRequestObj.request_url) + '</span>')}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Method</td>
+              <td class="tree-val-cell mono">${escapeHtml(rawRequestObj.request_method)}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Status</td>
+              <td class="tree-val-cell mono">${rawRequestObj.status_code}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Query String</td>
+              <td class="tree-val-cell mono">${makeCopyable(JSON.stringify(rawRequestObj.query_parameters), '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(JSON.stringify(rawRequestObj.query_parameters)) + '</span>')}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Payload</td>
+              <td class="tree-val-cell mono">${makeCopyable(JSON.stringify(rawRequestObj.request_payload), '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(JSON.stringify(rawRequestObj.request_payload)) + '</span>')}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
           </tbody>
         </table>
       `;
-      const secRaw = renderEventSection('raw', 'Raw Request', itemKey, rawTableHtml, rawPayload, true);
+      const secRaw = renderEventSection('raw', 'Raw Request', itemKey, rawTableHtml, rawRequestObj, true);
 
       // Assemble Event Card HTML
       item.className = 'tree-event-card ' + (isExpanded ? 'open' : '');
@@ -1048,7 +1048,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="tree-event-header">
           <div class="tree-event-header-top">
             <div class="tree-event-title-group">
-              <span class="tree-event-chevron">${isExpanded ? ICONS.chevronDown : ICONS.chevronRight}</span>
+              <span class="tree-event-chevron">${ICONS.chevronRight}</span>
               <span class="tree-status-dot ${statusDotClass}"></span>
               <span class="tree-event-name">${escapeHtml(evt.displayName || evt.name)}</span>
             </div>
@@ -1077,13 +1077,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (expandedEventIds.has(itemKey)) {
           expandedEventIds.delete(itemKey);
           item.classList.remove('open');
-          const chev = item.querySelector('.tree-event-chevron');
-          if (chev) chev.innerHTML = ICONS.chevronRight;
         } else {
           expandedEventIds.add(itemKey);
           item.classList.add('open');
-          const chev = item.querySelector('.tree-event-chevron');
-          if (chev) chev.innerHTML = ICONS.chevronDown;
         }
       });
 

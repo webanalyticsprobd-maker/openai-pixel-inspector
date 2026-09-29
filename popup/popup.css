@@ -1207,14 +1207,14 @@ html, body {
 }
 
 /* Collapsible Interactive JSON Viewer */
+/* Collapsible Interactive JSON Viewer */
 .json-viewer-box {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 11.5px;
 }
 
 .json-viewer-header {
@@ -1254,24 +1254,29 @@ html, body {
 }
 
 .json-viewer-tree {
-  padding: 8px 10px;
+  padding: 6px 8px;
   max-height: 250px;
   overflow-y: auto;
   overflow-x: auto;
-  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .json-node {
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 
 .json-line {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  white-space: pre;
-  gap: 2px;
+  gap: 3px;
+  line-height: 1.4;
+  padding: 0;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
 .json-toggle-line {
@@ -1288,11 +1293,15 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   color: var(--text-muted);
-  margin-right: 2px;
   flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.json-node.open > .json-toggle-line .json-toggle-icon {
+  transform: rotate(90deg);
 }
 
 .json-key {
@@ -1350,16 +1359,13 @@ html, body {
 }
 
 .json-children {
-  padding-left: 14px;
+  padding-left: 12px;
   border-left: 1px dashed var(--border-subtle);
-  margin-left: 4px;
-}
-
-.json-children.closed {
+  margin-left: 5px;
   display: none;
 }
 
-.json-children.open {
+.json-node.open > .json-children {
   display: block;
 }
 
