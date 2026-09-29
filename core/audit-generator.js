@@ -241,7 +241,11 @@ export function auditContentsArray(contents = [], eventCurrency = 'USD', eventCo
  * Comprehensive Audit Report Generator
  */
 export function generateComprehensiveAudit(tabState = {}) {
-  const events = Array.isArray(tabState.events) ? tabState.events : [];
+  const rawEvents = Array.isArray(tabState.events) ? tabState.events : [];
+  const events = rawEvents.filter(e => {
+    const n = (e.displayName || e.name || '').toLowerCase();
+    return !n.startsWith('openai::') && !n.startsWith('oai::') && n !== 'sdk_init' && n !== 'diagnostic';
+  });
   const pixel = tabState.pixel || {};
   const attribution = tabState.attribution || {};
   const sessionId = tabState.sessionId || ('SESSION_' + (tabState.id || Date.now()));

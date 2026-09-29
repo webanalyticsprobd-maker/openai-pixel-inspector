@@ -260,7 +260,27 @@ test('Strictly separates obref from oppref attribution', () => {
   assert.strictEqual(parsed.openAIRequest.query.pid, '4KjX1dq4C7HUw7EUpRXfMh');
 });
 
+// 16. Internal SDK Event Exclusion Test
+test('Excludes internal SDK events (sdk_init, diagnostic) from measurement events list', () => {
+  const rawBatch = {
+    url: 'https://bzr.openai.com/v1/sdk/events?pid=4KjX1dq4C7HUw7EUpRXfMh',
+    rawPayload: {
+      events: [
+        { type: 'openai::sdk_init', id: '1' },
+        { type: 'lead_created', id: '2', data: { type: 'customer_action' } },
+        { type: 'oai::diagnostic', id: '3' }
+      ]
+    }
+  };
+
+  const parsed = parseOpenAINetworkBatch(rawBatch);
+  assert.strictEqual(parsed.measurementEvents.length, 1);
+  assert.strictEqual(parsed.measurementEvents[0].type, 'lead_created');
+  assert.strictEqual(parsed.internalEvents.length, 2);
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+

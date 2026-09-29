@@ -10,7 +10,14 @@
 import { normalizeEvent } from '../core/normalizer.js';
 import { EventStore } from '../core/event-store.js';
 import { generateAuditReport } from '../core/scanner.js';
-import { parseNetworkPayload, isOpenAINetworkRequest } from '../network/request-parser.js';
+import { parseNetworkPayload, isOpenAINetworkRequest, classifyNetworkEvent } from '../network/request-parser.js';
+
+function isInternalSdkEvent(evtItem) {
+  if (!evtItem) return false;
+  const name = typeof evtItem === 'string' ? evtItem : (evtItem.type || evtItem.name || '');
+  const clean = name.trim().toLowerCase();
+  return clean.startsWith('openai::') || clean.startsWith('oai::') || clean === 'sdk_init' || clean === 'diagnostic' || classifyNetworkEvent(evtItem) !== 'MEASUREMENT_EVENT';
+}
 
 const tabStates = new Map();
 const tabStores = new Map();
@@ -270,6 +277,17 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
             const evtSrc = evtItem.source_url || state.url;
             const dataPayload = evtItem.data || {};
 
+            if (isInternalSdkEvent(evtItem)) {
+              state.pixel.detected = true;
+              state.pixel.confidence = 'high';
+              if (evtName.includes('init')) {
+                state.pixel.initialized = true;
+              }
+              if (!state.internalEvents) state.internalEvents = [];
+              state.internalEvents.push(evtItem);
+              return; // Exclude internal SDK events from user-facing events list
+            }
+
             const correlated = store.correlateNetworkRequest(netEntry, evtItem);
             if (!correlated) {
               const normalized = normalizeEvent({
@@ -307,37 +325,47 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         } else if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type)) {
           // Single event payload
           const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type;
-          const correlated = store.correlateNetworkRequest(netEntry);
-          if (!correlated) {
-            const normalized = normalizeEvent({
-              name: evtName,
-              parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
-              event_id: parsedPayload.event_id || parsedPayload.id || null,
-              pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
-              url: state.url,
-              timestamp: Date.now(),
-              caller: 'network (webRequest)',
-              query: queryParams,
-              batch: { obref: parsedPayload.obref || null },
-              obref: parsedPayload.obref || null
-            }, {
-              url: state.url,
-              pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
-              oppref: parsedPayload.obref || state.attribution.oppref || null,
-              obref: parsedPayload.obref || state.attribution.obref || null
-            });
+          if (isInternalSdkEvent(parsedPayload)) {
+            state.pixel.detected = true;
+            state.pixel.confidence = 'high';
+            if (evtName.includes('init')) {
+              state.pixel.initialized = true;
+            }
+            if (!state.internalEvents) state.internalEvents = [];
+            state.internalEvents.push(parsedPayload);
+          } else {
+            const correlated = store.correlateNetworkRequest(netEntry);
+            if (!correlated) {
+              const normalized = normalizeEvent({
+                name: evtName,
+                parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
+                event_id: parsedPayload.event_id || parsedPayload.id || null,
+                pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
+                url: state.url,
+                timestamp: Date.now(),
+                caller: 'network (webRequest)',
+                query: queryParams,
+                batch: { obref: parsedPayload.obref || null },
+                obref: parsedPayload.obref || null
+              }, {
+                url: state.url,
+                pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+                oppref: parsedPayload.obref || state.attribution.oppref || null,
+                obref: parsedPayload.obref || state.attribution.obref || null
+              });
 
-            normalized.network.detected = true;
-            normalized.network.url = url;
-            normalized.network.method = method;
-            normalized.network.payload = parsedPayload;
-            normalized.query = queryParams;
-            normalized.batch = { obref: parsedPayload.obref || null };
-            normalized.attribution.obref = parsedPayload.obref || null;
-            normalized.attribution.oppref = parsedPayload.obref || null;
-            store.addEvent(normalized);
+              normalized.network.detected = true;
+              normalized.network.url = url;
+              normalized.network.method = method;
+              normalized.network.payload = parsedPayload;
+              normalized.query = queryParams;
+              normalized.batch = { obref: parsedPayload.obref || null };
+              normalized.attribution.obref = parsedPayload.obref || null;
+              normalized.attribution.oppref = parsedPayload.obref || null;
+              store.addEvent(normalized);
+            }
+            state.events = store.events;
           }
-          state.events = store.events;
         } else {
           store.correlateNetworkRequest(netEntry);
           state.events = store.events;
@@ -560,6 +588,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'PIXEL_EVENT_CAPTURED': {
       if (state && store && message.data) {
         const rawEvent = message.data;
+        if (isInternalSdkEvent(rawEvent)) {
+          state.pixel.detected = true;
+          state.pixel.initialized = true;
+          state.pixel.confidence = 'high';
+          state.lastUpdated = Date.now();
+          updateBadge(tabId, state);
+          sendResponse({ status: 'ok' });
+          break;
+        }
+
         const normalized = normalizeEvent(rawEvent, {
           url: rawEvent.url || state.url,
           pathname: rawEvent.pathname || '',

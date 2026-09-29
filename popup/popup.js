@@ -397,7 +397,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const stats = currentTabState.stats || {};
     const attribution = currentTabState.attribution || {};
     const dataLayer = currentTabState.dataLayer || [];
-    const events = currentTabState.events || [];
+    const rawEvents = currentTabState.events || [];
+    const events = rawEvents.filter(e => {
+      const n = (e.displayName || e.name || '').toLowerCase();
+      return !n.startsWith('openai::') && !n.startsWith('oai::') && n !== 'sdk_init' && n !== 'diagnostic';
+    });
     const report = generateAuditReport(currentTabState);
     const issues = report.issues || [];
 
@@ -454,9 +458,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Metric Summary Cards (Clean & neutral by default, highlight only meaningful issues)
-    metricTotalEvents.textContent = stats.totalEvents || 0;
-    metricStandardEvents.textContent = stats.standardEvents || 0;
-    metricCustomEvents.textContent = stats.customEvents || 0;
+    const standardCount = events.filter(e => !e.validation?.isCustom).length;
+    const customCount = events.filter(e => e.validation?.isCustom).length;
+    metricTotalEvents.textContent = events.length;
+    metricStandardEvents.textContent = standardCount;
+    metricCustomEvents.textContent = customCount;
     
     // Issues Metric Card (Matches shared source of truth)
     metricIssuesEvents.textContent = totalDiagnostics;
@@ -471,7 +477,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Navigation Count Badges
-    tabCountEvents.textContent = stats.totalEvents || 0;
+    tabCountEvents.textContent = events.length;
     tabCountFunnel.textContent = report.funnel.completedCount + '/5';
     tabCountDatalayer.textContent = dataLayer.length || 0;
     tabCountIssues.textContent = totalDiagnostics;
@@ -788,7 +794,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderEvents() {
     if (!currentTabState) return;
-    const events = currentTabState.events || [];
+    const rawEvents = currentTabState.events || [];
+    const events = rawEvents.filter(e => {
+      const n = (e.displayName || e.name || '').toLowerCase();
+      return !n.startsWith('openai::') && !n.startsWith('oai::') && n !== 'sdk_init' && n !== 'diagnostic';
+    });
 
     const filtered = events.filter((evt) => {
       if (currentFilter === 'standard' && evt.validation && evt.validation.isCustom) return false;

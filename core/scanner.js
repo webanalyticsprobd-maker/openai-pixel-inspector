@@ -135,7 +135,11 @@ export function computeCapiDeduplication(events = []) {
 export function generateAuditReport(tabState) {
   const pixel = tabState.pixel || {};
   const attribution = tabState.attribution || {};
-  const events = tabState.events || [];
+  const rawEvents = tabState.events || [];
+  const events = rawEvents.filter(e => {
+    const n = (e.displayName || e.name || '').toLowerCase();
+    return !n.startsWith('openai::') && !n.startsWith('oai::') && n !== 'sdk_init' && n !== 'diagnostic';
+  });
   const network = tabState.network || [];
   const dataLayer = tabState.dataLayer || [];
   const gtmContainers = tabState.gtmContainers || [];
