@@ -365,6 +365,32 @@ test('Processes batched standard measurement events in store correctly', () => {
   assert.strictEqual(store.events[2].name, 'items_added');
 });
 
+// 19. Normalizes Events with contents[] Items Array without Exception
+test('Normalizes event with contents array items without TypeError', () => {
+  const norm = normalizeEvent({
+    name: 'items_added',
+    data: {
+      type: 'contents',
+      amount: 2599,
+      currency: 'USD',
+      contents: [
+        {
+          id: 'prod_123',
+          name: 'Pro Wireless Mouse',
+          quantity: 1,
+          amount: 2599,
+          currency: 'USD',
+          content_type: 'product'
+        }
+      ]
+    }
+  });
+
+  assert.strictEqual(norm.name, 'items_added');
+  assert.strictEqual(norm.validation.errorsCount, 0);
+  assert.strictEqual(norm.parameters.contents.length, 1);
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);

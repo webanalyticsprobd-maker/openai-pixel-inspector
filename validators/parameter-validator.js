@@ -235,7 +235,7 @@ export function validateParameter(paramName, paramValue, rule = {}, allParams = 
           for (const [propName, propRule] of Object.entries(CONTENT_ITEM_SCHEMA)) {
             if (item[propName] !== undefined) {
               const res = validateParameter(propName, item[propName], propRule, itemContext);
-              if (!res.valid && res.severity === 'error') {
+              if (res && !res.valid && res.severity === 'error') {
                 itemIssues.push(`Item #${idx + 1} "${propName}": ${res.message}`);
               }
             }
