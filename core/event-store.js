@@ -260,9 +260,9 @@ export class EventStore {
 
       const idMatch = targetId && evt.eventId && targetId === evt.eventId;
       const nameMatch = targetType && (targetType === evt.name || targetType === evt.displayName);
-      const timeClose = Math.abs(evt.timestamp - netReq.timestamp) < 3000;
+      const timeClose = Math.abs(evt.timestamp - netReq.timestamp) < 5000;
 
-      if (idMatch || (nameMatch && timeClose) || (timeClose && !evt.network.detected)) {
+      if (idMatch || (nameMatch && timeClose) || (nameMatch && !evt.network.detected)) {
         evt.network.detected = true;
         evt.network.status = netReq.status || 202;
         evt.network.method = netReq.method || 'POST';

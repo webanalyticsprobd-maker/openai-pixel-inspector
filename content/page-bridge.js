@@ -70,7 +70,7 @@
         timestamp: Date.now(),
         rawArgs: Array.from(args)
       });
-    } else if (command === 'measure') {
+    } else if (command === 'measure' || command === 'track' || command === 'event') {
       // oaiq("measure", eventName, properties, options)
       const eventName = args[1] || 'unknown';
       const properties = (args.length >= 3 && typeof args[2] === 'object' && args[2] !== null) ? args[2] : {};
@@ -86,7 +86,7 @@
         pathname: window.location.pathname,
         title: document.title,
         timestamp: Date.now(),
-        caller: 'oaiq("measure")'
+        caller: `oaiq("${command}")`
       });
     } else if (command === 'measureSingle') {
       // oaiq("measureSingle", pixelId, eventName, properties, options)
@@ -114,6 +114,24 @@
         consent: args[1],
         timestamp: Date.now()
       });
+    } else if (typeof command === 'string' && command !== 'set' && command !== 'config') {
+      // Direct event name call e.g. oaiq('page_viewed', properties, options)
+      const eventName = command;
+      const properties = (args.length >= 2 && typeof args[1] === 'object' && args[1] !== null) ? args[1] : {};
+      const options = (args.length >= 3 && typeof args[2] === 'object' && args[2] !== null) ? args[2] : {};
+
+      sendToContentScript('PIXEL_EVENT_CAPTURED', {
+        name: eventName,
+        parameters: properties,
+        options: options,
+        args: Array.from(args),
+        pixelId: Array.from(activePixelIds)[0] || null,
+        url: window.location.href,
+        pathname: window.location.pathname,
+        title: document.title,
+        timestamp: Date.now(),
+        caller: `oaiq("${command}")`
+      });
     }
   }
 
@@ -124,6 +142,16 @@
     if (Array.isArray(oaiqFn.q)) {
       for (const callArgs of oaiqFn.q) {
         handleOaiqCall(callArgs);
+      }
+      if (!oaiqFn.q.__OPENAI_PUSH_WRAPPED__) {
+        const origPush = oaiqFn.q.push;
+        oaiqFn.q.push = function () {
+          for (let i = 0; i < arguments.length; i++) {
+            handleOaiqCall(arguments[i]);
+          }
+          return origPush.apply(this, arguments);
+        };
+        oaiqFn.q.__OPENAI_PUSH_WRAPPED__ = true;
       }
     }
 
@@ -137,6 +165,16 @@
       wrappedOaiq[key] = oaiqFn[key];
     }
     wrappedOaiq.q = oaiqFn.q || [];
+    if (Array.isArray(wrappedOaiq.q) && !wrappedOaiq.q.__OPENAI_PUSH_WRAPPED__) {
+      const origPush = wrappedOaiq.q.push;
+      wrappedOaiq.q.push = function () {
+        for (let i = 0; i < arguments.length; i++) {
+          handleOaiqCall(arguments[i]);
+        }
+        return origPush.apply(this, arguments);
+      };
+      wrappedOaiq.q.__OPENAI_PUSH_WRAPPED__ = true;
+    }
     wrappedOaiq.__OPENAI_INSPECTOR_WRAPPED__ = true;
 
     return wrappedOaiq;
@@ -200,7 +238,8 @@
             ok: response.ok,
             duration: Date.now() - start,
             timestamp: start,
-            payload: payload
+            payload: payload,
+            via: 'fetch'
           });
           return response;
         }).catch((err) => {
@@ -212,7 +251,8 @@
             error: err.message,
             duration: Date.now() - start,
             timestamp: start,
-            payload: payload
+            payload: payload,
+            via: 'fetch'
           });
           throw err;
         });
@@ -243,6 +283,60 @@
         });
       }
       return originalSendBeacon.apply(this, arguments);
+    };
+  }
+
+  // Wrap XMLHttpRequest
+  if (typeof window.XMLHttpRequest === 'function') {
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this.__openai_method = method;
+      this.__openai_url = url;
+      return originalOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function (data) {
+      if (isTargetNetworkUrl(this.__openai_url)) {
+        const url = this.__openai_url;
+        const method = (this.__openai_method || 'POST').toUpperCase();
+        let payload = null;
+        if (data) {
+          try {
+            payload = typeof data === 'string' ? JSON.parse(data) : data;
+          } catch {
+            payload = data;
+          }
+        }
+        const start = Date.now();
+        this.addEventListener('load', () => {
+          sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+            url: url,
+            method: method,
+            status: this.status,
+            ok: this.status >= 200 && this.status < 300,
+            duration: Date.now() - start,
+            timestamp: start,
+            payload: payload,
+            via: 'xhr'
+          });
+        });
+        this.addEventListener('error', () => {
+          sendToContentScript('NETWORK_REQUEST_CAPTURED', {
+            url: url,
+            method: method,
+            status: 0,
+            ok: false,
+            error: 'Network Error',
+            duration: Date.now() - start,
+            timestamp: start,
+            payload: payload,
+            via: 'xhr'
+          });
+        });
+      }
+      return originalSend.apply(this, arguments);
     };
   }
 

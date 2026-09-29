@@ -1,6 +1,6 @@
 {
   "name": "openai-pixel-inspector",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "OpenAI Pixel QA Validation & Auditing Extension",
   "type": "module",
   "scripts": {

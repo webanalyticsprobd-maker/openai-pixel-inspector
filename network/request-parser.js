@@ -26,11 +26,11 @@ export function extractPixelIdFromUrl(url) {
 
 export function classifyNetworkEvent(eventItem) {
   if (!eventItem) return 'MEASUREMENT_EVENT';
-  const type = eventItem.type || eventItem.name || '';
-  if (type === 'openai::sdk_init' || type.startsWith('openai::')) {
+  const type = (typeof eventItem === 'string' ? eventItem : (eventItem.type || eventItem.name || '')).trim().toLowerCase();
+  if (type === 'openai::sdk_init' || type === 'sdk_init' || type.startsWith('openai::sdk')) {
     return 'SDK_INTERNAL';
   }
-  if (type === 'oai::diagnostic' || type.startsWith('oai::')) {
+  if (type === 'oai::diagnostic' || type === 'diagnostic' || type.startsWith('oai::diag') || type.startsWith('openai::diag')) {
     return 'DIAGNOSTIC';
   }
   return 'MEASUREMENT_EVENT';

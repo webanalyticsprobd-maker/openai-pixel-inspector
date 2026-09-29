@@ -14,9 +14,8 @@ import { parseNetworkPayload, isOpenAINetworkRequest, classifyNetworkEvent } fro
 
 function isInternalSdkEvent(evtItem) {
   if (!evtItem) return false;
-  const name = typeof evtItem === 'string' ? evtItem : (evtItem.type || evtItem.name || '');
-  const clean = name.trim().toLowerCase();
-  return clean.startsWith('openai::') || clean.startsWith('oai::') || clean === 'sdk_init' || clean === 'diagnostic' || classifyNetworkEvent(evtItem) !== 'MEASUREMENT_EVENT';
+  const name = (typeof evtItem === 'string' ? evtItem : (evtItem.type || evtItem.name || '')).trim().toLowerCase();
+  return name === 'openai::sdk_init' || name === 'sdk_init' || name === 'oai::diagnostic' || name === 'diagnostic' || name.startsWith('openai::sdk') || name.startsWith('oai::diag');
 }
 
 const tabStates = new Map();
@@ -180,6 +179,190 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+function processTrackingNetworkPayload(tabId, netEntry) {
+  if (!tabId || tabId < 0 || !netEntry) return;
+  const state = getOrCreateTabState(tabId);
+  const store = getOrCreateTabStore(tabId);
+
+  const url = netEntry.url || '';
+  const method = netEntry.method || 'POST';
+  const parsedPayload = netEntry.payload;
+
+  // Extract URL Query Parameters (pid, st, sv, t, ec)
+  const queryParams = {};
+  try {
+    const parsedUrl = new URL(url);
+    for (const [k, v] of parsedUrl.searchParams.entries()) {
+      queryParams[k] = v;
+    }
+  } catch {}
+
+  if (queryParams.pid) {
+    state.pixel.detected = true;
+    state.pixel.confidence = 'high';
+    if (!state.pixel.pixelIds.includes(queryParams.pid)) {
+      state.pixel.pixelIds.push(queryParams.pid);
+    }
+  }
+
+  // Extract obref from Network Payload
+  const obrefVal = parsedPayload?.obref || queryParams.obref || null;
+  if (obrefVal) {
+    state.attribution.obref = obrefVal;
+    state.attribution.oppref = obrefVal;
+    state.attribution.source = 'network';
+    state.attribution.details.networkPayload = obrefVal;
+  }
+
+  netEntry.query = queryParams;
+  netEntry.batch = { obref: obrefVal };
+  netEntry.obref = obrefVal;
+
+  // Process Batched or Single Events from Network Payload
+  if (parsedPayload && Array.isArray(parsedPayload.events) && parsedPayload.events.length > 0) {
+    parsedPayload.events.forEach((evtItem) => {
+      const evtName = evtItem.type || evtItem.name || 'openai::event';
+      const evtId = evtItem.id || evtItem.event_id || null;
+      const evtTs = evtItem.timestamp_ms || evtItem.timestamp || Date.now();
+      const evtSrc = evtItem.source_url || state.url;
+      const dataPayload = evtItem.data || {};
+
+      if (isInternalSdkEvent(evtItem)) {
+        state.pixel.detected = true;
+        state.pixel.confidence = 'high';
+        if (evtName.includes('init')) {
+          state.pixel.initialized = true;
+        }
+        if (!state.internalEvents) state.internalEvents = [];
+        state.internalEvents.push(evtItem);
+        return; // Exclude internal SDK events from user-facing events list
+      }
+
+      const correlated = store.correlateNetworkRequest(netEntry, evtItem);
+      if (!correlated) {
+        const normalized = normalizeEvent({
+          name: evtName,
+          parameters: dataPayload,
+          event_id: evtId,
+          pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+          url: evtSrc,
+          timestamp: evtTs,
+          caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
+          query: queryParams,
+          batch: { obref: obrefVal },
+          eventEnvelope: evtItem,
+          obref: obrefVal
+        }, {
+          url: evtSrc,
+          pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+          oppref: obrefVal || state.attribution.oppref || null,
+          obref: obrefVal || state.attribution.obref || null
+        });
+
+        normalized.network.detected = true;
+        normalized.network.url = url;
+        normalized.network.method = method;
+        normalized.network.payload = parsedPayload;
+        if (netEntry.status && netEntry.status !== 'pending') {
+          normalized.network.status = netEntry.status;
+        }
+        if (netEntry.ok !== undefined) {
+          normalized.network.ok = netEntry.ok;
+        }
+        normalized.query = queryParams;
+        normalized.batch = { obref: obrefVal };
+        normalized.eventEnvelope = evtItem;
+        normalized.attribution.obref = obrefVal || null;
+        normalized.attribution.oppref = obrefVal || null;
+        store.addEvent(normalized);
+      }
+    });
+    state.events = store.events;
+  } else if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type)) {
+    const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type;
+    if (isInternalSdkEvent(parsedPayload)) {
+      state.pixel.detected = true;
+      state.pixel.confidence = 'high';
+      if (evtName.includes('init')) {
+        state.pixel.initialized = true;
+      }
+      if (!state.internalEvents) state.internalEvents = [];
+      state.internalEvents.push(parsedPayload);
+    } else {
+      const correlated = store.correlateNetworkRequest(netEntry);
+      if (!correlated) {
+        const normalized = normalizeEvent({
+          name: evtName,
+          parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
+          event_id: parsedPayload.event_id || parsedPayload.id || null,
+          pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
+          url: state.url,
+          timestamp: Date.now(),
+          caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
+          query: queryParams,
+          batch: { obref: obrefVal },
+          obref: obrefVal
+        }, {
+          url: state.url,
+          pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
+          oppref: obrefVal || state.attribution.oppref || null,
+          obref: obrefVal || state.attribution.obref || null
+        });
+
+        normalized.network.detected = true;
+        normalized.network.url = url;
+        normalized.network.method = method;
+        normalized.network.payload = parsedPayload;
+        if (netEntry.status && netEntry.status !== 'pending') {
+          normalized.network.status = netEntry.status;
+        }
+        if (netEntry.ok !== undefined) {
+          normalized.network.ok = netEntry.ok;
+        }
+        normalized.query = queryParams;
+        normalized.batch = { obref: obrefVal };
+        normalized.attribution.obref = obrefVal || null;
+        normalized.attribution.oppref = obrefVal || null;
+        store.addEvent(normalized);
+      }
+      state.events = store.events;
+    }
+  } else {
+    store.correlateNetworkRequest(netEntry);
+    state.events = store.events;
+  }
+
+  // Recalculate stats
+  let total = state.events.length;
+  let standard = 0;
+  let custom = 0;
+  let valid = 0;
+  let warning = 0;
+  let error = 0;
+  let duplicate = 0;
+
+  for (const evt of state.events) {
+    if (evt.validation?.isCustom) custom++; else standard++;
+    if (evt.isDuplicate) duplicate++;
+    if (evt.validation?.status === 'valid') valid++;
+    if (evt.validation?.status === 'warning') warning++;
+    if (evt.validation?.status === 'error') error++;
+  }
+
+  state.stats = {
+    totalEvents: total,
+    standardEvents: standard,
+    customEvents: custom,
+    validEvents: valid,
+    warningEvents: warning,
+    errorEvents: error,
+    duplicateEvents: duplicate
+  };
+
+  state.lastUpdated = Date.now();
+  updateBadge(tabId, state);
+}
+
 // =========================================================================
 // Browser-Level Network Monitoring (chrome.webRequest)
 // =========================================================================
@@ -253,9 +436,6 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           status: 'pending',
           timestamp: Date.now(),
           payload: parsedPayload,
-          query: queryParams,
-          batch: { obref: parsedPayload?.obref || null },
-          obref: parsedPayload?.obref || null,
           source: 'webRequest'
         };
 
@@ -266,140 +446,7 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         });
 
         state.network.push(netEntry);
-
-        // Process Batched or Single Events from Network Payload
-        if (parsedPayload && Array.isArray(parsedPayload.events) && parsedPayload.events.length > 0) {
-          // Batch of events: loop each event in the batch
-          parsedPayload.events.forEach((evtItem) => {
-            const evtName = evtItem.type || evtItem.name || 'openai::event';
-            const evtId = evtItem.id || evtItem.event_id || null;
-            const evtTs = evtItem.timestamp_ms || evtItem.timestamp || Date.now();
-            const evtSrc = evtItem.source_url || state.url;
-            const dataPayload = evtItem.data || {};
-
-            if (isInternalSdkEvent(evtItem)) {
-              state.pixel.detected = true;
-              state.pixel.confidence = 'high';
-              if (evtName.includes('init')) {
-                state.pixel.initialized = true;
-              }
-              if (!state.internalEvents) state.internalEvents = [];
-              state.internalEvents.push(evtItem);
-              return; // Exclude internal SDK events from user-facing events list
-            }
-
-            const correlated = store.correlateNetworkRequest(netEntry, evtItem);
-            if (!correlated) {
-              const normalized = normalizeEvent({
-                name: evtName,
-                parameters: dataPayload,
-                event_id: evtId,
-                pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
-                url: evtSrc,
-                timestamp: evtTs,
-                caller: 'network (webRequest)',
-                query: queryParams,
-                batch: { obref: parsedPayload.obref || null },
-                eventEnvelope: evtItem,
-                obref: parsedPayload.obref || null
-              }, {
-                url: evtSrc,
-                pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
-                oppref: parsedPayload.obref || state.attribution.oppref || null,
-                obref: parsedPayload.obref || state.attribution.obref || null
-              });
-
-              normalized.network.detected = true;
-              normalized.network.url = url;
-              normalized.network.method = method;
-              normalized.network.payload = parsedPayload;
-              normalized.query = queryParams;
-              normalized.batch = { obref: parsedPayload.obref || null };
-              normalized.eventEnvelope = evtItem;
-              normalized.attribution.obref = parsedPayload.obref || null;
-              normalized.attribution.oppref = parsedPayload.obref || null;
-              store.addEvent(normalized);
-            }
-          });
-          state.events = store.events;
-        } else if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type)) {
-          // Single event payload
-          const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type;
-          if (isInternalSdkEvent(parsedPayload)) {
-            state.pixel.detected = true;
-            state.pixel.confidence = 'high';
-            if (evtName.includes('init')) {
-              state.pixel.initialized = true;
-            }
-            if (!state.internalEvents) state.internalEvents = [];
-            state.internalEvents.push(parsedPayload);
-          } else {
-            const correlated = store.correlateNetworkRequest(netEntry);
-            if (!correlated) {
-              const normalized = normalizeEvent({
-                name: evtName,
-                parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
-                event_id: parsedPayload.event_id || parsedPayload.id || null,
-                pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
-                url: state.url,
-                timestamp: Date.now(),
-                caller: 'network (webRequest)',
-                query: queryParams,
-                batch: { obref: parsedPayload.obref || null },
-                obref: parsedPayload.obref || null
-              }, {
-                url: state.url,
-                pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
-                oppref: parsedPayload.obref || state.attribution.oppref || null,
-                obref: parsedPayload.obref || state.attribution.obref || null
-              });
-
-              normalized.network.detected = true;
-              normalized.network.url = url;
-              normalized.network.method = method;
-              normalized.network.payload = parsedPayload;
-              normalized.query = queryParams;
-              normalized.batch = { obref: parsedPayload.obref || null };
-              normalized.attribution.obref = parsedPayload.obref || null;
-              normalized.attribution.oppref = parsedPayload.obref || null;
-              store.addEvent(normalized);
-            }
-            state.events = store.events;
-          }
-        } else {
-          store.correlateNetworkRequest(netEntry);
-          state.events = store.events;
-        }
-
-        // Recalculate stats
-        let total = state.events.length;
-        let standard = 0;
-        let custom = 0;
-        let valid = 0;
-        let warning = 0;
-        let error = 0;
-        let duplicate = 0;
-
-        for (const evt of state.events) {
-          if (evt.validation?.isCustom) custom++; else standard++;
-          if (evt.isDuplicate) duplicate++;
-          if (evt.validation?.status === 'valid') valid++;
-          if (evt.validation?.status === 'warning') warning++;
-          if (evt.validation?.status === 'error') error++;
-        }
-
-        state.stats = {
-          totalEvents: total,
-          standardEvents: standard,
-          customEvents: custom,
-          validEvents: valid,
-          warningEvents: warning,
-          errorEvents: error,
-          duplicateEvents: duplicate
-        };
-
-        state.lastUpdated = Date.now();
-        updateBadge(tabId, state);
+        processTrackingNetworkPayload(tabId, netEntry);
       }
     },
     { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] },
@@ -647,9 +694,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const netReq = Object.assign({}, message.data);
         netReq.payload = parseNetworkPayload(netReq.payload);
         state.network.push(netReq);
-        store.correlateNetworkRequest(netReq);
-        state.events = store.events;
-        state.lastUpdated = Date.now();
+        processTrackingNetworkPayload(tabId, netReq);
       }
       sendResponse({ status: 'ok' });
       break;

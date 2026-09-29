@@ -304,8 +304,70 @@ test('Excludes internal SDK events (sdk_init, diagnostic) from measurement event
   assert.strictEqual(parsed.internalEvents.length, 2);
 });
 
+// 17. All Standard Events Recognition and Normalization
+test('Recognizes and normalizes all 10 official standard events without error', () => {
+  const standardEventNames = [
+    'page_viewed',
+    'contents_viewed',
+    'items_added',
+    'checkout_started',
+    'order_created',
+    'lead_created',
+    'registration_completed',
+    'appointment_scheduled',
+    'subscription_created',
+    'trial_started'
+  ];
+
+  standardEventNames.forEach((evtName) => {
+    const isInternal = classifyNetworkEvent({ type: evtName });
+    assert.strictEqual(isInternal, 'MEASUREMENT_EVENT');
+    const norm = normalizeEvent({
+      name: evtName,
+      data: { type: 'contents' }
+    });
+    assert.strictEqual(norm.name, evtName);
+    assert.strictEqual(norm.validation.isCustom, false);
+  });
+});
+
+// 18. Batch Network Event Processing in EventStore
+test('Processes batched standard measurement events in store correctly', () => {
+  const store = new EventStore();
+  const rawBatch = {
+    url: 'https://bzr.openai.com/v1/sdk/events?pid=4KjX1dq4C7HUw7EUpRXfMh',
+    method: 'POST',
+    status: 202,
+    rawPayload: {
+      obref: 'batch-ref-abc',
+      events: [
+        { type: 'page_viewed', id: 'evt_pv_1', data: { type: 'contents' } },
+        { type: 'contents_viewed', id: 'evt_cv_1', data: { type: 'contents', amount: 1500, currency: 'USD' } },
+        { type: 'items_added', id: 'evt_ia_1', data: { type: 'contents', amount: 1500, currency: 'USD' } }
+      ]
+    }
+  };
+
+  const parsed = parseOpenAINetworkBatch(rawBatch);
+  assert.strictEqual(parsed.measurementEvents.length, 3);
+  parsed.measurementEvents.forEach((evt) => {
+    const normalized = normalizeEvent({
+      name: evt.type,
+      parameters: evt.data,
+      event_id: evt.id
+    });
+    store.addEvent(normalized);
+  });
+
+  assert.strictEqual(store.events.length, 3);
+  assert.strictEqual(store.events[0].name, 'page_viewed');
+  assert.strictEqual(store.events[1].name, 'contents_viewed');
+  assert.strictEqual(store.events[2].name, 'items_added');
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+
 
