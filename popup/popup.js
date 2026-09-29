@@ -24,9 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const healthStatusBadge = document.getElementById('health-status-badge');
   const healthOverallLabel = document.getElementById('health-overall-label');
   const valPixelId = document.getElementById('val-pixel-id');
-  const valSessionId = document.getElementById('val-session-id');
   const valOppref = document.getElementById('val-oppref');
-  const valServersideStatus = document.getElementById('val-serverside-status');
 
   const metricTotalEvents = document.getElementById('metric-total-events');
   const metricStandardEvents = document.getElementById('metric-standard-events');
@@ -438,23 +436,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       valPixelId.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
     }
 
-    // Session ID Row
-    const sessId = currentTabState.sessionId || ('SESSION_' + (activeTab ? activeTab.id : ''));
-    valSessionId.innerHTML = makeCopyable(sessId, '<span class="mono" style="color:var(--text-main); font-weight:600;">' + escapeHtml(sessId) + '</span>');
-
     // Attribution (oppref) Row
     if (attribution.oppref) {
       valOppref.innerHTML = makeCopyable(attribution.oppref, '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span class="mono" style="color:var(--text-secondary); font-size:11px;">(' + escapeHtml(truncateString(attribution.oppref, 14)) + ')</span>');
     } else {
       valOppref.innerHTML = '<span style="color:var(--text-muted);">Not detected</span>';
-    }
-
-    // Server-Side Activity Check (Clean short status + detailed tooltip)
-    const hasCapi = currentTabState.events ? currentTabState.events.some(e => e.isCapi || e.requestOrigin === 'server' || (e.url && e.url.includes('/api/'))) : false;
-    if (hasCapi) {
-      valServersideStatus.innerHTML = '<span style="color:var(--status-success); font-weight:600;">Detected</span> <span style="color:var(--text-secondary); font-size:11.5px;">(First-party endpoint)</span>';
-    } else {
-      valServersideStatus.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No activity detected</span>';
     }
 
     // Metric Summary Cards (Clean & neutral by default, highlight only meaningful issues)
@@ -514,7 +500,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     attachCopyListeners(valPixelId);
-    attachCopyListeners(valSessionId);
     attachCopyListeners(valOppref);
   }
 

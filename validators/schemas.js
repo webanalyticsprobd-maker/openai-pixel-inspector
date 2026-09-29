@@ -318,3 +318,8 @@ export const CUSTOM_EVENT_RULES = {
   validPattern: /^[a-zA-Z0-9][a-zA-Z0-9_\-]*[a-zA-Z0-9]$|^[a-zA-Z0-9]$/,
   reservedWords: new Set(['init', 'consent', 'config', 'set', 'get', 'measure', 'measureSingle'])
 };
+
+export const OPENAI_PIXEL_SCHEMA = EVENT_SCHEMAS;
+export const STANDARD_JS_EVENTS = STANDARD_EVENT_NAMES;
+export const CAPI_ONLY_EVENTS = ['app_installed', 'app_opened'];
+
