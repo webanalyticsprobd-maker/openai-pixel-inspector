@@ -290,20 +290,45 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
   chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
       const { tabId, url, method, requestId, requestBody } = details;
-      if (tabId < 0) return; // Background / system requests
 
-      const state = getOrCreateTabState(tabId);
-      const store = getOrCreateTabStore(tabId);
+      // Resolve effective tabId even if request sent via beacon or service worker (tabId: -1)
+      let effectiveTabId = tabId;
+      if (effectiveTabId < 0) {
+        if (details.initiator) {
+          for (const [id, s] of tabStates.entries()) {
+            if (s.url && s.url.startsWith(details.initiator)) {
+              effectiveTabId = id;
+              break;
+            }
+          }
+        }
+        if (effectiveTabId < 0) {
+          for (const [id, s] of tabStates.entries()) {
+            if (s.lastUpdated) {
+              effectiveTabId = id;
+              break;
+            }
+          }
+        }
+        if (effectiveTabId < 0) {
+          effectiveTabId = 0;
+        }
+      }
+
+      const state = getOrCreateTabState(effectiveTabId);
+      const store = getOrCreateTabStore(effectiveTabId);
 
       // Check SDK Script Download (bzrcdn.openai.com)
-      if (url.includes('bzrcdn.openai.com/sdk/oaiq')) {
+      if (url.includes('bzrcdn.openai.com/sdk/oaiq') || url.includes('/sdk/oaiq')) {
         state.pixel.detected = true;
         state.pixel.confidence = 'high';
         if (!state.pixel.scriptSources.includes(url)) {
           state.pixel.scriptSources.push(url);
         }
         state.lastUpdated = Date.now();
-        updateBadge(tabId, state);
+        updateBadge(effectiveTabId, state);
+        persistTabState(effectiveTabId, state);
+        notifyStateUpdated(effectiveTabId);
         return;
       }
 
@@ -314,7 +339,12 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           if (requestBody.raw && requestBody.raw.length > 0) {
             try {
               const decoder = new TextDecoder('utf-8');
-              const str = decoder.decode(requestBody.raw[0].bytes);
+              let str = '';
+              for (const chunk of requestBody.raw) {
+                if (chunk.bytes) {
+                  str += decoder.decode(chunk.bytes);
+                }
+              }
               parsedPayload = parseNetworkPayload(str);
             } catch {}
           } else if (requestBody.formData) {
@@ -333,7 +363,7 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         };
 
         pendingRequests.set(requestId, {
-          tabId: tabId,
+          tabId: effectiveTabId,
           start: Date.now(),
           entry: netEntry
         });
@@ -377,10 +407,10 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
         state.capturedRequests = store.capturedRequests;
         state.networkSummary = store.getNetworkActivitySummary();
         state.lastUpdated = Date.now();
-        updateBadge(tabId, state);
-        broadcastToDevTools(tabId, { action: 'NEW_BATCH', batch: batch, openAIRequest: batch.openAIRequest });
-        persistTabState(tabId, state);
-        notifyStateUpdated(tabId);
+        updateBadge(effectiveTabId, state);
+        broadcastToDevTools(effectiveTabId, { action: 'NEW_BATCH', batch: batch, openAIRequest: batch.openAIRequest });
+        persistTabState(effectiveTabId, state);
+        notifyStateUpdated(effectiveTabId);
       }
     },
     { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] },
@@ -392,25 +422,26 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
     (details) => {
       const { requestId, statusCode, tabId } = details;
       if (pendingRequests.has(requestId)) {
-        const { entry } = pendingRequests.get(requestId);
+        const { entry, tabId: pendingTabId } = pendingRequests.get(requestId);
         entry.status = statusCode;
         entry.ok = statusCode >= 200 && statusCode < 300;
         entry.responseTimestamp = Date.now();
         pendingRequests.delete(requestId);
 
-        if (tabId >= 0) {
-          const store = getOrCreateTabStore(tabId);
+        const targetTabId = tabId >= 0 ? tabId : pendingTabId;
+        if (targetTabId !== undefined && targetTabId !== null) {
+          const store = getOrCreateTabStore(targetTabId);
           store.correlateNetworkRequest(entry);
-          const state = getOrCreateTabState(tabId);
+          const state = getOrCreateTabState(targetTabId);
           state.events = store.events;
           state.lastUpdated = Date.now();
-          updateBadge(tabId, state);
-          persistTabState(tabId, state);
-          notifyStateUpdated(tabId);
+          updateBadge(targetTabId, state);
+          persistTabState(targetTabId, state);
+          notifyStateUpdated(targetTabId);
         }
       }
     },
-    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*'] }
+    { urls: ['*://*.openai.com/*', '*://bzr.openai.com/*', '*://bzrcdn.openai.com/*', '<all_urls>'] }
   );
 
   // 3. Inspect Response Headers for Server-Side Tagging Containers

@@ -334,10 +334,9 @@
   function hookOaiqFunction(oaiqFn) {
     if (!oaiqFn || oaiqFn.__OPENAI_INSPECTOR_WRAPPED__) return oaiqFn;
 
-    if (Array.isArray(oaiqFn.q)) {
-      for (const callArgs of oaiqFn.q) {
-        handleOaiqCall(callArgs);
-      }
+    const existingQueue = Array.isArray(oaiqFn.q) ? oaiqFn.q : (Array.isArray(oaiqFn.queue) ? oaiqFn.queue : []);
+    for (const callArgs of existingQueue) {
+      handleOaiqCall(callArgs);
     }
 
     const wrappedOaiq = function () {
@@ -349,6 +348,7 @@
       wrappedOaiq[key] = oaiqFn[key];
     }
     wrappedOaiq.q = oaiqFn.q || [];
+    wrappedOaiq.queue = oaiqFn.queue || wrappedOaiq.q;
     wrappedOaiq.__OPENAI_INSPECTOR_WRAPPED__ = true;
 
     return wrappedOaiq;
@@ -384,7 +384,10 @@
     return (
       clean.includes('bzr.openai.com') ||
       clean.includes('bzrcdn.openai.com') ||
+      clean.includes('openai.com') ||
       clean.includes('/v1/sdk/events') ||
+      clean.includes('oaiq') ||
+      (clean.includes('pid=') && (clean.includes('st=oaiq') || clean.includes('oai'))) ||
       (clean.includes('/events') && (clean.includes('pid=') || clean.includes('oaiq')))
     );
   }
@@ -433,9 +436,9 @@
   if (typeof window.fetch === 'function') {
     const originalFetch = window.fetch;
     window.fetch = function (resource, init) {
-      const url = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
+      const url = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : (resource && resource.href ? resource.href : (resource ? String(resource) : '')));
       if (isTargetNetworkUrl(url)) {
-        const method = (init && init.method) ? init.method.toUpperCase() : 'GET';
+        const method = (init && init.method) ? init.method.toUpperCase() : (resource && resource.method ? resource.method.toUpperCase() : 'GET');
         let payload = null;
         if (init && init.body) {
           try {
@@ -483,7 +486,8 @@
   if (navigator && typeof navigator.sendBeacon === 'function') {
     const originalSendBeacon = navigator.sendBeacon;
     navigator.sendBeacon = function (url, data) {
-      if (isTargetNetworkUrl(url)) {
+      const urlStr = typeof url === 'string' ? url : (url && url.href ? url.href : String(url || ''));
+      if (isTargetNetworkUrl(urlStr)) {
         let payload = null;
         try {
           payload = typeof data === 'string' ? JSON.parse(data) : data;
@@ -491,7 +495,7 @@
           payload = data;
         }
         const netData = {
-          url: url,
+          url: urlStr,
           method: 'POST',
           status: 200,
           ok: true,
@@ -505,6 +509,45 @@
       return originalSendBeacon.apply(this, arguments);
     };
   }
+
+  // Hook dataLayer for Google Tag Manager deployments
+  function hookDataLayer(dl) {
+    if (!dl || dl.__OPENAI_INSPECTOR_WRAPPED__) return dl;
+    if (Array.isArray(dl)) {
+      for (const item of dl) {
+        checkDataLayerItem(item);
+      }
+    }
+    const origPush = dl.push;
+    dl.push = function () {
+      for (let i = 0; i < arguments.length; i++) {
+        checkDataLayerItem(arguments[i]);
+      }
+      return origPush.apply(this, arguments);
+    };
+    dl.__OPENAI_INSPECTOR_WRAPPED__ = true;
+    return dl;
+  }
+
+  function checkDataLayerItem(item) {
+    if (!item || typeof item !== 'object') return;
+    sendToContentScript('DATALAYER_EVENT_CAPTURED', item);
+  }
+
+  if (typeof window.dataLayer !== 'undefined') {
+    window.dataLayer = hookDataLayer(window.dataLayer);
+  }
+  let internalDataLayer = window.dataLayer;
+  try {
+    Object.defineProperty(window, 'dataLayer', {
+      configurable: true,
+      enumerable: true,
+      get: () => internalDataLayer,
+      set: (val) => {
+        internalDataLayer = hookDataLayer(val);
+      }
+    });
+  } catch {}
 
   // Wrap XMLHttpRequest
   if (typeof window.XMLHttpRequest === 'function') {

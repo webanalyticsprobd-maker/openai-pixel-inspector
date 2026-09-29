@@ -42,7 +42,10 @@ export function isOpenAINetworkRequest(url) {
   return (
     cleanUrl.includes('bzr.openai.com') ||
     cleanUrl.includes('bzrcdn.openai.com') ||
+    cleanUrl.includes('openai.com') ||
     cleanUrl.includes('/v1/sdk/events') ||
+    cleanUrl.includes('oaiq') ||
+    (cleanUrl.includes('pid=') && (cleanUrl.includes('st=oaiq') || cleanUrl.includes('oai'))) ||
     (cleanUrl.includes('/events') && (cleanUrl.includes('pid=') || cleanUrl.includes('oaiq')))
   );
 }
@@ -78,12 +81,35 @@ export function parseNetworkPayload(rawPayload) {
         const params = new URLSearchParams(rawPayload);
         const obj = {};
         for (const [k, v] of params.entries()) {
-          obj[k] = v;
+          try {
+            obj[k] = JSON.parse(v);
+          } catch {
+            obj[k] = v;
+          }
         }
         parsed = obj;
       } catch {
         parsed = { rawText: rawPayload };
       }
+    }
+  }
+
+  // If parsed has stringified events or data, parse them
+  if (parsed && typeof parsed === 'object') {
+    if (typeof parsed.events === 'string') {
+      try {
+        parsed.events = JSON.parse(parsed.events);
+      } catch {}
+    }
+    if (typeof parsed.data === 'string') {
+      try {
+        parsed.data = JSON.parse(parsed.data);
+      } catch {}
+    }
+    if (typeof parsed.user === 'string') {
+      try {
+        parsed.user = JSON.parse(parsed.user);
+      } catch {}
     }
   }
 
@@ -299,7 +325,43 @@ export function normalizeOpenAIRequest(netReq) {
 
   // 2. Transport & Request-Level Data
   const obref = parsedBody.obref || null;
-  const rawEvents = Array.isArray(parsedBody.events) ? parsedBody.events : [];
+  let rawEvents = [];
+  if (Array.isArray(parsedBody.events)) {
+    rawEvents = parsedBody.events;
+  } else if (typeof parsedBody.events === 'string') {
+    try {
+      const parsed = JSON.parse(parsedBody.events);
+      if (Array.isArray(parsed)) rawEvents = parsed;
+      else if (parsed && typeof parsed === 'object') rawEvents = [parsed];
+    } catch {}
+  } else if (parsedBody.event && typeof parsedBody.event === 'object') {
+    rawEvents = [parsedBody.event];
+  } else if (parsedBody.type || parsedBody.eventName || parsedBody.name) {
+    rawEvents = [parsedBody];
+  } else if (urlObj) {
+    const evName = urlObj.searchParams.get('ev') || urlObj.searchParams.get('event') || urlObj.searchParams.get('name') || urlObj.searchParams.get('type');
+    if (evName) {
+      rawEvents = [{
+        type: evName,
+        id: urlObj.searchParams.get('id') || urlObj.searchParams.get('event_id') || null,
+        timestamp_ms: queryParams.t || Date.now(),
+        source_url: url,
+        data: parsedBody || {}
+      }];
+    }
+  }
+
+  // Fallback: If this is an OpenAI network request (to /v1/sdk/events, /events, or with pid=) and no explicit events were extracted:
+  if (rawEvents.length === 0 && (queryParams.pid || url.includes('/events') || url.includes('bzr.openai.com') || url.includes('oaiq'))) {
+    const inferredType = urlObj?.searchParams.get('ev') || urlObj?.searchParams.get('event') || 'page_viewed';
+    rawEvents = [{
+      type: inferredType,
+      id: urlObj?.searchParams.get('id') || null,
+      timestamp_ms: queryParams.t || netReq.timestamp || Date.now(),
+      source_url: url,
+      data: parsedBody || {}
+    }];
+  }
   const unknownTransportFields = [];
   for (const [k, v] of Object.entries(parsedBody)) {
     if (!['obref', 'events', 'user', 'pixelId', 'pixel_id'].includes(k)) {
