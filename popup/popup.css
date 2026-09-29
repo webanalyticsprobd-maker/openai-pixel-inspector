@@ -1099,6 +1099,152 @@ html, body {
   background: var(--status-neutral-bg);
 }
 
+/* ==========================================================================
+   Elevated Parameter Cards (Built-in Knowledge Dictionary UI)
+   ========================================================================== */
+.param-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.param-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.param-card:hover {
+  border-color: var(--accent-brand);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.param-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.param-card-key {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11.5px;
+  color: var(--text-main);
+  word-break: break-all;
+}
+
+.param-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.param-tag-official {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--status-success);
+  background: var(--status-success-bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+.param-tag-inferred {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  letter-spacing: 0.02em;
+}
+
+.param-card-cat-badge {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cat-query {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+}
+
+.cat-batch {
+  background: rgba(168, 85, 247, 0.12);
+  color: #9333ea;
+}
+
+.cat-event {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.cat-data {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.cat-user {
+  background: rgba(249, 115, 22, 0.12);
+  color: #ea580c;
+}
+
+.cat-attribution {
+  background: rgba(236, 72, 153, 0.12);
+  color: #db2777;
+}
+
+.param-card-val-box {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.param-card-val {
+  font-size: 11px;
+  color: var(--text-main);
+  word-break: break-all;
+  flex: 1;
+}
+
+.param-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.param-desc-name {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.tree-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 /* Validation Checklist Items */
 .val-check-item {
   display: flex;

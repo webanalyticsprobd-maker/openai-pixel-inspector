@@ -247,7 +247,7 @@
           <table class="health-table" style="margin-top: 8px;">
             <tbody>
               <tr>
-                <td class="health-component">URL Parameter</td>
+                <td class="health-component">URL Parameter (?oppref)</td>
                 <td class="health-status mono" id="attr-url-val">Not found</td>
               </tr>
               <tr>
@@ -255,23 +255,55 @@
                 <td class="health-status mono" id="attr-cookie-val">Not found</td>
               </tr>
               <tr>
+                <td class="health-component">Browser Reference (obref)</td>
+                <td class="health-status mono" id="attr-obref-val">Not found</td>
+              </tr>
+              <tr>
                 <td class="health-component">Storage</td>
                 <td class="health-status mono" id="attr-storage-val">Not found</td>
               </tr>
               <tr>
-                <td class="health-component">Active Attribution</td>
+                <td class="health-component">Active Identifier</td>
                 <td class="health-status mono" id="attr-active-key">None</td>
               </tr>
             </tbody>
           </table>
 
-          <details class="learn-disclosure">
-            <summary>Learn about oppref</summary>
-            <ul class="guidance-list">
-              <li><strong>Ad Clicks:</strong> OpenAI automatically appends <code>?oppref=gAAAA...</code> when users click OpenAI Ads.</li>
-              <li><strong>Cookie Lifetime:</strong> The official SDK persists this into the <code>__oppref</code> cookie for 30-day conversion attribution.</li>
-              <li><strong>CAPI Tracking:</strong> Pass the same <code>oppref</code> in your server Conversions API payload for hybrid attribution.</li>
-            </ul>
+          <details class="learn-disclosure" open style="margin-top: 12px;">
+            <summary style="font-weight: 600; font-size: 11.5px; cursor: pointer; color: var(--text-main);">Built-in Attribution Knowledge Base</summary>
+            <div style="margin-top: 8px; font-size: 11px; line-height: 1.45; color: var(--text-secondary);">
+              <table class="tree-table" style="margin-top: 4px;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); text-align: left;">
+                    <th style="padding: 4px; font-size: 10px; color: var(--text-muted);">Identifier</th>
+                    <th style="padding: 4px; font-size: 10px; color: var(--text-muted);">Collection Source</th>
+                    <th style="padding: 4px; font-size: 10px; color: var(--text-muted);">Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono" style="padding: 4px; font-weight: 700; color: var(--status-success);">oppref</td>
+                    <td style="padding: 4px;">URL parameter <code>?oppref=...</code></td>
+                    <td style="padding: 4px;">Ad-click attribution token passed from ChatGPT / OpenAI Ads.</td>
+                  </tr>
+                  <tr>
+                    <td class="mono" style="padding: 4px; font-weight: 700; color: var(--status-success);">__oppref</td>
+                    <td style="padding: 4px;">First-party cookie</td>
+                    <td style="padding: 4px;">Persists ad-click attribution for multi-page checkout.</td>
+                  </tr>
+                  <tr>
+                    <td class="mono" style="padding: 4px; font-weight: 700; color: #9333ea;">obref</td>
+                    <td style="padding: 4px;">Request payload &amp; <code>__obref</code></td>
+                    <td style="padding: 4px;">Browser-level device reference across event batches.</td>
+                  </tr>
+                  <tr>
+                    <td class="mono" style="padding: 4px; font-weight: 700; color: #9333ea;">__obref</td>
+                    <td style="padding: 4px;">First-party cookie</td>
+                    <td style="padding: 4px;">Stores persistent browser reference on client domain.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </details>
         </section>
       </div>

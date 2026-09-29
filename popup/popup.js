@@ -5,6 +5,7 @@
 
 import { formatTimestamp, escapeHtml, truncateString } from '../utils/formatting.js';
 import { generateAuditReport, generateComprehensiveAudit, formatAuditMarkdown, formatAuditCsv } from '../core/scanner.js';
+import { getEventInfo, getParameterInfo, EVENT_DICTIONARY, ATTRIBUTION_DICTIONARY } from '../core/dictionary.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Navigation elements
@@ -57,6 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const opprefStatusBadge = document.getElementById('oppref-status-badge');
   const attrUrlVal = document.getElementById('attr-url-val');
   const attrCookieVal = document.getElementById('attr-cookie-val');
+  const attrObrefVal = document.getElementById('attr-obref-val');
   const attrStorageVal = document.getElementById('attr-storage-val');
   const attrActiveKey = document.getElementById('attr-active-key');
 
@@ -487,15 +489,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const isCustom = latest.validation && latest.validation.isCustom;
+      const latestEvtInfo = getEventInfo(latest.displayName || latest.name);
+      const latestColor = latestEvtInfo.color || '#10b981';
 
       latestEventContent.innerHTML = `
         <div class="latest-event-compact">
           <div class="latest-event-top-line">
-            <strong class="latest-event-name">${escapeHtml(latest.displayName || latest.name)}</strong>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="tree-status-dot" style="background-color: ${latestColor};" title="${escapeHtml(latestEvtInfo.label)}"></span>
+              <strong class="latest-event-name">${escapeHtml(latest.displayName || latest.name)}</strong>
+            </div>
             ${latestTriggerBadge}
           </div>
           <div class="latest-event-meta-line">
-            <span>${formatTimestamp(latest.timestamp)} &bull; <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">${isCustom ? 'Custom' : 'Standard'}</span></span>
+            <span>${formatTimestamp(latest.timestamp)} &bull; <span class="event-type-badge ${isCustom ? 'event-type-custom' : 'event-type-std'}">${escapeHtml(latestEvtInfo.label)}</span></span>
           </div>
           <div class="latest-event-path-line">
             <code class="mono truncate">${escapeHtml(latest.pathname || '/')}</code>
@@ -694,15 +701,74 @@ document.addEventListener('DOMContentLoaded', async () => {
     `;
   }
 
-  // Section Builder Helper
-  function renderEventSection(secName, title, itemKey, tableHtml, jsonData, isRaw = false) {
+  // Individual Parameter Card Renderer (Built-in Knowledge Base)
+  function renderParameterCard(paramKey, val, category = 'DATA', currency = 'USD') {
+    const paramInfo = getParameterInfo(paramKey, category);
+    const catClass = `cat-${category.toLowerCase()}`;
+    const isOfficial = paramInfo.official;
+
+    let displayValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+    let rawValue = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+
+    if ((paramKey.includes('amount') || paramKey.includes('price') || paramKey.includes('value')) && typeof val === 'number') {
+      if (Number.isInteger(val)) {
+        displayValue = `${val} (${currency} ${(val / 100).toFixed(2)})`;
+      }
+    }
+
+    return `
+      <div class="param-card">
+        <div class="param-card-header">
+          <span class="param-card-key mono">${escapeHtml(paramKey)}</span>
+          <div class="param-card-badges">
+            ${isOfficial ? '<span class="param-tag-official">Official</span>' : '<span class="param-tag-inferred">Inferred</span>'}
+            <span class="param-card-cat-badge ${catClass}">${escapeHtml(category)}</span>
+          </div>
+        </div>
+        <div class="param-card-val-box">
+          <code class="param-card-val mono">${escapeHtml(displayValue)}</code>
+          <button class="btn-copy-inline" data-copy="${escapeHtml(rawValue)}" title="Copy value">${ICONS.copy}</button>
+        </div>
+        <div class="param-card-desc">
+          <span class="param-desc-name">${escapeHtml(paramInfo.name)}</span> — ${escapeHtml(paramInfo.description)}
+        </div>
+      </div>
+    `;
+  }
+
+  // Section Builder Helper (Supports CARDS | TABLE | JSON)
+  function renderEventSection(secName, title, itemKey, tableHtml, jsonData, isRaw = false, cardsHtml = null) {
     const secKey = `${itemKey}__${secName}`;
     const isSectionExpanded = isRaw ? openRawSectionKeys.has(secKey) : !collapsedSectionKeys.has(secKey);
-    const viewMode = sectionViewModes.get(secKey) || (isRaw ? 'json' : 'table');
+    const defaultMode = cardsHtml ? 'cards' : (isRaw ? 'json' : 'table');
+    const viewMode = sectionViewModes.get(secKey) || defaultMode;
 
-    const bodyContent = viewMode === 'table'
-      ? tableHtml
-      : renderInteractiveJson(jsonData, `${secKey}_json`);
+    let bodyContent = tableHtml;
+    if (viewMode === 'cards' && cardsHtml) {
+      bodyContent = cardsHtml;
+    } else if (viewMode === 'json') {
+      bodyContent = renderInteractiveJson(jsonData, `${secKey}_json`);
+    } else {
+      bodyContent = tableHtml;
+    }
+
+    let toggleBtns = '';
+    if (cardsHtml) {
+      toggleBtns = `
+        <div class="tree-view-toggle">
+          <button class="view-toggle-btn ${viewMode === 'cards' ? 'active' : ''}" data-set-view="cards" data-sec-key="${escapeHtml(secKey)}">CARDS</button>
+          <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
+          <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
+        </div>
+      `;
+    } else {
+      toggleBtns = `
+        <div class="tree-view-toggle">
+          <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
+          <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
+        </div>
+      `;
+    }
 
     return `
       <div class="tree-section ${isSectionExpanded ? 'open' : ''}" data-section-key="${escapeHtml(secKey)}">
@@ -711,10 +777,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="tree-section-chevron">${ICONS.chevronRight}</span>
             <span class="tree-section-title">${escapeHtml(title)}</span>
           </div>
-          <div class="tree-view-toggle">
-            <button class="view-toggle-btn ${viewMode === 'table' ? 'active' : ''}" data-set-view="table" data-sec-key="${escapeHtml(secKey)}">TABLE</button>
-            <button class="view-toggle-btn ${viewMode === 'json' ? 'active' : ''}" data-set-view="json" data-sec-key="${escapeHtml(secKey)}">JSON</button>
-          </div>
+          ${toggleBtns}
         </div>
         <div class="tree-section-body">
           ${bodyContent}
@@ -787,13 +850,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       const subtitleText = `${isCustom ? 'Custom Event' : 'Standard Event'} · ${evt.source?.location === 'server' ? 'Conversions API' : 'Browser Pixel'}`;
       const timeStr = formatTimestamp(evt.timestamp);
 
+      const evtInfo = getEventInfo(evt.displayName || evt.name);
+
       // Section 1: Event
       const eventTableHtml = `
         <table class="tree-table">
           <tbody>
             <tr>
               <td class="tree-key-cell">Event Name</td>
-              <td class="tree-val-cell mono">${escapeHtml(evt.displayName || evt.name)}</td>
+              <td class="tree-val-cell mono"><span class="tree-status-dot" style="background-color:${evtInfo.color}; display:inline-block; margin-right:5px; vertical-align:middle;"></span>${escapeHtml(evt.displayName || evt.name)}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Label &amp; Category</td>
+              <td class="tree-val-cell">${escapeHtml(evtInfo.label)} &bull; <span class="badge badge-neutral" style="font-size:10px;">${escapeHtml(evtInfo.category)}</span></td>
+              <td class="tree-status-cell"><span class="val-pill ${evtInfo.official ? 'val-pill-valid' : 'val-pill-info'}">${evtInfo.official ? 'Official' : 'Inferred'}</span></td>
+            </tr>
+            <tr>
+              <td class="tree-key-cell">Data Shape</td>
+              <td class="tree-val-cell mono">${escapeHtml(evtInfo.dataShape)}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
             <tr>
@@ -812,6 +887,11 @@ document.addEventListener('DOMContentLoaded', async () => {
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
             <tr>
+              <td class="tree-key-cell">Description</td>
+              <td class="tree-val-cell" style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(evtInfo.description)}</td>
+              <td class="tree-status-cell"><span class="val-pill val-pill-info">ⓘ</span></td>
+            </tr>
+            <tr>
               <td class="tree-key-cell">Source</td>
               <td class="tree-val-cell">${escapeHtml(evt.source?.caller || (evt.source?.location === 'server' ? 'Conversions API' : 'Browser Pixel'))}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
@@ -821,12 +901,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       `;
       const eventJsonData = {
         event_name: evt.displayName || evt.name,
+        label: evtInfo.label,
+        category: evtInfo.category,
+        official: evtInfo.official,
+        data_shape: evtInfo.dataShape,
+        description: evtInfo.description,
         event_id: evt.eventId || null,
         pixel_id: evt.pixelId || null,
         timestamp: timeStr,
         source: evt.source?.caller || (evt.source?.location === 'server' ? 'conversions_api' : 'browser_pixel')
       };
-      const secEvent = renderEventSection('event', 'Event', itemKey, eventTableHtml, eventJsonData);
+      const secEvent = renderEventSection('event', 'Event Definition & Metadata', itemKey, eventTableHtml, eventJsonData);
 
       // Section 2: Attribution
       const oppref = evt.attribution?.oppref || currentTabState.attribution?.oppref || null;
@@ -865,6 +950,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const dataParams = params || {};
 
       let combinedHierarchyRows = '';
+      const paramCards = [];
 
       // 1. QUERY Parameters
       const qEntries = Object.entries(qParams);
@@ -878,6 +964,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
           `;
+          paramCards.push(renderParameterCard(`query.${qk}`, qv, 'QUERY'));
         }
       }
 
@@ -892,6 +979,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓ Present</span></td>
           </tr>
         `;
+        paramCards.push(renderParameterCard('batch.obref', bObref, 'BATCH'));
       }
 
       // 3. EVENT Parameters (Envelope)
@@ -918,6 +1006,15 @@ document.addEventListener('DOMContentLoaded', async () => {
           <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
         </tr>
       `;
+      paramCards.push(renderParameterCard('type', envParams.type || evt.displayName || evt.name, 'EVENT'));
+      if (envParams.id || evt.eventId) {
+        paramCards.push(renderParameterCard('id', envParams.id || evt.eventId, 'EVENT'));
+      }
+      paramCards.push(renderParameterCard('timestamp_ms', envParams.timestamp_ms || evt.timestamp, 'EVENT'));
+      if (envParams.source_url || evt.url || currentTabState.url) {
+        paramCards.push(renderParameterCard('source_url', envParams.source_url || evt.url || currentTabState.url || '', 'EVENT'));
+      }
+
       if (envParams.opt_out !== undefined) {
         combinedHierarchyRows += `
           <tr>
@@ -926,6 +1023,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
           </tr>
         `;
+        paramCards.push(renderParameterCard('opt_out', envParams.opt_out, 'EVENT'));
       }
 
       // 4. DATA Parameters
@@ -936,9 +1034,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           renderParameterValue(`data.${k}`, v, valResults, itemKey, '', dataParams.currency || 'USD')
         ).join('');
         combinedHierarchyRows += paramRows;
+
+        for (const [dk, dv] of dataEntries) {
+          const cat = ['amount', 'currency', 'contents', 'content_type', 'num_items'].includes(dk) ? 'COMMERCE' :
+                      ['email_sha256', 'phone_number_sha256', 'first_name_sha256', 'last_name_sha256', 'external_id_sha256', 'city', 'region', 'postal_code', 'country'].includes(dk) ? 'USER' : 'DATA';
+          paramCards.push(renderParameterCard(`data.${dk}`, dv, cat, dataParams.currency || 'USD'));
+        }
       }
 
       const paramsTableHtml = `<table class="tree-table"><tbody>${combinedHierarchyRows}</tbody></table>`;
+      const paramCardsHtml = `<div class="param-cards-grid">${paramCards.join('')}</div>`;
       
       const combinedJsonData = {
         query: Object.keys(qParams).length > 0 ? qParams : undefined,
@@ -952,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
         data: dataParams
       };
-      const secParams = renderEventSection('params', 'Parameters & Payload Hierarchy', itemKey, paramsTableHtml, combinedJsonData);
+      const secParams = renderEventSection('params', 'Parameters & Payload Hierarchy', itemKey, paramsTableHtml, combinedJsonData, false, paramCardsHtml);
 
       // Section 4: Page
       const pageUrl = evt.url || currentTabState.url || '/';
@@ -1149,13 +1254,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="tree-event-header-top">
             <div class="tree-event-title-group">
               <span class="tree-event-chevron">${ICONS.chevronRight}</span>
-              <span class="tree-status-dot ${statusDotClass}"></span>
+              <span class="tree-status-dot" style="background-color: ${evtInfo.color};" title="${escapeHtml(evtInfo.label)}"></span>
               <span class="tree-event-name">${escapeHtml(evt.displayName || evt.name)}</span>
             </div>
             <span class="tree-event-time">${timeStr}</span>
           </div>
           <div class="tree-event-header-sub">
-            <span class="tree-event-subtitle">${escapeHtml(subtitleText)}</span>
+            <span class="tree-event-subtitle">${escapeHtml(evtInfo.label)} &bull; ${escapeHtml(subtitleText)}</span>
             ${statusTagHtml}
           </div>
         </div>
@@ -1419,13 +1524,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       opprefStatusBadge.className = 'badge badge-neutral';
     }
 
+    const obrefVal = attribution.obref || (currentTabState.events && currentTabState.events.find(e => e.network?.payload?.obref)?.network?.payload?.obref) || null;
+
     attrUrlVal.innerHTML = attribution.urlDetected ? makeCopyable(attribution.details.urlParam, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.urlParam) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
     attrCookieVal.innerHTML = attribution.cookieDetected ? makeCopyable(attribution.details.cookieValue, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.cookieValue) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    if (attrObrefVal) {
+      attrObrefVal.innerHTML = obrefVal ? makeCopyable(obrefVal, '<span style="color:#9333ea; font-weight:600;">' + escapeHtml(obrefVal) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
+    }
     attrStorageVal.innerHTML = attribution.storageDetected ? makeCopyable(attribution.details.localStorage, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(attribution.details.localStorage) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
     attrActiveKey.innerHTML = activeRef ? makeCopyable(activeRef, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(activeRef) + '</span>') : '<span style="color:var(--text-muted);">None</span>';
 
     attachCopyListeners(attrUrlVal);
     attachCopyListeners(attrCookieVal);
+    if (attrObrefVal) attachCopyListeners(attrObrefVal);
     attachCopyListeners(attrStorageVal);
     attachCopyListeners(attrActiveKey);
   }
