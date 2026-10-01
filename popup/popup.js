@@ -359,10 +359,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderAll() {
+    const appMain = document.querySelector('.app-main');
+    const savedScrollTop = appMain ? appMain.scrollTop : 0;
     renderOverview();
     renderEvents();
     renderIssues();
     renderAudit();
+    if (appMain && savedScrollTop > 0) {
+      requestAnimationFrame(() => {
+        appMain.scrollTop = savedScrollTop;
+      });
+    }
   }
 
   // Real-time tab state synchronization listener (instant zero-delay event updates)
@@ -871,6 +878,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderEvents() {
     if (!currentTabState) return;
+    const appMain = document.querySelector('.app-main');
+    const savedScrollTop = appMain ? appMain.scrollTop : 0;
+
     const rawEvents = currentTabState.events || [];
     const events = rawEvents.filter(e => {
       const n = (e.displayName || e.name || '').toLowerCase();
@@ -1386,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         drawerEl.addEventListener('click', (e) => e.stopPropagation());
       }
 
-      // Section Header Accordion Toggles
+      // Section Header Accordion Toggles (In-place DOM toggle without list re-render)
       item.querySelectorAll('.tree-section-title-group').forEach((secHeader) => {
         secHeader.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1411,7 +1421,6 @@ document.addEventListener('DOMContentLoaded', async () => {
               if (secContainer) secContainer.classList.remove('open');
             }
           }
-          renderEvents();
         });
       });
 
@@ -1426,37 +1435,47 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       });
 
-      // Nested Array / Object Accordion Toggles
+      // Nested Array / Object Accordion Toggles (In-place DOM toggle)
       item.querySelectorAll('[data-toggle-nested]').forEach((nestedHeader) => {
         nestedHeader.addEventListener('click', (e) => {
           e.stopPropagation();
           const nestedKey = nestedHeader.dataset.toggleNested;
+          const container = nestedHeader.closest('.tree-array-item-card, .tree-nested-array, .tree-nested-object');
           if (collapsedNestedKeys.has(nestedKey)) {
             collapsedNestedKeys.delete(nestedKey);
+            if (container) container.classList.add('open');
           } else {
             collapsedNestedKeys.add(nestedKey);
+            if (container) container.classList.remove('open');
           }
-          renderEvents();
         });
       });
 
-      // Interactive JSON Tree Disclosure Toggles
+      // Interactive JSON Tree Disclosure Toggles (In-place DOM toggle)
       item.querySelectorAll('.json-toggle-line').forEach((jsonToggle) => {
         jsonToggle.addEventListener('click', (e) => {
           e.stopPropagation();
           const jsonPath = jsonToggle.dataset.jsonPath;
+          const node = jsonToggle.closest('.json-node');
           if (collapsedJsonPaths.has(jsonPath)) {
             collapsedJsonPaths.delete(jsonPath);
+            if (node) node.classList.add('open');
           } else {
             collapsedJsonPaths.add(jsonPath);
+            if (node) node.classList.remove('open');
           }
-          renderEvents();
         });
       });
 
       attachCopyListeners(item);
       eventsListContainer.appendChild(item);
     });
+
+    if (appMain && savedScrollTop > 0) {
+      requestAnimationFrame(() => {
+        appMain.scrollTop = savedScrollTop;
+      });
+    }
   }
 
 
