@@ -581,11 +581,94 @@ document.addEventListener('DOMContentLoaded', async () => {
     return `<div class="json-viewer-box"><div class="json-viewer-header"><span class="json-viewer-tag">JSON Payload</span><button class="btn-copy-inline btn-copy-json" data-copy="${escapeHtml(jsonStr)}" title="Copy JSON">${ICONS.copy} Copy JSON</button></div><div class="json-viewer-tree">${renderNode(data, null, rootId, 0)}</div></div>`;
   }
 
+  // Plain Name & Friendly Label Dictionary for Parameters
+  const PARAM_PLAIN_LABELS = {
+    // QUERY
+    'pid': 'Pixel ID',
+    'st': 'SDK Type',
+    'sv': 'SDK Version',
+    't': 'Timestamp',
+    'ec': 'Event Count',
+
+    // BATCH & ATTRIBUTION
+    'obref': 'Browser Reference',
+    '__obref': 'Browser Reference Cookie',
+    'oppref': 'Ad Attribution',
+    '__oppref': 'Ad Attribution Cookie',
+
+    // EVENT ENVELOPE
+    'type': 'Event Type',
+    'id': 'Event ID',
+    'timestamp_ms': 'Timestamp',
+    'source_url': 'Source URL',
+    'referrer_url': 'Referrer URL',
+    'opt_out': 'Opt Out',
+    'custom_event_name': 'Custom Event Name',
+
+    // DATA / COMMERCE
+    'amount': 'Amount',
+    'currency': 'Currency',
+    'contents': 'Contents',
+    'content_type': 'Content Type',
+    'num_items': 'Item Count',
+    'plan_id': 'Plan ID',
+    'order_id': 'Order ID',
+    'status': 'Status',
+    'value': 'Value',
+    'price': 'Price',
+    'quantity': 'Quantity',
+    'name': 'Item Name',
+    'brand': 'Brand',
+    'category': 'Category',
+
+    // USER MATCHING
+    'email_sha256': 'Hashed Email',
+    'phone_number_sha256': 'Hashed Phone',
+    'external_id_sha256': 'Hashed External ID',
+    'first_name_sha256': 'Hashed First Name',
+    'last_name_sha256': 'Hashed Last Name',
+    'country': 'Country',
+    'city': 'City',
+    'region': 'Region',
+    'postal_code': 'Postal Code',
+    'user.in': 'User Identity',
+    'user.fm': 'Form Matching',
+    'eid': 'External ID',
+    'em': 'Hashed Email'
+  };
+
+  function renderKeyDisplay(rawKey, category = 'DATA') {
+    if (!rawKey) return '';
+    const cleanKey = String(rawKey).replace(/^(query|batch|data|event)\./, '');
+    
+    let label = PARAM_PLAIN_LABELS[cleanKey] || PARAM_PLAIN_LABELS[rawKey];
+    
+    if (!label) {
+      if (cleanKey === 'type') {
+        label = (category === 'QUERY' || category === 'EVENT') ? 'Event Type' : 'Data Type';
+      } else if (cleanKey === 'id') {
+        label = (category === 'EVENT') ? 'Event ID' : 'Item ID';
+      } else {
+        const info = getParameterInfo(cleanKey, category);
+        if (info && info.name && info.name !== 'Custom Parameter' && !info.name.startsWith('Payload Parameter')) {
+          label = info.name.split('(')[0].trim();
+        }
+      }
+    }
+
+    if (label && label.toLowerCase() !== cleanKey.toLowerCase()) {
+      return `<span class="tree-param-key">${escapeHtml(cleanKey)}</span> <span class="tree-param-label">(${escapeHtml(label)})</span>`;
+    }
+    return `<span class="tree-param-key">${escapeHtml(cleanKey)}</span>`;
+  }
+
   // Recursive Parameter Renderer (Primitives, Objects, Arrays)
   function renderParameterValue(key, val, valResults = {}, itemKey = '', path = '', currency = 'USD') {
-    const currentPath = path ? `${path}.${key}` : key;
+    const rawKey = String(key);
+    const cleanKey = rawKey.replace(/^(query|batch|data|event)\./, '');
+    const currentPath = path ? `${path}.${cleanKey}` : cleanKey;
     const isNestedKey = `${itemKey}__${currentPath}`;
-    const valRes = valResults[key] || valResults[currentPath] || {};
+    const valRes = valResults[cleanKey] || valResults[currentPath] || valResults[`data.${cleanKey}`] || valResults[`data.${currentPath}`] || valResults[rawKey] || {};
 
     let valPill = '';
     if (valRes.valid === false || valRes.severity === 'error') {
@@ -651,7 +734,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <div class="tree-nested-header" data-toggle-nested="${escapeHtml(isNestedKey)}">
                 <div style="display:flex; align-items:center;">
                   <span class="tree-nested-chevron">${ICONS.chevronRight}</span>
-                  <span class="tree-key" style="font-weight:600; font-family:var(--font-mono);">${escapeHtml(key)}</span>
+                  <span class="tree-key">${renderKeyDisplay(cleanKey, 'DATA')}</span>
                   <span class="tree-section-badge">· ${val.length} item${val.length === 1 ? '' : 's'}</span>
                 </div>
                 <div>${valPill}</div>
@@ -679,7 +762,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               <div class="tree-nested-header" data-toggle-nested="${escapeHtml(isNestedKey)}">
                 <div style="display:flex; align-items:center;">
                   <span class="tree-nested-chevron">${ICONS.chevronRight}</span>
-                  <span class="tree-key" style="font-weight:600; font-family:var(--font-mono);">${escapeHtml(key)}</span>
+                  <span class="tree-key">${renderKeyDisplay(cleanKey, 'DATA')}</span>
                 </div>
                 <div>${valPill}</div>
               </div>
@@ -696,7 +779,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Primitive value
     let displayValue = String(val);
-    if ((key === 'amount' || key === 'value' || key === 'price') && typeof val === 'number') {
+    if ((cleanKey === 'amount' || cleanKey === 'value' || cleanKey === 'price') && typeof val === 'number') {
       if (Number.isInteger(val)) {
         displayValue = `${val} <span class="mono" style="color:var(--text-muted); font-size:11px;">(${currency} ${(val / 100).toFixed(2)})</span>`;
       }
@@ -704,7 +787,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     return `
       <tr>
-        <td class="tree-key-cell">${escapeHtml(key)}</td>
+        <td class="tree-key-cell">${renderKeyDisplay(cleanKey, path.includes('contents') ? 'CONTENTS' : 'DATA')}</td>
         <td class="tree-val-cell mono">${makeCopyable(String(val), displayValue)}</td>
         <td class="tree-status-cell">${valPill}</td>
       </tr>
@@ -713,23 +796,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Individual Parameter Card Renderer (Built-in Knowledge Base)
   function renderParameterCard(paramKey, val, category = 'DATA', currency = 'USD') {
-    const paramInfo = getParameterInfo(paramKey, category);
+    const cleanKey = String(paramKey).replace(/^(query|batch|data|event)\./, '');
+    const paramInfo = getParameterInfo(cleanKey, category);
     const catClass = `cat-${category.toLowerCase()}`;
     const isOfficial = paramInfo.official;
 
     let displayValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
     let rawValue = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
 
-    if ((paramKey.includes('amount') || paramKey.includes('price') || paramKey.includes('value')) && typeof val === 'number') {
+    if ((cleanKey.includes('amount') || cleanKey.includes('price') || cleanKey.includes('value')) && typeof val === 'number') {
       if (Number.isInteger(val)) {
         displayValue = `${val} (${currency} ${(val / 100).toFixed(2)})`;
       }
     }
 
+    const friendlyLabel = PARAM_PLAIN_LABELS[cleanKey] || (paramInfo.name && paramInfo.name.split('(')[0].trim());
+    const hasLabel = friendlyLabel && friendlyLabel.toLowerCase() !== cleanKey.toLowerCase();
+
     return `
       <div class="param-card">
         <div class="param-card-header">
-          <span class="param-card-key mono">${escapeHtml(paramKey)}</span>
+          <span class="param-card-key mono">${escapeHtml(cleanKey)}${hasLabel ? ` <span style="font-weight:400; font-size:11px; color:var(--text-secondary);">(${escapeHtml(friendlyLabel)})</span>` : ''}</span>
           <div class="param-card-badges">
             ${isOfficial ? '<span class="param-tag-official">Official</span>' : '<span class="param-tag-inferred">Inferred</span>'}
             <span class="param-card-cat-badge ${catClass}">${escapeHtml(category)}</span>
@@ -926,12 +1013,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         <table class="tree-table">
           <tbody>
             <tr>
-              <td class="tree-key-cell">oppref</td>
+              <td class="tree-key-cell">${renderKeyDisplay('oppref', 'ATTRIBUTION')}</td>
               <td class="tree-val-cell mono">${oppref ? makeCopyable(oppref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(oppref) + '</span>') : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
               <td class="tree-status-cell">${oppref ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not detected</span>'}</td>
             </tr>
             <tr>
-              <td class="tree-key-cell">obref</td>
+              <td class="tree-key-cell">${renderKeyDisplay('obref', 'ATTRIBUTION')}</td>
               <td class="tree-val-cell mono">${obref ? makeCopyable(obref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(obref) + '</span>') : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
               <td class="tree-status-cell">${obref ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not detected</span>'}</td>
             </tr>
@@ -965,12 +1052,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         for (const [qk, qv] of qEntries) {
           combinedHierarchyRows += `
             <tr>
-              <td class="tree-key-cell mono" style="color:var(--text-secondary);"><span style="color:var(--text-muted);">query.</span>${escapeHtml(qk)}</td>
+              <td class="tree-key-cell">${renderKeyDisplay(qk, 'QUERY')}</td>
               <td class="tree-val-cell mono">${makeCopyable(String(qv), escapeHtml(String(qv)))}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
           `;
-          paramCards.push(renderParameterCard(`query.${qk}`, qv, 'QUERY'));
+          paramCards.push(renderParameterCard(qk, qv, 'QUERY'));
         }
       }
 
@@ -980,34 +1067,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         combinedHierarchyRows += `
           <tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">BATCH</td></tr>
           <tr>
-            <td class="tree-key-cell mono" style="color:var(--text-secondary);"><span style="color:var(--text-muted);">batch.</span>obref</td>
+            <td class="tree-key-cell">${renderKeyDisplay('obref', 'BATCH')}</td>
             <td class="tree-val-cell mono">${makeCopyable(bObref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(bObref) + '</span>')}</td>
             <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓ Present</span></td>
           </tr>
         `;
-        paramCards.push(renderParameterCard('batch.obref', bObref, 'BATCH'));
+        paramCards.push(renderParameterCard('obref', bObref, 'BATCH'));
       }
 
       // 3. EVENT Parameters (Envelope)
       combinedHierarchyRows += `<tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">EVENT</td></tr>`;
       combinedHierarchyRows += `
         <tr>
-          <td class="tree-key-cell mono">type</td>
+          <td class="tree-key-cell">${renderKeyDisplay('type', 'EVENT')}</td>
           <td class="tree-val-cell mono">${escapeHtml(envParams.type || evt.displayName || evt.name)}</td>
           <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
         </tr>
         <tr>
-          <td class="tree-key-cell mono">id</td>
+          <td class="tree-key-cell">${renderKeyDisplay('id', 'EVENT')}</td>
           <td class="tree-val-cell mono">${(envParams.id || evt.eventId) ? makeCopyable(envParams.id || evt.eventId, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(envParams.id || evt.eventId) + '</span>') : '<span style="color:var(--text-muted)">Not Sent</span>'}</td>
           <td class="tree-status-cell">${(envParams.id || evt.eventId) ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not Sent</span>'}</td>
         </tr>
         <tr>
-          <td class="tree-key-cell mono">timestamp_ms</td>
+          <td class="tree-key-cell">${renderKeyDisplay('timestamp_ms', 'EVENT')}</td>
           <td class="tree-val-cell mono">${envParams.timestamp_ms || evt.timestamp}</td>
           <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
         </tr>
         <tr>
-          <td class="tree-key-cell mono">source_url</td>
+          <td class="tree-key-cell">${renderKeyDisplay('source_url', 'EVENT')}</td>
           <td class="tree-val-cell mono">${makeCopyable(envParams.source_url || evt.url || currentTabState.url || '', '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(envParams.source_url || evt.url || currentTabState.url || '') + '</span>')}</td>
           <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
         </tr>
@@ -1024,7 +1111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (envParams.opt_out !== undefined) {
         combinedHierarchyRows += `
           <tr>
-            <td class="tree-key-cell mono">opt_out</td>
+            <td class="tree-key-cell">${renderKeyDisplay('opt_out', 'EVENT')}</td>
             <td class="tree-val-cell mono">${String(envParams.opt_out)}</td>
             <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
           </tr>
@@ -1037,14 +1124,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (dataEntries.length > 0) {
         combinedHierarchyRows += `<tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">DATA</td></tr>`;
         const paramRows = dataEntries.map(([k, v]) =>
-          renderParameterValue(`data.${k}`, v, valResults, itemKey, '', dataParams.currency || 'USD')
+          renderParameterValue(k, v, valResults, itemKey, '', dataParams.currency || 'USD')
         ).join('');
         combinedHierarchyRows += paramRows;
 
         for (const [dk, dv] of dataEntries) {
           const cat = ['amount', 'currency', 'contents', 'content_type', 'num_items'].includes(dk) ? 'COMMERCE' :
                       ['email_sha256', 'phone_number_sha256', 'first_name_sha256', 'last_name_sha256', 'external_id_sha256', 'city', 'region', 'postal_code', 'country'].includes(dk) ? 'USER' : 'DATA';
-          paramCards.push(renderParameterCard(`data.${dk}`, dv, cat, dataParams.currency || 'USD'));
+          paramCards.push(renderParameterCard(dk, dv, cat, dataParams.currency || 'USD'));
         }
       }
 
