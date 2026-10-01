@@ -54,14 +54,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const gtmContainerPills = document.getElementById('gtm-container-pills');
   const datalayerListContainer = document.getElementById('datalayer-list-container');
 
-  // Attribution Tab elements
-  const opprefStatusBadge = document.getElementById('oppref-status-badge');
-  const attrUrlVal = document.getElementById('attr-url-val');
-  const attrCookieVal = document.getElementById('attr-cookie-val');
-  const attrObrefVal = document.getElementById('attr-obref-val');
-  const attrStorageVal = document.getElementById('attr-storage-val');
-  const attrActiveKey = document.getElementById('attr-active-key');
-
   // Issues Tab elements
   const issuesStatusBadge = document.getElementById('issues-status-badge');
   const issuesSummarySubtitle = document.getElementById('issues-summary-subtitle');
@@ -382,7 +374,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderEvents();
     renderFunnel();
     renderDataLayer();
-    renderAttribution();
     renderIssues();
     renderAudit();
   }
@@ -1523,55 +1514,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // ==========================================
-  // 10. Attribution (oppref & obref) Renderer
-  // ==========================================
-  function renderAttribution() {
-    if (!currentTabState) return;
-    const attribution = currentTabState.attribution || {};
-    const opprefVal = attribution.oppref || null;
-    const obrefVal = attribution.obref || (currentTabState.events && currentTabState.events.find(e => e.network?.payload?.obref)?.network?.payload?.obref) || null;
-
-    if (opprefVal || obrefVal) {
-      opprefStatusBadge.textContent = 'Detected';
-      opprefStatusBadge.className = 'badge badge-success';
-    } else {
-      opprefStatusBadge.textContent = 'Not detected';
-      opprefStatusBadge.className = 'badge badge-neutral';
-    }
-
-    // 1. URL Parameter (?oppref=...) - Ad-click token passed in landing URL
-    const urlOppref = (attribution.urlDetected && attribution.details?.urlParam) ? attribution.details.urlParam : (attribution.source === 'url' ? opprefVal : null);
-    attrUrlVal.innerHTML = urlOppref ? makeCopyable(urlOppref, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(urlOppref) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
-
-    // 2. Cookie (__oppref) - Persistent ad-click attribution cookie
-    const cookieOppref = attribution.cookieOpprefDetected ? attribution.details?.cookieOpprefValue : (attribution.details?.cookieOpprefValue || (attribution.source === 'cookie' && opprefVal ? opprefVal : null));
-    attrCookieVal.innerHTML = cookieOppref ? makeCopyable(cookieOppref, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(cookieOppref) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
-
-    // 3. Browser Reference (obref) - Device reference from payload / __obref
-    if (attrObrefVal) {
-      attrObrefVal.innerHTML = obrefVal ? makeCopyable(obrefVal, '<span style="color:#9333ea; font-weight:600;">' + escapeHtml(obrefVal) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
-    }
-
-    // 4. Storage (__oppref / oppref) - LocalStorage fallback
-    const storageVal = (attribution.storageDetected && attribution.details?.localStorage) ? attribution.details.localStorage : null;
-    attrStorageVal.innerHTML = storageVal ? makeCopyable(storageVal, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(storageVal) + '</span>') : '<span style="color:var(--text-muted);">Not found</span>';
-
-    // 5. Active Identifier - Shows primary ad-click oppref or browser obref
-    if (opprefVal) {
-      attrActiveKey.innerHTML = makeCopyable(opprefVal, '<span style="color:var(--status-success); font-weight:600;">' + escapeHtml(opprefVal) + '</span> <span style="font-size:10px; color:var(--text-muted);">(oppref)</span>');
-    } else if (obrefVal) {
-      attrActiveKey.innerHTML = makeCopyable(obrefVal, '<span style="color:#9333ea; font-weight:600;">' + escapeHtml(obrefVal) + '</span> <span style="font-size:10px; color:var(--text-muted);">(obref)</span>');
-    } else {
-      attrActiveKey.innerHTML = '<span style="color:var(--text-muted);">None</span>';
-    }
-
-    attachCopyListeners(attrUrlVal);
-    attachCopyListeners(attrCookieVal);
-    if (attrObrefVal) attachCopyListeners(attrObrefVal);
-    attachCopyListeners(attrStorageVal);
-    attachCopyListeners(attrActiveKey);
-  }
 
   // ==========================================
   // 11. Issues & Diagnostics Renderer

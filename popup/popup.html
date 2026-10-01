@@ -80,10 +80,6 @@
               <span>Data Layer</span>
               <span class="tab-count-tag" id="tab-count-datalayer">0</span>
             </button>
-            <button class="nav-tab" data-tab="attribution">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-              <span>oppref</span>
-            </button>
             <button class="nav-tab" data-tab="issues">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span>Issues</span>
@@ -233,82 +229,7 @@
         </section>
       </div>
 
-      <!-- TAB 5: ATTRIBUTION (oppref) -->
-      <div class="tab-pane" id="pane-attribution">
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <span class="card-title">OpenAI Click Reference (oppref)</span>
-              <span class="card-subtitle">Advertising attribution identifier</span>
-            </div>
-            <span id="oppref-status-badge" class="badge badge-neutral">Not detected</span>
-          </div>
-
-          <table class="health-table" style="margin-top: 8px;">
-            <tbody>
-              <tr>
-                <td class="health-component">URL Parameter (?oppref)</td>
-                <td class="health-status mono" id="attr-url-val">Not found</td>
-              </tr>
-              <tr>
-                <td class="health-component">Cookie (__oppref)</td>
-                <td class="health-status mono" id="attr-cookie-val">Not found</td>
-              </tr>
-              <tr>
-                <td class="health-component">Browser Reference (obref)</td>
-                <td class="health-status mono" id="attr-obref-val">Not found</td>
-              </tr>
-              <tr>
-                <td class="health-component">Storage</td>
-                <td class="health-status mono" id="attr-storage-val">Not found</td>
-              </tr>
-              <tr>
-                <td class="health-component">Active Identifier</td>
-                <td class="health-status mono" id="attr-active-key">None</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <details class="learn-disclosure" open style="margin-top: 12px;">
-            <summary style="font-weight: 600; font-size: 11.5px; cursor: pointer; color: var(--text-main);">Built-in Attribution Knowledge Base</summary>
-            <div style="margin-top: 8px; font-size: 11px; line-height: 1.45; color: var(--text-secondary);">
-              <table class="tree-table" style="margin-top: 4px;">
-                <thead>
-                  <tr style="border-bottom: 1px solid var(--border-color); text-align: left;">
-                    <th style="padding: 4px; font-size: 10px; color: var(--text-muted);">Identifier</th>
-                    <th style="padding: 4px; font-size: 10px; color: var(--text-muted);">Collection Source</th>
-                    <th style="padding: 4px; font-size: 10px; color: var(--text-muted);">Purpose</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="mono" style="padding: 4px; font-weight: 700; color: var(--status-success);">oppref</td>
-                    <td style="padding: 4px;">URL parameter <code>?oppref=...</code></td>
-                    <td style="padding: 4px;">Ad-click attribution token passed from ChatGPT / OpenAI Ads.</td>
-                  </tr>
-                  <tr>
-                    <td class="mono" style="padding: 4px; font-weight: 700; color: var(--status-success);">__oppref</td>
-                    <td style="padding: 4px;">First-party cookie</td>
-                    <td style="padding: 4px;">Persists ad-click attribution for multi-page checkout.</td>
-                  </tr>
-                  <tr>
-                    <td class="mono" style="padding: 4px; font-weight: 700; color: #9333ea;">obref</td>
-                    <td style="padding: 4px;">Request payload &amp; <code>__obref</code></td>
-                    <td style="padding: 4px;">Browser-level device reference across event batches.</td>
-                  </tr>
-                  <tr>
-                    <td class="mono" style="padding: 4px; font-weight: 700; color: #9333ea;">__obref</td>
-                    <td style="padding: 4px;">First-party cookie</td>
-                    <td style="padding: 4px;">Stores persistent browser reference on client domain.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </details>
-        </section>
-      </div>
-
-      <!-- TAB 7: ISSUES & DIAGNOSTICS -->
+      <!-- TAB 4: ISSUES & DIAGNOSTICS -->
       <div class="tab-pane" id="pane-issues">
         <section class="card">
           <div class="card-header">
