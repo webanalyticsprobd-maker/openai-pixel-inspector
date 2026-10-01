@@ -391,6 +391,96 @@ test('Normalizes event with contents array items without TypeError', () => {
   assert.strictEqual(norm.parameters.contents.length, 1);
 });
 
+// 20. Processed Event Keys Deduplication Engine
+test('Prevents dual ingestion of identical network events using processedEventKeys', () => {
+  const store = new EventStore();
+  const eventKey = 'evt_id:54f1f433-08a1-4321';
+  
+  assert.strictEqual(store.hasProcessedKey(eventKey), false);
+  store.markProcessedKey(eventKey);
+  assert.strictEqual(store.hasProcessedKey(eventKey), true);
+
+  store.clear();
+  assert.strictEqual(store.hasProcessedKey(eventKey), false);
+});
+
+// 21. Legitimate Repeated Network Events (e.g. repeated clicks across seconds)
+test('Preserves legitimate repeated network requests as separate valid events', () => {
+  const store = new EventStore();
+  const t1 = 1000000;
+  const t2 = 1002500; // 2.5 seconds later (separate legitimate user click)
+
+  const evt1 = normalizeEvent({
+    name: 'items_added',
+    timestamp: t1,
+    data: { type: 'contents', amount: 1500, currency: 'USD' }
+  });
+  const evt2 = normalizeEvent({
+    name: 'items_added',
+    timestamp: t2,
+    data: { type: 'contents', amount: 1500, currency: 'USD' }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[1].isDuplicate, false);
+  assert.strictEqual(store.events[1].duplicateStatus, '✅ Correct');
+});
+
+// 22. Rapid Double-Firing Detection (< 300ms race condition)
+test('Detects rapid double-firing race condition within 300ms with identical parameters', () => {
+  const store = new EventStore();
+  const t1 = 1000000;
+  const t2 = 1000050; // 50ms later (simultaneous tag trigger race condition)
+
+  const evt1 = normalizeEvent({
+    name: 'order_created',
+    timestamp: t1,
+    data: { type: 'contents', amount: 5000, currency: 'USD' }
+  });
+  const evt2 = normalizeEvent({
+    name: 'order_created',
+    timestamp: t2,
+    data: { type: 'contents', amount: 5000, currency: 'USD' }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[1].isDuplicate, true);
+  assert.strictEqual(store.events[1].duplicateStatus, '❌ Double Fired / Duplicate');
+});
+
+// 23. Exact Duplicate Event ID Detection
+test('Detects duplicate event ID sent across multiple network requests', () => {
+  const store = new EventStore();
+  const evt1 = normalizeEvent({
+    name: 'order_created',
+    event_id: 'order_abc_123',
+    timestamp: 1000000,
+    data: { type: 'contents', amount: 5000, currency: 'USD' }
+  });
+  const evt2 = normalizeEvent({
+    name: 'order_created',
+    event_id: 'order_abc_123',
+    timestamp: 1008000, // 8 seconds later with SAME explicit event_id
+    data: { type: 'contents', amount: 5000, currency: 'USD' }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[1].isDuplicate, true);
+  assert.strictEqual(store.events[1].duplicateReason.includes('order_abc_123'), true);
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);

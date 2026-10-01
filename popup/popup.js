@@ -387,6 +387,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderAudit();
   }
 
+  // Real-time tab state synchronization listener (instant zero-delay event updates)
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message && message.action === 'TAB_STATE_UPDATED') {
+        if (activeTab && message.tabId === activeTab.id && message.state) {
+          currentTabState = message.state;
+          renderAll();
+        }
+      }
+    });
+  }
+
   // ==========================================
   // 6. Overview Renderer (Tracking Health Dashboard)
   // ==========================================

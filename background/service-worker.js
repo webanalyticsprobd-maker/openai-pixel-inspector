@@ -238,8 +238,26 @@ function processTrackingNetworkPayload(tabId, netEntry) {
         return; // Exclude internal SDK events from user-facing events list
       }
 
-      const correlated = store.correlateNetworkRequest(netEntry, evtItem);
-      if (!correlated) {
+      // Unique Ingestion Key for Network Deduplication
+      const eventKey = evtId ? `evt_id:${evtId}` : `sig:${evtName}:${JSON.stringify(dataPayload)}:${netEntry.requestId || Math.floor(evtTs / 300)}`;
+
+      if (store.hasProcessedKey(eventKey)) {
+        // Already ingested from primary transport (e.g. webRequest) -> Update HTTP status/resolution
+        for (let i = store.events.length - 1; i >= 0; i--) {
+          const e = store.events[i];
+          if ((evtId && e.eventId === evtId) || (e.name === evtName && Math.abs(e.timestamp - evtTs) < 1000)) {
+            if (netEntry.status && netEntry.status !== 'pending') {
+              e.network.status = netEntry.status;
+            }
+            if (netEntry.ok !== undefined) {
+              e.network.ok = netEntry.ok;
+            }
+            break;
+          }
+        }
+      } else {
+        store.markProcessedKey(eventKey);
+
         const normalized = normalizeEvent({
           name: evtName,
           parameters: dataPayload,
@@ -280,6 +298,9 @@ function processTrackingNetworkPayload(tabId, netEntry) {
     state.events = store.events;
   } else if (parsedPayload && (parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type)) {
     const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type;
+    const evtId = parsedPayload.event_id || parsedPayload.id || null;
+    const evtTs = parsedPayload.timestamp_ms || parsedPayload.timestamp || Date.now();
+
     if (isInternalSdkEvent(parsedPayload)) {
       state.pixel.detected = true;
       state.pixel.confidence = 'high';
@@ -289,15 +310,32 @@ function processTrackingNetworkPayload(tabId, netEntry) {
       if (!state.internalEvents) state.internalEvents = [];
       state.internalEvents.push(parsedPayload);
     } else {
-      const correlated = store.correlateNetworkRequest(netEntry);
-      if (!correlated) {
+      const dataPayload = parsedPayload.properties || parsedPayload.data || parsedPayload;
+      const eventKey = evtId ? `evt_id:${evtId}` : `sig:${evtName}:${JSON.stringify(dataPayload)}:${netEntry.requestId || Math.floor(evtTs / 300)}`;
+
+      if (store.hasProcessedKey(eventKey)) {
+        for (let i = store.events.length - 1; i >= 0; i--) {
+          const e = store.events[i];
+          if ((evtId && e.eventId === evtId) || (e.name === evtName && Math.abs(e.timestamp - evtTs) < 1000)) {
+            if (netEntry.status && netEntry.status !== 'pending') {
+              e.network.status = netEntry.status;
+            }
+            if (netEntry.ok !== undefined) {
+              e.network.ok = netEntry.ok;
+            }
+            break;
+          }
+        }
+      } else {
+        store.markProcessedKey(eventKey);
+
         const normalized = normalizeEvent({
           name: evtName,
-          parameters: parsedPayload.properties || parsedPayload.data || parsedPayload,
-          event_id: parsedPayload.event_id || parsedPayload.id || null,
+          parameters: dataPayload,
+          event_id: evtId,
           pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
           url: state.url,
-          timestamp: Date.now(),
+          timestamp: evtTs,
           caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
           query: queryParams,
           batch: { obref: obrefVal },
@@ -327,9 +365,6 @@ function processTrackingNetworkPayload(tabId, netEntry) {
       }
       state.events = store.events;
     }
-  } else {
-    store.correlateNetworkRequest(netEntry);
-    state.events = store.events;
   }
 
   // Recalculate stats
@@ -361,6 +396,15 @@ function processTrackingNetworkPayload(tabId, netEntry) {
 
   state.lastUpdated = Date.now();
   updateBadge(tabId, state);
+
+  // Broadcast state update immediately for real-time live debugger UI
+  try {
+    chrome.runtime.sendMessage({
+      action: 'TAB_STATE_UPDATED',
+      tabId: tabId,
+      state: state
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 // =========================================================================
@@ -633,55 +677,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'PIXEL_EVENT_CAPTURED': {
-      if (state && store && message.data) {
+      if (state && message.data) {
         const rawEvent = message.data;
-        if (isInternalSdkEvent(rawEvent)) {
-          state.pixel.detected = true;
-          state.pixel.initialized = true;
-          state.pixel.confidence = 'high';
-          state.lastUpdated = Date.now();
-          updateBadge(tabId, state);
-          sendResponse({ status: 'ok' });
-          break;
+        state.pixel.detected = true;
+        state.pixel.initialized = true;
+        state.pixel.confidence = 'high';
+        if (rawEvent.pixelId && !state.pixel.pixelIds.includes(rawEvent.pixelId)) {
+          state.pixel.pixelIds.push(rawEvent.pixelId);
         }
-
-        const normalized = normalizeEvent(rawEvent, {
-          url: rawEvent.url || state.url,
-          pathname: rawEvent.pathname || '',
-          pixelId: rawEvent.pixelId || state.pixel.pixelIds[0] || null,
-          oppref: state.attribution.oppref || null
-        });
-
-        store.addEvent(normalized);
-        state.events = store.events;
-
-        // Recalculate stats
-        let total = state.events.length;
-        let standard = 0;
-        let custom = 0;
-        let valid = 0;
-        let warning = 0;
-        let error = 0;
-        let duplicate = 0;
-
-        for (const evt of state.events) {
-          if (evt.validation.isCustom) custom++; else standard++;
-          if (evt.isDuplicate) duplicate++;
-          if (evt.validation.status === 'valid') valid++;
-          if (evt.validation.status === 'warning') warning++;
-          if (evt.validation.status === 'error') error++;
-        }
-
-        state.stats = {
-          totalEvents: total,
-          standardEvents: standard,
-          customEvents: custom,
-          validEvents: valid,
-          warningEvents: warning,
-          errorEvents: error,
-          duplicateEvents: duplicate
-        };
-
         state.lastUpdated = Date.now();
         updateBadge(tabId, state);
       }

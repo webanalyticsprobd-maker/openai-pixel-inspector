@@ -9,6 +9,7 @@ export class EventStore {
   constructor() {
     this.events = [];
     this.duplicates = [];
+    this.processedEventKeys = new Set();
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
   }
@@ -16,8 +17,20 @@ export class EventStore {
   clear() {
     this.events = [];
     this.duplicates = [];
+    this.processedEventKeys = new Set();
     this.sessionId = 'SESSION_' + Date.now().toString(36).toUpperCase();
     this.startedAt = Date.now();
+  }
+
+  hasProcessedKey(key) {
+    if (!key) return false;
+    return this.processedEventKeys.has(key);
+  }
+
+  markProcessedKey(key) {
+    if (key) {
+      this.processedEventKeys.add(key);
+    }
   }
 
   /**
@@ -98,55 +111,38 @@ export class EventStore {
 
   /**
    * Action-Based Duplicate Detection
-   * Compares Event Name, URL/Pathname, Content/Product, Parameters, and Timestamp
+   * Strictly differentiates between:
+   * 1. Intentional repeated user actions (e.g. clicking Add to Cart twice across seconds) -> separate legitimate events.
+   * 2. True technical duplicate event_id collisions or rapid trigger double-fires (< 300ms) -> flagged as duplicate.
    */
   detectActionDuplicate(newEvent) {
     if (!newEvent.name) return null;
-    const windowMs = 5000; // 5.0-second action threshold for accidental double-fires
+    const rapidWindowMs = 300; // 300ms window for unintentional synchronous double-fires from duplicate listeners/triggers
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const existing = this.events[i];
       const timeDiff = Math.abs(newEvent.timestamp - existing.timestamp);
 
-      // Rule 1: Exact matching explicit event_id (Only when event_id was actually sent)
+      // Rule 1: Exact matching explicit event_id sent multiple times
       if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId && newEvent.name === existing.name) {
         return {
           event: existing,
-          reason: `Matching Event ID "${newEvent.eventId}"`
+          reason: `Matching Event ID "${newEvent.eventId}" sent multiple times`
         };
       }
 
-      // Rule 2: Same event name on the same URL within 5 seconds with identical content/amount/parameters
-      if (existing.name === newEvent.name && timeDiff < windowMs) {
+      // Rule 2: Rapid double-fire on identical page within 300ms with identical parameters
+      if (existing.name === newEvent.name && timeDiff <= rapidWindowMs) {
         const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : true;
         
-        // Compare parameters
         const existingParams = JSON.stringify(existing.parameters || {});
         const newParams = JSON.stringify(newEvent.parameters || {});
 
         if (samePath && (existingParams === newParams || (!existing.parameters && !newEvent.parameters))) {
           return {
             event: existing,
-            reason: `Fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
+            reason: `Rapid duplicate fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
           };
-        }
-
-        // Special check for page_viewed: 2 page_viewed calls on the same page load within 5 seconds
-        if (newEvent.name === 'page_viewed' && samePath) {
-          return {
-            event: existing,
-            reason: `Duplicate page_viewed fired ${timeDiff}ms after initial page load`
-          };
-        }
-
-        // Special check for order_created / purchase: matching order/plan ID or identical monetary value
-        if ((newEvent.name === 'order_created' || newEvent.name === 'purchase') && samePath) {
-          if (newEvent.parameters?.amount && existing.parameters?.amount && newEvent.parameters.amount === existing.parameters.amount) {
-            return {
-              event: existing,
-              reason: `Duplicate order conversion fired ${timeDiff}ms after previous order with same value (${newEvent.parameters.amount})`
-            };
-          }
         }
       }
     }
