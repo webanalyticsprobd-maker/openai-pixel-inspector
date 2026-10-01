@@ -91,8 +91,8 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     batch: rawEvent.batch || (tabContext.obref ? { obref: tabContext.obref } : null),
     eventEnvelope: rawEvent.eventEnvelope || null,
     attribution: {
-      oppref: rawEvent.obref || tabContext.obref || tabContext.oppref || null,
-      obref: rawEvent.obref || tabContext.obref || tabContext.oppref || null
+      oppref: rawEvent.oppref || tabContext.oppref || null,
+      obref: rawEvent.obref || (rawEvent.batch && rawEvent.batch.obref) || tabContext.obref || null
     },
     network: {
       detected: Boolean(rawEvent.network?.detected),

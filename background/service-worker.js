@@ -134,18 +134,33 @@ async function scanBrowserCookiesForTab(tabId, url) {
   try {
     const cookieOppref = await chrome.cookies.get({ url: url, name: '__oppref' }).catch(() => null);
     const cookieObref = await chrome.cookies.get({ url: url, name: '__obref' }).catch(() => null);
-    const cookie = cookieObref || cookieOppref;
     const state = getOrCreateTabState(tabId);
-    if (cookie && cookie.value) {
+    let updated = false;
+
+    if (cookieOppref && cookieOppref.value) {
+      const decodedOppref = decodeURIComponent(cookieOppref.value);
+      state.attribution.cookieOpprefDetected = true;
       state.attribution.cookieDetected = true;
-      const decoded = decodeURIComponent(cookie.value);
-      state.attribution.obref = decoded;
-      state.attribution.oppref = decoded;
+      state.attribution.oppref = decodedOppref;
       if (!state.attribution.source) {
         state.attribution.source = 'cookie';
       }
-      state.attribution.details.cookieValue = decoded;
-      state.attribution.details.expirationDate = cookie.expirationDate;
+      state.attribution.details.cookieOpprefValue = decodedOppref;
+      state.attribution.details.cookieValue = decodedOppref;
+      state.attribution.details.opprefExpirationDate = cookieOppref.expirationDate;
+      updated = true;
+    }
+
+    if (cookieObref && cookieObref.value) {
+      const decodedObref = decodeURIComponent(cookieObref.value);
+      state.attribution.cookieObrefDetected = true;
+      state.attribution.obref = decodedObref;
+      state.attribution.details.cookieObrefValue = decodedObref;
+      state.attribution.details.obrefExpirationDate = cookieObref.expirationDate;
+      updated = true;
+    }
+
+    if (updated) {
       state.lastUpdated = Date.now();
       updateBadge(tabId, state);
     }
@@ -205,12 +220,10 @@ function processTrackingNetworkPayload(tabId, netEntry) {
     }
   }
 
-  // Extract obref from Network Payload
+  // Extract obref from Network Payload (Do NOT overwrite oppref!)
   const obrefVal = parsedPayload?.obref || queryParams.obref || null;
   if (obrefVal) {
     state.attribution.obref = obrefVal;
-    state.attribution.oppref = obrefVal;
-    state.attribution.source = 'network';
     state.attribution.details.networkPayload = obrefVal;
   }
 
@@ -269,11 +282,12 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           query: queryParams,
           batch: { obref: obrefVal },
           eventEnvelope: evtItem,
-          obref: obrefVal
+          obref: obrefVal,
+          oppref: state.attribution.oppref || null
         }, {
           url: evtSrc,
           pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
-          oppref: obrefVal || state.attribution.oppref || null,
+          oppref: state.attribution.oppref || null,
           obref: obrefVal || state.attribution.obref || null
         });
 
@@ -290,8 +304,8 @@ function processTrackingNetworkPayload(tabId, netEntry) {
         normalized.query = queryParams;
         normalized.batch = { obref: obrefVal };
         normalized.eventEnvelope = evtItem;
-        normalized.attribution.obref = obrefVal || null;
-        normalized.attribution.oppref = obrefVal || null;
+        normalized.attribution.obref = obrefVal || state.attribution.obref || null;
+        normalized.attribution.oppref = state.attribution.oppref || null;
         store.addEvent(normalized);
       }
     });
@@ -339,11 +353,12 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
           query: queryParams,
           batch: { obref: obrefVal },
-          obref: obrefVal
+          obref: obrefVal,
+          oppref: state.attribution.oppref || null
         }, {
           url: state.url,
           pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
-          oppref: obrefVal || state.attribution.oppref || null,
+          oppref: state.attribution.oppref || null,
           obref: obrefVal || state.attribution.obref || null
         });
 
@@ -359,8 +374,8 @@ function processTrackingNetworkPayload(tabId, netEntry) {
         }
         normalized.query = queryParams;
         normalized.batch = { obref: obrefVal };
-        normalized.attribution.obref = obrefVal || null;
-        normalized.attribution.oppref = obrefVal || null;
+        normalized.attribution.obref = obrefVal || state.attribution.obref || null;
+        normalized.attribution.oppref = state.attribution.oppref || null;
         store.addEvent(normalized);
       }
       state.events = store.events;
@@ -465,11 +480,9 @@ if (typeof chrome.webRequest !== 'undefined' && chrome.webRequest.onBeforeReques
           }
         }
 
-        // Extract obref from Network Payload
+        // Extract obref from Network Payload (Do NOT overwrite oppref!)
         if (parsedPayload && parsedPayload.obref) {
           state.attribution.obref = parsedPayload.obref;
-          state.attribution.oppref = parsedPayload.obref;
-          state.attribution.source = 'network';
           state.attribution.details.networkPayload = parsedPayload.obref;
         }
 

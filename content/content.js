@@ -67,9 +67,12 @@
   function scanAttribution() {
     const attribution = {
       oppref: null,
+      obref: null,
       source: null,
       urlDetected: false,
       cookieDetected: false,
+      cookieOpprefDetected: false,
+      cookieObrefDetected: false,
       storageDetected: false,
       details: {}
     };
@@ -82,7 +85,7 @@
           attribution.oppref = val.trim();
           attribution.source = 'url';
           attribution.urlDetected = true;
-          attribution.details.urlParam = val;
+          attribution.details.urlParam = val.trim();
         }
       }
     } catch {}
@@ -94,12 +97,23 @@
         if (name === '__oppref') {
           const val = rest.join('=');
           if (val) {
+            const decoded = decodeURIComponent(val);
+            attribution.cookieOpprefDetected = true;
             attribution.cookieDetected = true;
             if (!attribution.oppref) {
-              attribution.oppref = decodeURIComponent(val);
+              attribution.oppref = decoded;
               attribution.source = 'cookie';
             }
-            attribution.details.cookieValue = decodeURIComponent(val);
+            attribution.details.cookieOpprefValue = decoded;
+            attribution.details.cookieValue = decoded;
+          }
+        } else if (name === '__obref') {
+          const val = rest.join('=');
+          if (val) {
+            const decoded = decodeURIComponent(val);
+            attribution.cookieObrefDetected = true;
+            attribution.obref = decoded;
+            attribution.details.cookieObrefValue = decoded;
           }
         }
       }
