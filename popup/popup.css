@@ -487,9 +487,25 @@ html, body {
 }
 
 .copyable-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
+
+.copyable-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-height: 1.4;
+}
+
+.btn-copy-inline {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .info-tooltip-trigger {
@@ -1069,6 +1085,7 @@ html, body {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: auto;
 }
 
 .tree-table tr {
@@ -1076,7 +1093,7 @@ html, body {
 }
 
 .tree-table td {
-  padding: 5px 4px;
+  padding: 6px 5px;
   vertical-align: top;
 }
 
@@ -1087,7 +1104,7 @@ html, body {
 }
 
 .tree-group-header-cell {
-  padding: 4px 6px !important;
+  padding: 5px 6px !important;
   font-size: 10px !important;
   font-weight: 700 !important;
   letter-spacing: 0.06em !important;
@@ -1097,12 +1114,14 @@ html, body {
 }
 
 .tree-key-cell {
-  width: 38%;
+  width: 36%;
+  min-width: 110px;
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-weight: 500;
   font-size: 11.5px;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .tree-param-key {
@@ -1118,19 +1137,22 @@ html, body {
   font-size: 10.5px;
   color: var(--text-muted);
   margin-left: 2px;
-  white-space: nowrap;
+  display: inline-block;
 }
 
 .tree-val-cell {
-  width: 44%;
+  width: 50%;
   color: var(--text-main);
-  word-break: break-all;
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .tree-status-cell {
-  width: 18%;
+  width: 14%;
   text-align: right;
   white-space: nowrap;
+  vertical-align: top;
 }
 
 /* Inline Validation Status Pills */
@@ -1430,7 +1452,6 @@ html, body {
 }
 
 /* Collapsible Interactive JSON Viewer */
-/* Collapsible Interactive JSON Viewer */
 .json-viewer-box {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1438,13 +1459,16 @@ html, body {
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: 11.5px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .json-viewer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: 5px 8px;
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -1468,7 +1492,7 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 4px;
+  padding: 2px 6px;
   border-radius: 3px;
 }
 
@@ -1477,13 +1501,15 @@ html, body {
 }
 
 .json-viewer-tree {
-  padding: 6px 8px;
-  max-height: 250px;
+  padding: 8px 10px;
+  max-height: 380px;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior: contain;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.45;
+  box-sizing: border-box;
 }
 
 .json-node {
@@ -1492,14 +1518,16 @@ html, body {
 
 .json-line {
   display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 3px;
-  line-height: 1.4;
-  padding: 0;
+  line-height: 1.45;
+  padding: 1px 0;
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11.5px;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .json-toggle-line {
@@ -1520,6 +1548,7 @@ html, body {
   height: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
+  margin-top: 2px;
   transition: transform 0.15s ease;
 }
 
@@ -1530,6 +1559,7 @@ html, body {
 .json-key {
   color: #7c3aed;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 [data-theme="dark"] .json-key {
@@ -1538,6 +1568,8 @@ html, body {
 
 .json-string {
   color: #059669;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 [data-theme="dark"] .json-string {
@@ -1590,6 +1622,23 @@ html, body {
 
 .json-node.open > .json-children {
   display: block;
+}
+
+.payload-code {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  max-height: 350px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ==========================================================================

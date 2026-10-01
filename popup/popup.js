@@ -138,11 +138,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Helper to make copyable element
   function makeCopyable(text, displayHtml, extraClass = '') {
-    if (!text) return displayHtml || '<span style="color:var(--text-muted);">None</span>';
+    if (!text && text !== 0) return displayHtml || '<span style="color:var(--text-muted);">None</span>';
+    const content = (displayHtml !== undefined && displayHtml !== null) ? displayHtml : escapeHtml(String(text));
     return `
       <span class="copyable-inline ${extraClass}">
-        <span>${displayHtml || escapeHtml(text)}</span>
-        <button class="btn-copy-inline" data-copy="${escapeHtml(text)}" title="Copy value">${ICONS.copy}</button>
+        <span class="copyable-text">${content}</span>
+        <button class="btn-copy-inline" data-copy="${escapeHtml(String(text))}" title="Copy value">${ICONS.copy}</button>
       </span>
     `;
   }
@@ -581,8 +582,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     '__oppref': 'Ad Attribution Cookie',
 
     // EVENT ENVELOPE
-    'type': 'Event Type',
-    'id': 'Event ID',
     'timestamp_ms': 'Timestamp',
     'source_url': 'Source URL',
     'referrer_url': 'Referrer URL',
@@ -604,6 +603,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     'name': 'Item Name',
     'brand': 'Brand',
     'category': 'Category',
+    'item_id': 'Item ID',
+    'product_id': 'Product ID',
+    'product': 'Product',
+    'sku': 'SKU',
+    'description': 'Description',
+    'url': 'URL',
+    'search_query': 'Search Query',
+    'search_string': 'Search Query',
+    'payment_type': 'Payment Type',
 
     // USER MATCHING
     'email_sha256': 'Hashed Email',
@@ -618,29 +626,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     'user.in': 'User Identity',
     'user.fm': 'Form Matching',
     'eid': 'External ID',
-    'em': 'Hashed Email'
+    'em': 'Hashed Email',
+    'ph': 'Hashed Phone',
+    'fn': 'Hashed First Name',
+    'ln': 'Hashed Last Name',
+    'ct': 'City',
+    'st_region': 'State / Region',
+    'zp': 'Zip / Postal Code'
   };
 
   function renderKeyDisplay(rawKey, category = 'DATA') {
     if (!rawKey) return '';
     const cleanKey = String(rawKey).replace(/^(query|batch|data|event)\./, '');
     
-    let label = PARAM_PLAIN_LABELS[cleanKey] || PARAM_PLAIN_LABELS[rawKey];
+    let label = '';
+    if (cleanKey === 'type') {
+      label = (category === 'QUERY' || category === 'EVENT') ? 'Event Type' : 'Content Type';
+    } else if (cleanKey === 'id') {
+      label = (category === 'EVENT') ? 'Event ID' : 'Item ID';
+    } else {
+      label = PARAM_PLAIN_LABELS[cleanKey] || PARAM_PLAIN_LABELS[rawKey];
+    }
     
     if (!label) {
-      if (cleanKey === 'type') {
-        label = (category === 'QUERY' || category === 'EVENT') ? 'Event Type' : 'Data Type';
-      } else if (cleanKey === 'id') {
-        label = (category === 'EVENT') ? 'Event ID' : 'Item ID';
-      } else {
-        const info = getParameterInfo(cleanKey, category);
-        if (info && info.name && info.name !== 'Custom Parameter' && !info.name.startsWith('Payload Parameter')) {
-          label = info.name.split('(')[0].trim();
-        }
+      const info = getParameterInfo(cleanKey, category);
+      if (info && info.name && info.name !== 'Custom Parameter' && !info.name.startsWith('Payload Parameter')) {
+        label = info.name.split('(')[0].trim();
       }
     }
 
-    if (label && label.toLowerCase() !== cleanKey.toLowerCase()) {
+    if (label) {
       return `<span class="tree-param-key">${escapeHtml(cleanKey)}</span> <span class="tree-param-label">(${escapeHtml(label)})</span>`;
     }
     return `<span class="tree-param-key">${escapeHtml(cleanKey)}</span>`;
@@ -998,12 +1013,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           <tbody>
             <tr>
               <td class="tree-key-cell">${renderKeyDisplay('oppref', 'ATTRIBUTION')}</td>
-              <td class="tree-val-cell mono">${oppref ? makeCopyable(oppref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(oppref) + '</span>') : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
+              <td class="tree-val-cell mono">${oppref ? makeCopyable(oppref) : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
               <td class="tree-status-cell">${oppref ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not detected</span>'}</td>
             </tr>
             <tr>
               <td class="tree-key-cell">${renderKeyDisplay('obref', 'ATTRIBUTION')}</td>
-              <td class="tree-val-cell mono">${obref ? makeCopyable(obref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(obref) + '</span>') : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
+              <td class="tree-val-cell mono">${obref ? makeCopyable(obref) : '<span style="color:var(--text-muted)">Not detected</span>'}</td>
               <td class="tree-status-cell">${obref ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not detected</span>'}</td>
             </tr>
           </tbody>
@@ -1037,7 +1052,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           combinedHierarchyRows += `
             <tr>
               <td class="tree-key-cell">${renderKeyDisplay(qk, 'QUERY')}</td>
-              <td class="tree-val-cell mono">${makeCopyable(String(qv), escapeHtml(String(qv)))}</td>
+              <td class="tree-val-cell mono">${makeCopyable(String(qv))}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
           `;
@@ -1052,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <tr class="tree-group-header-row"><td colspan="3" class="tree-group-header-cell">BATCH</td></tr>
           <tr>
             <td class="tree-key-cell">${renderKeyDisplay('obref', 'BATCH')}</td>
-            <td class="tree-val-cell mono">${makeCopyable(bObref, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(bObref) + '</span>')}</td>
+            <td class="tree-val-cell mono">${makeCopyable(bObref)}</td>
             <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓ Present</span></td>
           </tr>
         `;
@@ -1069,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         </tr>
         <tr>
           <td class="tree-key-cell">${renderKeyDisplay('id', 'EVENT')}</td>
-          <td class="tree-val-cell mono">${(envParams.id || evt.eventId) ? makeCopyable(envParams.id || evt.eventId, '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(envParams.id || evt.eventId) + '</span>') : '<span style="color:var(--text-muted)">Not Sent</span>'}</td>
+          <td class="tree-val-cell mono">${(envParams.id || evt.eventId) ? makeCopyable(envParams.id || evt.eventId) : '<span style="color:var(--text-muted)">Not Sent</span>'}</td>
           <td class="tree-status-cell">${(envParams.id || evt.eventId) ? '<span class="val-pill val-pill-valid">✓ Present</span>' : '<span class="val-pill val-pill-muted">Not Sent</span>'}</td>
         </tr>
         <tr>
@@ -1079,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         </tr>
         <tr>
           <td class="tree-key-cell">${renderKeyDisplay('source_url', 'EVENT')}</td>
-          <td class="tree-val-cell mono">${makeCopyable(envParams.source_url || evt.url || currentTabState.url || '', '<span class="truncate" style="display:inline-block; max-width:180px;">' + escapeHtml(envParams.source_url || evt.url || currentTabState.url || '') + '</span>')}</td>
+          <td class="tree-val-cell mono">${makeCopyable(envParams.source_url || evt.url || currentTabState.url || '')}</td>
           <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
         </tr>
       `;
@@ -1144,12 +1159,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           <tbody>
             <tr>
               <td class="tree-key-cell">URL</td>
-              <td class="tree-val-cell mono">${makeCopyable(pageUrl, '<span class="truncate" style="display:inline-block; max-width:200px;">' + escapeHtml(pageUrl) + '</span>')}</td>
+              <td class="tree-val-cell mono">${makeCopyable(pageUrl)}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
             <tr>
               <td class="tree-key-cell">Referrer</td>
-              <td class="tree-val-cell mono">${referrer ? makeCopyable(referrer, '<span class="truncate" style="display:inline-block; max-width:200px;">' + escapeHtml(referrer) + '</span>') : '<span style="color:var(--text-muted)">Direct / None</span>'}</td>
+              <td class="tree-val-cell mono">${referrer ? makeCopyable(referrer) : '<span style="color:var(--text-muted)">Direct / None</span>'}</td>
               <td class="tree-status-cell"><span class="val-pill ${referrer ? 'val-pill-valid' : 'val-pill-muted'}">${referrer ? '✓' : 'None'}</span></td>
             </tr>
             <tr>
@@ -1182,7 +1197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             </tr>
             <tr>
               <td class="tree-key-cell">Endpoint</td>
-              <td class="tree-val-cell mono">${makeCopyable(netUrl, '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(netUrl) + '</span>')}</td>
+              <td class="tree-val-cell mono">${makeCopyable(netUrl)}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
             <tr>
@@ -1296,7 +1311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <tbody>
             <tr>
               <td class="tree-key-cell">Request URL</td>
-              <td class="tree-val-cell mono">${makeCopyable(rawRequestObj.request_url, '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(rawRequestObj.request_url) + '</span>')}</td>
+              <td class="tree-val-cell mono">${makeCopyable(rawRequestObj.request_url)}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
             <tr>
@@ -1311,12 +1326,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             </tr>
             <tr>
               <td class="tree-key-cell">Query String</td>
-              <td class="tree-val-cell mono">${makeCopyable(JSON.stringify(rawRequestObj.query_parameters), '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(JSON.stringify(rawRequestObj.query_parameters)) + '</span>')}</td>
+              <td class="tree-val-cell mono">${makeCopyable(JSON.stringify(rawRequestObj.query_parameters))}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
             <tr>
               <td class="tree-key-cell">Payload</td>
-              <td class="tree-val-cell mono">${makeCopyable(JSON.stringify(rawRequestObj.request_payload), '<span class="truncate" style="display:inline-block; max-width:190px;">' + escapeHtml(JSON.stringify(rawRequestObj.request_payload)) + '</span>')}</td>
+              <td class="tree-val-cell mono">${makeCopyable(JSON.stringify(rawRequestObj.request_payload))}</td>
               <td class="tree-status-cell"><span class="val-pill val-pill-valid">✓</span></td>
             </tr>
           </tbody>
