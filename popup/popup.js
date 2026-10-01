@@ -36,23 +36,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Tab counters
   const tabCountEvents = document.getElementById('tab-count-events');
-  const tabCountFunnel = document.getElementById('tab-count-funnel');
-  const tabCountDatalayer = document.getElementById('tab-count-datalayer');
   const tabCountIssues = document.getElementById('tab-count-issues');
 
   // Events Tab elements
   const eventSearchInput = document.getElementById('event-search-input');
   const filterChips = document.querySelectorAll('.filter-chip');
   const eventsListContainer = document.getElementById('events-list-container');
-
-  // Funnel Tab elements
-  const funnelRateBadge = document.getElementById('funnel-rate-badge');
-  const funnelPipelineContainer = document.getElementById('funnel-pipeline-container');
-
-  // Data Layer Tab elements
-  const gtmContainerBadge = document.getElementById('gtm-container-badge');
-  const gtmContainerPills = document.getElementById('gtm-container-pills');
-  const datalayerListContainer = document.getElementById('datalayer-list-container');
 
   // Issues Tab elements
   const issuesStatusBadge = document.getElementById('issues-status-badge');
@@ -92,7 +81,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   let activeModalJson = '';
   const expandedEventIds = new Set();
   const expandedPayloadEventIds = new Set();
-  const expandedDlIndices = new Set();
 
   // ==========================================
   // SVG Icon System (Professional & Zero Emojis)
@@ -372,8 +360,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderAll() {
     renderOverview();
     renderEvents();
-    renderFunnel();
-    renderDataLayer();
     renderIssues();
     renderAudit();
   }
@@ -482,8 +468,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Navigation Count Badges
     tabCountEvents.textContent = events.length;
-    tabCountFunnel.textContent = report.funnel.completedCount + '/5';
-    tabCountDatalayer.textContent = dataLayer.length || 0;
     tabCountIssues.textContent = totalDiagnostics;
 
     // Latest Observed Event Snapshot (Clean, compact 3-line layout)
@@ -1460,146 +1444,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // ==========================================
-  // 8. Funnel Journey Renderer
-  // ==========================================
-  function renderFunnel() {
-    if (!currentTabState) return;
-    const report = generateAuditReport(currentTabState);
-    const funnel = report.funnel;
-
-    // Progress badge (Teal/Neutral progress styling instead of alert orange)
-    funnelRateBadge.textContent = funnel.completionPercentage + '% Completed (' + funnel.completedCount + '/5)';
-    if (funnel.completionPercentage === 100) {
-      funnelRateBadge.className = 'badge badge-success';
-    } else if (funnel.completionPercentage > 0) {
-      funnelRateBadge.className = 'badge badge-info';
-    } else {
-      funnelRateBadge.className = 'badge badge-neutral';
-    }
-
-    let funnelHtml = '';
-    funnel.steps.forEach((step) => {
-      const isTriggered = step.detected;
-      const timeStr = step.latestTimestamp ? formatTimestamp(step.latestTimestamp) : '';
-
-      // Check if this step event had parameter errors/warnings
-      let stepSubText = 'Action pending in session';
-      let statusBadgeHtml = '';
-
-      if (isTriggered) {
-        const stepEvt = currentTabState.events ? currentTabState.events.find(e => e.name === step.name) : null;
-        const valResults = (stepEvt && stepEvt.validation && stepEvt.validation.parameterResults) ? Object.values(stepEvt.validation.parameterResults) : [];
-        const errorCount = valResults.filter(r => r.severity === 'error' || r.valid === false).length;
-        const warningCount = valResults.filter(r => r.severity === 'warning').length;
-
-        if (errorCount > 0) {
-          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered') + ' <span class="badge badge-error" style="font-size:10px; padding:1px 5px; margin-left:4px;">' + errorCount + ' issue</span>';
-          stepSubText = '<span style="color:var(--status-error);">' + errorCount + ' parameter error (' + (errorCount === 1 ? 'e.g. amount' : 'parameters') + ')</span> &bull; Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent');
-        } else if (warningCount > 0) {
-          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered') + ' <span class="badge badge-warning" style="font-size:10px; padding:1px 5px; margin-left:4px;">' + warningCount + ' warning</span>';
-          stepSubText = 'Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent');
-        } else {
-          statusBadgeHtml = renderStatusBadge('triggered', 'Triggered');
-          stepSubText = 'Event ID: ' + (step.hasEventId ? ('<code>' + escapeHtml(step.eventId) + '</code>') : 'Not sent') + (step.hasAmount ? ' &bull; Amount set' : '');
-        }
-      } else {
-        statusBadgeHtml = renderStatusBadge('neutral', 'Not triggered');
-      }
-
-      funnelHtml += `
-        <div class="funnel-step-row ${isTriggered ? 'completed' : 'pending'}">
-          <div class="funnel-step-disc">${step.stepNumber}</div>
-          <div class="funnel-step-content">
-            <span class="funnel-step-title">${escapeHtml(step.label)}</span>
-            <span class="funnel-step-sub">${stepSubText}</span>
-          </div>
-          <div class="funnel-step-meta">
-            ${timeStr ? ('<span class="mono" style="font-size: 11px; color: var(--text-muted);">' + timeStr + '</span>') : ''}
-            ${statusBadgeHtml}
-          </div>
-        </div>
-      `;
-    });
-    funnelPipelineContainer.innerHTML = funnelHtml;
-  }
-
-  // ==========================================
-  // 9. Data Layer Developer Feed Renderer
-  // ==========================================
-  function renderDataLayer() {
-    if (!currentTabState) return;
-    const gtmContainers = currentTabState.gtmContainers || [];
-    const dataLayerEvents = currentTabState.dataLayer || [];
-
-    if (gtmContainers.length > 0) {
-      gtmContainerBadge.textContent = gtmContainers.length + ' Detected';
-      gtmContainerBadge.className = 'badge badge-success';
-      gtmContainerPills.innerHTML = gtmContainers.map((gId) => `
-        <span class="gtm-pill">
-          <span>${escapeHtml(gId)}</span>
-          <button class="btn-copy-inline" data-copy="${escapeHtml(gId)}" title="Copy GTM ID">${ICONS.copy}</button>
-        </span>
-      `).join(' ');
-      attachCopyListeners(gtmContainerPills);
-    } else {
-      gtmContainerBadge.textContent = 'None Detected';
-      gtmContainerBadge.className = 'badge badge-neutral';
-      gtmContainerPills.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">No Google Tag Manager containers detected.</span>';
-    }
-
-    if (dataLayerEvents.length === 0) {
-      datalayerListContainer.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-icon">${ICONS.emptyEvents}</span>
-          <p class="empty-text">No window.dataLayer pushes recorded.</p>
-          <span class="empty-subtext">Events pushed to window.dataLayer appear here in real time.</span>
-        </div>
-      `;
-      return;
-    }
-
-    datalayerListContainer.innerHTML = '';
-    dataLayerEvents.slice().reverse().forEach((dl, idx) => {
-      const isExpanded = expandedDlIndices.has(idx);
-      const evtName = dl.event || (dl.data && dl.data.event) || 'dataLayer.push';
-      const timeStr = formatTimestamp(dl.timestamp);
-
-      // Distinguish GTM core lifecycle vs Custom / Ecom
-      const isGtmCore = ['gtm.js', 'gtm.dom', 'gtm.load', 'gtm.historyChange-v2', 'gtm.init'].includes(evtName);
-      const badgeClass = isGtmCore ? 'dl-badge dl-badge-core' : 'dl-badge dl-badge-custom';
-      const badgeLabel = isGtmCore ? 'GTM Core' : 'Custom';
-
-      const row = document.createElement('div');
-      row.className = 'dl-row ' + (isExpanded ? 'open' : '');
-      row.innerHTML = `
-        <div class="dl-row-header">
-          <div class="dl-row-left">
-            <span class="dl-chevron">${ICONS.chevronDown}</span>
-            <span class="dl-time">${timeStr}</span>
-            <span class="${badgeClass}">${badgeLabel}</span>
-            <span class="dl-name">${escapeHtml(evtName)}</span>
-          </div>
-          <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${Object.keys(dl.data || {}).length} keys</span>
-        </div>
-        <div class="dl-drawer">
-          <pre class="payload-code">${escapeHtml(JSON.stringify(dl.data || dl, null, 2))}</pre>
-        </div>
-      `;
-
-      row.addEventListener('click', () => {
-        if (expandedDlIndices.has(idx)) {
-          expandedDlIndices.delete(idx);
-          row.classList.remove('open');
-        } else {
-          expandedDlIndices.add(idx);
-          row.classList.add('open');
-        }
-      });
-
-      datalayerListContainer.appendChild(row);
-    });
-  }
 
 
   // ==========================================

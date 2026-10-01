@@ -77,16 +77,6 @@
               <span>Events</span>
               <span class="tab-count-tag" id="tab-count-events">0</span>
             </button>
-            <button class="nav-tab" data-tab="funnel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-              <span>Funnel</span>
-              <span class="tab-count-tag" id="tab-count-funnel">0/5</span>
-            </button>
-            <button class="nav-tab" data-tab="datalayer">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-              <span>Data Layer</span>
-              <span class="tab-count-tag" id="tab-count-datalayer">0</span>
-            </button>
             <button class="nav-tab" data-tab="issues">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span>Issues</span>
@@ -192,51 +182,7 @@
         </div>
       </div>
 
-      <!-- TAB 3: FUNNEL JOURNEY -->
-      <div class="tab-pane" id="pane-funnel">
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <span class="card-title">E-Commerce Funnel Journey</span>
-              <span class="card-subtitle">5-step conversion pipeline</span>
-            </div>
-            <span id="funnel-rate-badge" class="badge badge-neutral">0% Completed</span>
-          </div>
-          <div class="funnel-pipeline" id="funnel-pipeline-container">
-            <!-- Dynamically populated -->
-          </div>
-        </section>
-      </div>
-
-      <!-- TAB 4: GTM & DATA LAYER -->
-      <div class="tab-pane" id="pane-datalayer">
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <span class="card-title">Google Tag Manager</span>
-              <span class="card-subtitle">Container Detection</span>
-            </div>
-            <span id="gtm-container-badge" class="badge badge-neutral">Scanning</span>
-          </div>
-          <div id="gtm-container-pills" class="gtm-pills-container">
-            <!-- Dynamically populated -->
-          </div>
-        </section>
-
-        <section class="card" style="margin-top: 10px;">
-          <div class="card-header">
-            <div>
-              <span class="card-title">Data Layer Feed</span>
-              <span class="card-subtitle">window.dataLayer pushes</span>
-            </div>
-          </div>
-          <div class="datalayer-feed" id="datalayer-list-container">
-            <!-- Dynamically populated -->
-          </div>
-        </section>
-      </div>
-
-      <!-- TAB 4: ISSUES & DIAGNOSTICS -->
+      <!-- TAB 3: ISSUES & DIAGNOSTICS -->
       <div class="tab-pane" id="pane-issues">
         <section class="card">
           <div class="card-header">
