@@ -1,56 +1,56 @@
 /* ==========================================================================
-   OpenAI Ads Pixel Inspector — Professional Developer & Analytics Debugger
-   Reference Style: Stripe Dashboard + Linear + Chrome DevTools + OpenAI Branding
+   OpenAI Ads Pixel Inspector — Official Brand Design System
+   Reference: OpenAI Brand Guidelines (openai.com/brand) + ChatGPT UI
    ========================================================================== */
 
 :root {
-  /* Surface & Background */
-  --bg-app: #f7f9fb;
+  /* Surface & Background (Light Mode) */
+  --bg-app: #f9f9f9;
   --bg-card: #ffffff;
-  --bg-subtle: #f0f3f6;
-  --bg-hover: #e8ecf1;
-  --bg-active: #dfe5eb;
+  --bg-subtle: #f4f4f5;
+  --bg-hover: #ececec;
+  --bg-active: #e2e2e4;
   
   /* Text & Typography */
-  --text-main: #182230;
-  --text-secondary: #526174;
-  --text-muted: #7a8899;
+  --text-main: #0d0d0d;
+  --text-secondary: #525252;
+  --text-muted: #737373;
   
   /* Borders & Dividers */
-  --border-color: #dee4ea;
-  --border-subtle: #eaeff4;
-  --border-strong: #c8d2dc;
+  --border-color: rgba(0, 0, 0, 0.09);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-strong: rgba(0, 0, 0, 0.16);
   
-  /* OpenAI Brand Accent */
+  /* OpenAI Signature Brand Accent */
   --accent-brand: #10a37f;
   --accent-brand-hover: #0d8a6b;
   --accent-brand-subtle: rgba(16, 163, 127, 0.08);
   --accent-brand-border: rgba(16, 163, 127, 0.25);
 
   /* Semantic Status Colors */
-  --status-success: #07875f;
-  --status-success-bg: rgba(7, 135, 95, 0.08);
-  --status-success-border: rgba(7, 135, 95, 0.2);
+  --status-success: #10a37f;
+  --status-success-bg: rgba(16, 163, 127, 0.08);
+  --status-success-border: rgba(16, 163, 127, 0.22);
 
-  --status-error: #d92d4c;
-  --status-error-bg: rgba(217, 45, 76, 0.08);
-  --status-error-border: rgba(217, 45, 76, 0.2);
+  --status-error: #ef4444;
+  --status-error-bg: rgba(239, 68, 68, 0.08);
+  --status-error-border: rgba(239, 68, 68, 0.22);
 
-  --status-warning: #b76e00;
-  --status-warning-bg: rgba(183, 110, 0, 0.08);
-  --status-warning-border: rgba(183, 110, 0, 0.2);
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.08);
+  --status-warning-border: rgba(245, 158, 11, 0.22);
 
-  --status-info: #2563a7;
-  --status-info-bg: rgba(37, 99, 167, 0.08);
-  --status-info-border: rgba(37, 99, 167, 0.2);
+  --status-info: #0284c7;
+  --status-info-bg: rgba(2, 132, 199, 0.08);
+  --status-info-border: rgba(2, 132, 199, 0.22);
 
-  --status-neutral: #7a8899;
-  --status-neutral-bg: rgba(122, 136, 153, 0.08);
-  --status-neutral-border: rgba(122, 136, 153, 0.2);
+  --status-neutral: #71717a;
+  --status-neutral-bg: rgba(113, 113, 122, 0.08);
+  --status-neutral-border: rgba(113, 113, 122, 0.2);
 
-  /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  /* Typography (OpenAI Brand Stack) */
+  --font-sans: "OpenAI Sans", "Söhne", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Söhne Mono", "JetBrains Mono", "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
 
   /* Component Radii */
   --radius-lg: 10px;
@@ -59,52 +59,53 @@
   --radius-pill: 9999px;
 
   /* Shadows */
-  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.05);
-  --shadow-dropdown: 0 4px 12px rgba(16, 24, 40, 0.1);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="dark"] {
-  --bg-app: #0b0f17;
-  --bg-card: #131924;
-  --bg-subtle: #192231;
-  --bg-hover: #212c3f;
-  --bg-active: #2a374d;
+  /* Surface & Background (OpenAI Signature Dark) */
+  --bg-app: #0d0d0d;
+  --bg-card: #181818;
+  --bg-subtle: #212121;
+  --bg-hover: #282828;
+  --bg-active: #323232;
 
-  --text-main: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-main: #f3f3f3;
+  --text-secondary: #b4b4b4;
+  --text-muted: #737373;
 
-  --border-color: #232e42;
-  --border-subtle: #1c2637;
-  --border-strong: #33435e;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.18);
 
   --accent-brand: #10a37f;
-  --accent-brand-hover: #15b890;
-  --accent-brand-subtle: rgba(16, 163, 127, 0.15);
-  --accent-brand-border: rgba(16, 163, 127, 0.35);
+  --accent-brand-hover: #19c37d;
+  --accent-brand-subtle: rgba(16, 163, 127, 0.16);
+  --accent-brand-border: rgba(16, 163, 127, 0.38);
 
-  --status-success: #10b981;
-  --status-success-bg: rgba(16, 185, 129, 0.12);
-  --status-success-border: rgba(16, 185, 129, 0.28);
+  --status-success: #10a37f;
+  --status-success-bg: rgba(16, 163, 127, 0.14);
+  --status-success-border: rgba(16, 163, 127, 0.3);
 
-  --status-error: #f43f5e;
-  --status-error-bg: rgba(244, 63, 94, 0.12);
-  --status-error-border: rgba(244, 63, 94, 0.28);
+  --status-error: #ef4444;
+  --status-error-bg: rgba(239, 68, 68, 0.14);
+  --status-error-border: rgba(239, 68, 68, 0.3);
 
   --status-warning: #f59e0b;
-  --status-warning-bg: rgba(245, 158, 11, 0.12);
-  --status-warning-border: rgba(245, 158, 11, 0.28);
+  --status-warning-bg: rgba(245, 158, 11, 0.14);
+  --status-warning-border: rgba(245, 158, 11, 0.3);
 
   --status-info: #38bdf8;
-  --status-info-bg: rgba(56, 189, 248, 0.12);
-  --status-info-border: rgba(56, 189, 248, 0.28);
+  --status-info-bg: rgba(56, 189, 248, 0.14);
+  --status-info-border: rgba(56, 189, 248, 0.3);
 
-  --status-neutral: #94a3b8;
-  --status-neutral-bg: rgba(148, 163, 184, 0.12);
-  --status-neutral-border: rgba(148, 163, 184, 0.28);
+  --status-neutral: #a1a1aa;
+  --status-neutral-bg: rgba(161, 161, 170, 0.12);
+  --status-neutral-border: rgba(161, 161, 170, 0.25);
 
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-dropdown: 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 /* ==========================================================================
@@ -123,7 +124,7 @@ html, body {
   background-color: var(--bg-app);
   color: var(--text-main);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -136,6 +137,25 @@ html, body {
   max-height: 600px;
   overflow: hidden;
   background-color: var(--bg-app);
+}
+
+/* Custom Minimalist Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 140, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 140, 140, 0.4);
 }
 
 /* Monospace Utilities */
@@ -171,12 +191,20 @@ html, body {
 .logo-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
 }
 
-.brand-logo {
-  border-radius: 50%;
+.openai-brand-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--accent-brand);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(16, 163, 127, 0.25);
 }
 
 .brand-text {
@@ -184,11 +212,30 @@ html, body {
   flex-direction: column;
 }
 
-.brand-title {
-  font-size: 14px;
+.brand-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.brand-title-openai {
+  font-size: 14.5px;
   font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text-main);
-  line-height: 1.2;
+  font-family: var(--font-sans);
+}
+
+.brand-title-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent-brand-subtle);
+  color: var(--accent-brand);
+  border: 1px solid var(--accent-brand-border);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .brand-subtitle {
@@ -196,6 +243,7 @@ html, body {
   color: var(--text-muted);
   font-weight: 400;
   letter-spacing: -0.01em;
+  margin-top: 1px;
 }
 
 .header-actions {
@@ -250,11 +298,12 @@ html, body {
   border-radius: 50%;
   background: var(--status-success);
   flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(16, 163, 127, 0.4);
 }
 
 .workspace-host {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-main);
   letter-spacing: -0.01em;
