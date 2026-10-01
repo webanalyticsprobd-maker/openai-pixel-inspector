@@ -122,28 +122,6 @@
     return attribution;
   }
 
-  /**
-   * Injects page-context bridge into MAIN world
-   */
-  function injectBridge() {
-    try {
-      const script = document.createElement('script');
-      script.src = chrome.runtime.getURL('content/page-bridge.js');
-      script.async = false;
-      const target = document.head || document.documentElement;
-      if (target) {
-        target.appendChild(script);
-        script.onload = () => script.remove();
-      } else {
-        document.addEventListener('DOMContentLoaded', () => {
-          (document.head || document.documentElement).appendChild(script);
-        }, { once: true });
-      }
-    } catch (err) {
-      console.warn('[OpenAI Pixel Inspector] Bridge injection failed:', err);
-    }
-  }
-
   function sendToPageBridge(type, payload = {}) {
     window.postMessage(
       {
@@ -256,8 +234,6 @@
   });
 
   // Initialize
-  injectBridge();
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', performFullScan);
   } else {
