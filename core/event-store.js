@@ -110,10 +110,13 @@ export class EventStore {
   }
 
   /**
-   * Action-Based Duplicate Detection
-   * Strictly differentiates between:
-   * 1. Intentional repeated user actions (e.g. clicking Add to Cart twice across seconds) -> separate legitimate events.
-   * 2. True technical duplicate event_id collisions, rapid trigger double-fires (< 1500ms), duplicate page loads (< 3000ms), or duplicate conversion transactions.
+   * Action & Batch-Based Duplicate Detection
+   * Note: Does NOT rely on event_id for duplicate detection because OpenAI SDK generates random default IDs for each event.
+   * Detects:
+   * 1. Multiple events of the same type detected within a SINGLE network request batch.
+   * 2. Duplicate page_viewed fired on the same page/route within 3000ms.
+   * 3. Rapid double-firing on the same page within 1500ms with identical parameters.
+   * 4. Duplicate conversion transactions (matching order_id, lead_id, or identical amount & currency).
    */
   detectActionDuplicate(newEvent) {
     if (!newEvent.name) return null;
@@ -121,22 +124,24 @@ export class EventStore {
     const isCustom = newEvent.validation ? newEvent.validation.isCustom : (newEvent.name === 'custom');
     const newName = (newEvent.name || '').toLowerCase();
     const newDisplay = (newEvent.displayName || '').toLowerCase();
+    const newReqId = newEvent.requestId || (newEvent.network && newEvent.network.requestId) || null;
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const existing = this.events[i];
       const existName = (existing.name || '').toLowerCase();
       const existDisplay = (existing.displayName || '').toLowerCase();
+      const isSameEventName = (newName === existName) || (newDisplay && existDisplay && newDisplay === existDisplay);
       const timeDiff = Math.abs(newEvent.timestamp - existing.timestamp);
+      const existReqId = existing.requestId || (existing.network && existing.network.requestId) || null;
 
-      // Rule 1: Exact matching explicit event_id sent multiple times (OpenAI deduplication key match)
-      if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId) {
-        const isSameName = (newName === existName) || (newDisplay && existDisplay && newDisplay === existDisplay);
-        if (isSameName) {
-          return {
-            event: existing,
-            reason: `Matching Event ID "${newEvent.eventId}" sent multiple times`
-          };
-        }
+      if (!isSameEventName) continue;
+
+      // Rule 1: Multiple events detected within the SAME network request batch
+      if (newReqId && existReqId && newReqId === existReqId) {
+        return {
+          event: existing,
+          reason: `Multiple "${newEvent.displayName || newEvent.name}" events detected in a single network request batch`
+        };
       }
 
       // Rule 2: Duplicate page_viewed event fired on same page/route within 3000ms
@@ -151,8 +156,7 @@ export class EventStore {
       }
 
       // Rule 3: Rapid double-fire on identical page within 1500ms with identical parameters
-      const isSameEventName = (newName === existName) || (newDisplay && existDisplay && newDisplay === existDisplay);
-      if (isSameEventName && timeDiff <= rapidWindowMs) {
+      if (timeDiff <= rapidWindowMs) {
         const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : (existing.url === newEvent.url);
         
         const existingParams = JSON.stringify(existing.parameters || {});
@@ -168,7 +172,7 @@ export class EventStore {
 
       // Rule 4: Duplicate conversion transactions (matching order_id, lead_id, or identical amount & currency)
       const conversionEvents = ['order_created', 'lead_created', 'subscription_created', 'appointment_scheduled', 'purchase'];
-      if (conversionEvents.includes(newName) && conversionEvents.includes(existName) && isSameEventName) {
+      if (conversionEvents.includes(newName) && conversionEvents.includes(existName)) {
         const newP = newEvent.parameters || {};
         const existP = existing.parameters || {};
         const hasMatchingOrderId = (newP.order_id && existP.order_id && String(newP.order_id) === String(existP.order_id));

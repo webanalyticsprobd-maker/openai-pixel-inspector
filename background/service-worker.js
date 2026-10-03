@@ -285,6 +285,7 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           url: evtSrc,
           timestamp: evtTs,
           caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
+          requestId: netEntry.requestId || null,
           query: queryParams,
           batch: { obref: obrefVal },
           eventEnvelope: evtItem,
@@ -297,6 +298,8 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           obref: obrefVal || state.attribution.obref || null
         });
 
+        normalized.requestId = netEntry.requestId || null;
+        normalized.network.requestId = netEntry.requestId || null;
         normalized.network.detected = true;
         normalized.network.url = url;
         normalized.network.method = method;
@@ -363,6 +366,7 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           url: state.url,
           timestamp: evtTs,
           caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
+          requestId: netEntry.requestId || null,
           query: queryParams,
           batch: { obref: obrefVal },
           eventEnvelope: parsedPayload,
@@ -375,6 +379,8 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           obref: obrefVal || state.attribution.obref || null
         });
 
+        normalized.requestId = netEntry.requestId || null;
+        normalized.network.requestId = netEntry.requestId || null;
         normalized.network.detected = true;
         normalized.network.url = url;
         normalized.network.method = method;

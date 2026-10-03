@@ -92,6 +92,7 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     _id: generateUUID(), // Internal React/DOM render key only
     eventId: explicitEventId, // Real Event ID or null (NEVER generated!)
     hasEventId: Boolean(explicitEventId),
+    requestId: rawEvent.requestId || null,
     name: eventName,
     displayName: displayName,
     custom_event_name: extractedCustomName || null,
