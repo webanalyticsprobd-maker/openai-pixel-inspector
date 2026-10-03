@@ -1768,7 +1768,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (activeTab) {
         expandedEventIds.clear();
         expandedPayloadEventIds.clear();
-        expandedDlIndices.clear();
         await chrome.runtime.sendMessage({ action: 'CLEAR_TAB_STATE', tabId: activeTab.id }).catch(() => {});
         await updateState();
       }
