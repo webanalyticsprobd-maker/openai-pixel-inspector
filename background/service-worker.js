@@ -252,8 +252,8 @@ function processTrackingNetworkPayload(tabId, netEntry) {
         return; // Exclude internal SDK events from user-facing events list
       }
 
-      // Unique Ingestion Key for Network Deduplication
-      const eventKey = evtId ? `evt_id:${evtId}` : `sig:${evtName}:${JSON.stringify(dataPayload)}:${netEntry.requestId || Math.floor(evtTs / 300)}`;
+      // Unique Ingestion Key for Network Deduplication (includes requestId to allow distinct duplicate requests to reach action duplicate detector)
+      const eventKey = `req_${netEntry.requestId || 't_' + Math.floor(evtTs / 200)}_${evtId ? `id_${evtId}` : `sig_${evtName}_${JSON.stringify(dataPayload)}`}`;
 
       if (store.hasProcessedKey(eventKey)) {
         // Already ingested from primary transport (e.g. webRequest) -> Update HTTP status/resolution
@@ -332,7 +332,7 @@ function processTrackingNetworkPayload(tabId, netEntry) {
       state.internalEvents.push(parsedPayload);
     } else {
       const dataPayload = parsedPayload.properties || parsedPayload.data || parsedPayload;
-      const eventKey = evtId ? `evt_id:${evtId}` : `sig:${evtName}:${JSON.stringify(dataPayload)}:${netEntry.requestId || Math.floor(evtTs / 300)}`;
+      const eventKey = `req_${netEntry.requestId || 't_' + Math.floor(evtTs / 200)}_${evtId ? `id_${evtId}` : `sig_${evtName}_${JSON.stringify(dataPayload)}`}`;
 
       if (store.hasProcessedKey(eventKey)) {
         for (let i = store.events.length - 1; i >= 0; i--) {

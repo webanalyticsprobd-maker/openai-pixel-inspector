@@ -890,7 +890,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const filtered = events.filter((evt) => {
       if (currentFilter === 'standard' && evt.validation && evt.validation.isCustom) return false;
       if (currentFilter === 'custom' && evt.validation && !evt.validation.isCustom) return false;
-      if (currentFilter === 'duplicates' && !evt.isDuplicate && (!evt.requestCount || evt.requestCount <= 1)) return false;
+      if (currentFilter === 'duplicates' && !evt.isDuplicate && (!evt.requestCount || evt.requestCount <= 1) && !evt.hasDuplicates) return false;
       if (currentFilter === 'errors' && evt.validation && evt.validation.status !== 'error') return false;
       if (currentFilter === 'warnings' && evt.validation && evt.validation.status !== 'warning') return false;
 
@@ -931,7 +931,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       let statusDotColor = '#10b981';
       let statusTagHtml = '';
 
-      if (evt.isDuplicate) {
+      if (evt.isDuplicate || evt.hasDuplicates || (evt.requestCount && evt.requestCount > 1)) {
         statusDotClass = 'dot-yellow';
         statusDotColor = '#f59e0b';
         statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} Double Fired (${evt.requestCount || 2}x)</span>`;

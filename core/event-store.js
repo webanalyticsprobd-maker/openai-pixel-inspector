@@ -113,27 +113,47 @@ export class EventStore {
    * Action-Based Duplicate Detection
    * Strictly differentiates between:
    * 1. Intentional repeated user actions (e.g. clicking Add to Cart twice across seconds) -> separate legitimate events.
-   * 2. True technical duplicate event_id collisions or rapid trigger double-fires (< 300ms) -> flagged as duplicate.
+   * 2. True technical duplicate event_id collisions, rapid trigger double-fires (< 1500ms), duplicate page loads (< 3000ms), or duplicate conversion transactions.
    */
   detectActionDuplicate(newEvent) {
     if (!newEvent.name) return null;
-    const rapidWindowMs = 300; // 300ms window for unintentional synchronous double-fires from duplicate listeners/triggers
+    const rapidWindowMs = 1500; // 1500ms window for unintentional rapid double-fires from duplicate listeners/triggers
+    const isCustom = newEvent.validation ? newEvent.validation.isCustom : (newEvent.name === 'custom');
+    const newName = (newEvent.name || '').toLowerCase();
+    const newDisplay = (newEvent.displayName || '').toLowerCase();
 
     for (let i = this.events.length - 1; i >= 0; i--) {
       const existing = this.events[i];
+      const existName = (existing.name || '').toLowerCase();
+      const existDisplay = (existing.displayName || '').toLowerCase();
       const timeDiff = Math.abs(newEvent.timestamp - existing.timestamp);
 
-      // Rule 1: Exact matching explicit event_id sent multiple times
-      if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId && newEvent.name === existing.name) {
-        return {
-          event: existing,
-          reason: `Matching Event ID "${newEvent.eventId}" sent multiple times`
-        };
+      // Rule 1: Exact matching explicit event_id sent multiple times (OpenAI deduplication key match)
+      if (newEvent.eventId && existing.eventId && newEvent.eventId === existing.eventId) {
+        const isSameName = (newName === existName) || (newDisplay && existDisplay && newDisplay === existDisplay);
+        if (isSameName) {
+          return {
+            event: existing,
+            reason: `Matching Event ID "${newEvent.eventId}" sent multiple times`
+          };
+        }
       }
 
-      // Rule 2: Rapid double-fire on identical page within 300ms with identical parameters
-      if (existing.name === newEvent.name && timeDiff <= rapidWindowMs) {
-        const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : true;
+      // Rule 2: Duplicate page_viewed event fired on same page/route within 3000ms
+      if ((newName === 'page_viewed' || newName === 'pageview') && (existName === 'page_viewed' || existName === 'pageview') && timeDiff <= 3000) {
+        const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : (existing.url === newEvent.url);
+        if (samePath) {
+          return {
+            event: existing,
+            reason: `Duplicate page_viewed event fired ${timeDiff}ms after initial page load on ${newEvent.pathname || newEvent.url || 'current page'}`
+          };
+        }
+      }
+
+      // Rule 3: Rapid double-fire on identical page within 1500ms with identical parameters
+      const isSameEventName = (newName === existName) || (newDisplay && existDisplay && newDisplay === existDisplay);
+      if (isSameEventName && timeDiff <= rapidWindowMs) {
+        const samePath = (existing.pathname && newEvent.pathname) ? (existing.pathname === newEvent.pathname) : (existing.url === newEvent.url);
         
         const existingParams = JSON.stringify(existing.parameters || {});
         const newParams = JSON.stringify(newEvent.parameters || {});
@@ -141,7 +161,24 @@ export class EventStore {
         if (samePath && (existingParams === newParams || (!existing.parameters && !newEvent.parameters))) {
           return {
             event: existing,
-            reason: `Rapid duplicate fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
+            reason: `Rapid duplicate "${newEvent.displayName || newEvent.name}" fired ${timeDiff}ms after previous call with identical parameters on ${newEvent.pathname || 'same page'}`
+          };
+        }
+      }
+
+      // Rule 4: Duplicate conversion transactions (matching order_id, lead_id, or identical amount & currency)
+      const conversionEvents = ['order_created', 'lead_created', 'subscription_created', 'appointment_scheduled', 'purchase'];
+      if (conversionEvents.includes(newName) && conversionEvents.includes(existName) && isSameEventName) {
+        const newP = newEvent.parameters || {};
+        const existP = existing.parameters || {};
+        const hasMatchingOrderId = (newP.order_id && existP.order_id && String(newP.order_id) === String(existP.order_id));
+        const hasMatchingLeadId = (newP.lead_id && existP.lead_id && String(newP.lead_id) === String(existP.lead_id));
+        const hasMatchingAmount = (newP.amount !== undefined && existP.amount !== undefined && newP.amount === existP.amount && newP.currency && existP.currency && newP.currency === existP.currency);
+        
+        if (hasMatchingOrderId || hasMatchingLeadId || (hasMatchingAmount && timeDiff <= 10000)) {
+          return {
+            event: existing,
+            reason: `Duplicate conversion event fired for identical transaction (order_id: ${newP.order_id || 'N/A'}, amount: ${newP.amount || 'N/A'} ${newP.currency || ''})`
           };
         }
       }

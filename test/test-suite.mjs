@@ -726,6 +726,124 @@ test('Validates opt_out type in options parameter', () => {
   assert.notStrictEqual(optIssue, undefined);
 });
 
+// 35. Detects duplicate page_viewed fired within 3000ms on the same page
+test('Detects duplicate page_viewed fired within 3000ms on the same page', () => {
+  const store = new EventStore();
+  const evt1 = normalizeEvent({
+    name: 'page_viewed',
+    url: 'https://example.com/products/item-1',
+    pathname: '/products/item-1',
+    timestamp: 1000000,
+    data: { type: 'contents' }
+  });
+  const evt2 = normalizeEvent({
+    name: 'page_viewed',
+    url: 'https://example.com/products/item-1',
+    pathname: '/products/item-1',
+    timestamp: 1001200, // 1200ms later on same page
+    data: { type: 'contents' }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[0].hasDuplicates, true);
+  assert.strictEqual(store.events[0].requestCount, 2);
+  assert.strictEqual(store.events[1].isDuplicate, true);
+  assert.strictEqual(store.events[1].duplicateStatus, '❌ Double Fired / Duplicate');
+  assert.strictEqual(store.events[1].duplicateReason.includes('page_viewed'), true);
+});
+
+// 36. Detects rapid double firing of custom events within 1500ms
+test('Detects rapid double firing of custom events within 1500ms', () => {
+  const store = new EventStore();
+  const evt1 = normalizeEvent({
+    name: 'custom',
+    custom_event_name: 'request_quote',
+    options: { custom_event_name: 'request_quote' },
+    url: 'https://example.com/quote',
+    pathname: '/quote',
+    timestamp: 1000000,
+    data: { type: 'custom', plan: 'enterprise' }
+  });
+  const evt2 = normalizeEvent({
+    name: 'custom',
+    custom_event_name: 'request_quote',
+    options: { custom_event_name: 'request_quote' },
+    url: 'https://example.com/quote',
+    pathname: '/quote',
+    timestamp: 1000850, // 850ms later with identical payload
+    data: { type: 'custom', plan: 'enterprise' }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[0].hasDuplicates, true);
+  assert.strictEqual(store.events[1].isDuplicate, true);
+  assert.strictEqual(store.events[1].duplicateReason.includes('Rapid duplicate'), true);
+  assert.strictEqual(store.events[1].duplicateReason.includes('request_quote'), true);
+});
+
+// 37. Detects duplicate conversion transaction with matching order_id
+test('Detects duplicate conversion transaction with matching order_id', () => {
+  const store = new EventStore();
+  const evt1 = normalizeEvent({
+    name: 'order_created',
+    url: 'https://example.com/checkout/success',
+    pathname: '/checkout/success',
+    timestamp: 1000000,
+    data: { type: 'contents', order_id: 'ORD_99881', amount: 9900, currency: 'USD' }
+  });
+  const evt2 = normalizeEvent({
+    name: 'order_created',
+    url: 'https://example.com/checkout/success',
+    pathname: '/checkout/success',
+    timestamp: 1005000, // 5 seconds later with identical order_id
+    data: { type: 'contents', order_id: 'ORD_99881', amount: 9900, currency: 'USD' }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[1].isDuplicate, true);
+  assert.strictEqual(store.events[1].duplicateReason.includes('ORD_99881'), true);
+});
+
+// 38. Preserves legitimate repeated actions as valid separate events
+test('Preserves legitimate repeated actions spaced apart as valid separate events', () => {
+  const store = new EventStore();
+  const evt1 = normalizeEvent({
+    name: 'items_added',
+    url: 'https://example.com/shop',
+    pathname: '/shop',
+    timestamp: 1000000,
+    data: { type: 'contents', contents: [{ id: 'prod_1', quantity: 1, amount: 2000 }] }
+  });
+  const evt2 = normalizeEvent({
+    name: 'items_added',
+    url: 'https://example.com/shop',
+    pathname: '/shop',
+    timestamp: 1003500, // 3.5 seconds later (user clicked Add to Cart again)
+    data: { type: 'contents', contents: [{ id: 'prod_2', quantity: 1, amount: 3500 }] }
+  });
+
+  store.addEvent(evt1);
+  store.addEvent(evt2);
+
+  assert.strictEqual(store.events.length, 2);
+  assert.strictEqual(store.events[0].isDuplicate, false);
+  assert.strictEqual(store.events[0].duplicateStatus, '✅ Correct');
+  assert.strictEqual(store.events[1].isDuplicate, false);
+  assert.strictEqual(store.events[1].duplicateStatus, '✅ Correct');
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);
