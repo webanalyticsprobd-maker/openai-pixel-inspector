@@ -295,13 +295,14 @@ export const EVENT_SCHEMAS = {
     dataShape: 'custom',
     category: 'custom',
     required: [],
-    optional: ['type', 'plan_id', 'amount', 'currency', 'contents'],
+    optional: ['type', 'custom_event_name', 'plan_id', 'amount', 'currency', 'contents'],
     optionsRequired: ['custom_event_name'],
     conditionalRequired: [
       { when: 'amount', require: ['currency'], message: 'Currency is required whenever amount is provided' }
     ],
     parameters: {
       type: { type: 'string', expected: 'custom', required: false, description: 'Optional data shape' },
+      custom_event_name: { type: 'string', description: 'Name of the custom event' },
       plan_id: { type: 'string', description: 'Optional plan ID' },
       amount: { type: 'integer', min: 0, minorUnit: true, description: 'Optional custom event value' },
       currency: { type: 'string', format: 'currency', description: 'ISO currency code' },

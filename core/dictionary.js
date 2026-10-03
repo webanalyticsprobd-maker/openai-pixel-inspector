@@ -194,10 +194,21 @@ export function getEventInfo(eventName) {
     };
   }
 
+  // Treat any non-standard custom event name as a custom category event
+  const formattedLabel = clean
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
   return {
-    ...DEFAULT_EVENT_INFO,
     name: clean,
-    label: clean
+    label: formattedLabel,
+    color: '#8b5cf6', // violet
+    colorName: 'violet',
+    official: false,
+    dataShape: 'custom',
+    category: 'custom',
+    description: `Custom business conversion event "${clean}" tracked on the page.`,
+    triggerMoment: 'Dispatched on specific user interactions defined by custom business requirements.'
   };
 }
 

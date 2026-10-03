@@ -26,6 +26,7 @@ import {
 import { validateEvent } from '../validators/event-validator.js';
 import { normalizeEvent } from '../core/normalizer.js';
 import { EventStore } from '../core/event-store.js';
+import { getEventInfo } from '../core/dictionary.js';
 
 let totalTests = 0;
 let passedTests = 0;
@@ -479,6 +480,161 @@ test('Detects duplicate event ID sent across multiple network requests', () => {
   assert.strictEqual(store.events[0].isDuplicate, false);
   assert.strictEqual(store.events[1].isDuplicate, true);
   assert.strictEqual(store.events[1].duplicateReason.includes('order_abc_123'), true);
+});
+
+// 24. Custom Event Network Payload with top-level custom_event_name
+test('Accurately detects custom event from wire network payload with custom_event_name', () => {
+  const rawEnvelope = {
+    type: 'custom',
+    timestamp_ms: 1791009108118,
+    id: '2e9a9c4c-f6d6-453c-8f44-da26f3f00038',
+    source_url: 'https://example.com/quote',
+    referrer_url: 'https://example.com/',
+    custom_event_name: 'get_a_quote',
+    data: { type: 'custom' }
+  };
+
+  const customEventName = rawEnvelope.custom_event_name || (rawEnvelope.data && rawEnvelope.data.custom_event_name) || (rawEnvelope.options && rawEnvelope.options.custom_event_name);
+
+  const normalized = normalizeEvent({
+    name: rawEnvelope.type,
+    custom_event_name: customEventName,
+    options: {
+      custom_event_name: customEventName,
+      event_id: rawEnvelope.id
+    },
+    parameters: rawEnvelope.data,
+    event_id: rawEnvelope.id,
+    timestamp: rawEnvelope.timestamp_ms,
+    eventEnvelope: rawEnvelope
+  });
+
+  assert.strictEqual(normalized.displayName, 'get_a_quote');
+  assert.strictEqual(normalized.custom_event_name, 'get_a_quote');
+  assert.strictEqual(normalized.validation.isCustom, true);
+  assert.strictEqual(normalized.validation.errorsCount, 0);
+  assert.strictEqual(normalized.validation.status, 'valid');
+
+  // Verify dictionary classification
+  const info = getEventInfo(normalized.displayName);
+  assert.strictEqual(info.category, 'custom');
+  assert.strictEqual(info.label, 'Get A Quote');
+});
+
+// 25. Custom Event with custom_event_name in data/options object
+test('Extracts custom_event_name from data object and options object correctly', () => {
+  const normData = normalizeEvent({
+    name: 'custom',
+    data: {
+      custom_event_name: 'calculator_used',
+      amount: 5000,
+      currency: 'USD'
+    }
+  });
+
+  assert.strictEqual(normData.displayName, 'calculator_used');
+  assert.strictEqual(normData.custom_event_name, 'calculator_used');
+  assert.strictEqual(normData.validation.errorsCount, 0);
+  assert.strictEqual(normData.validation.status, 'valid');
+
+  const normOptions = normalizeEvent({
+    name: 'custom',
+    options: {
+      custom_event_name: 'video_completed'
+    },
+    parameters: {
+      video_id: 'vid_123'
+    }
+  });
+
+  assert.strictEqual(normOptions.displayName, 'video_completed');
+  assert.strictEqual(normOptions.validation.errorsCount, 0);
+});
+
+// 26. Custom Event with direct non-standard event name
+test('Recognizes direct custom event name without false missing-name error', () => {
+  const norm = normalizeEvent({
+    name: 'download_whitepaper',
+    parameters: { file_id: 'wp_2026.pdf' }
+  });
+
+  assert.strictEqual(norm.displayName, 'download_whitepaper');
+  assert.strictEqual(norm.validation.isCustom, true);
+  assert.strictEqual(norm.validation.errorsCount, 0);
+});
+
+// 27. Truly Missing custom_event_name generates MISSING_CUSTOM_EVENT_NAME error
+test('Reports genuine error when custom_event_name is missing for type "custom"', () => {
+  const norm = normalizeEvent({
+    name: 'custom',
+    data: { type: 'custom' }
+  });
+
+  assert.strictEqual(norm.validation.errorsCount, 1);
+  assert.strictEqual(norm.validation.status, 'error');
+  const missingIssue = norm.validation.issues.find(i => i.code === 'MISSING_CUSTOM_EVENT_NAME');
+  assert.notStrictEqual(missingIssue, undefined);
+  assert.strictEqual(missingIssue.severity, 'error');
+});
+
+// 28. Malformed / Too Long custom_event_name triggers warning
+test('Validates custom_event_name length and character pattern', () => {
+  // Exceeds 64 characters
+  const tooLongName = 'a'.repeat(65);
+  const normLong = normalizeEvent({
+    name: 'custom',
+    options: { custom_event_name: tooLongName }
+  });
+  assert.strictEqual(normLong.validation.warningsCount, 1);
+  const longIssue = normLong.validation.issues.find(i => i.code === 'CUSTOM_NAME_TOO_LONG');
+  assert.notStrictEqual(longIssue, undefined);
+
+  // Invalid characters (e.g. spaces or symbols)
+  const normInvalidChars = normalizeEvent({
+    name: 'custom',
+    options: { custom_event_name: 'get a quote!' }
+  });
+  assert.strictEqual(normInvalidChars.validation.warningsCount, 1);
+  const formatIssue = normInvalidChars.validation.issues.find(i => i.code === 'CUSTOM_NAME_INVALID_FORMAT');
+  assert.notStrictEqual(formatIssue, undefined);
+});
+
+// 29. Mixed Batch with Standard and Custom Events
+test('Parses and normalizes batch containing both standard and custom events independently', () => {
+  const rawBatch = {
+    url: 'https://bzr.openai.com/v1/sdk/events?pid=4KjX1dq4C7HUw7EUpRXfMh',
+    rawPayload: {
+      obref: 'obref-uuid-999',
+      events: [
+        { type: 'page_viewed', id: 'evt_1', data: { type: 'contents' } },
+        { type: 'custom', id: 'evt_2', custom_event_name: 'schedule_demo', data: { type: 'custom' } }
+      ]
+    }
+  };
+
+  const parsed = parseOpenAINetworkBatch(rawBatch);
+  assert.strictEqual(parsed.measurementEvents.length, 2);
+
+  const norm1 = normalizeEvent({
+    name: parsed.measurementEvents[0].type,
+    parameters: parsed.measurementEvents[0].data,
+    event_id: parsed.measurementEvents[0].id
+  });
+  const norm2 = normalizeEvent({
+    name: parsed.measurementEvents[1].type,
+    custom_event_name: parsed.measurementEvents[1].custom_event_name,
+    options: { custom_event_name: parsed.measurementEvents[1].custom_event_name },
+    parameters: parsed.measurementEvents[1].data,
+    event_id: parsed.measurementEvents[1].id
+  });
+
+  assert.strictEqual(norm1.displayName, 'page_viewed');
+  assert.strictEqual(norm1.validation.isCustom, false);
+  assert.strictEqual(norm1.validation.errorsCount, 0);
+
+  assert.strictEqual(norm2.displayName, 'schedule_demo');
+  assert.strictEqual(norm2.validation.isCustom, true);
+  assert.strictEqual(norm2.validation.errorsCount, 0);
 });
 
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);

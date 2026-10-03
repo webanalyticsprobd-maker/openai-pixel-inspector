@@ -2,6 +2,18 @@
 
 All notable changes to the **OpenAI Ads Pixel Inspector** Chrome Extension will be documented in this file.
 
+## [1.8.6] - 2026-10-03
+
+### Fixed & Enhanced
+- **Custom Event Detection & Extraction**:
+  - Fixed false-positive `MISSING_CUSTOM_EVENT_NAME` error when custom events are delivered via network request payloads containing `custom_event_name` (e.g. `{"type": "custom", "custom_event_name": "get_a_quote"}`).
+  - Added multi-source resolution for `custom_event_name` across wire protocol envelope, request options, parameter dictionary, and payload data.
+  - Dynamically displayed the actual custom event name (`get_a_quote`) across popup cards, devtools inspector, search filters, and audit summaries.
+  - Preserved strict validation to catch genuine errors when custom event names are truly missing, empty, or violate naming constraints (>64 chars, invalid characters).
+  - Categorized custom event names dynamically in event dictionary with distinct purple visual indicator and clean formatting.
+  - Expanded automated test suite to 32 tests covering all custom event network and parameter scenarios.
+
+
 ## [1.0.0] - 2026-08-17
 
 ### Added

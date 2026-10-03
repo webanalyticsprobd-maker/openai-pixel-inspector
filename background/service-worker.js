@@ -239,6 +239,7 @@ function processTrackingNetworkPayload(tabId, netEntry) {
       const evtTs = evtItem.timestamp_ms || evtItem.timestamp || Date.now();
       const evtSrc = evtItem.source_url || state.url;
       const dataPayload = evtItem.data || {};
+      const customEventName = evtItem.custom_event_name || (evtItem.data && evtItem.data.custom_event_name) || (evtItem.options && evtItem.options.custom_event_name) || null;
 
       if (isInternalSdkEvent(evtItem)) {
         state.pixel.detected = true;
@@ -273,6 +274,11 @@ function processTrackingNetworkPayload(tabId, netEntry) {
 
         const normalized = normalizeEvent({
           name: evtName,
+          custom_event_name: customEventName,
+          options: {
+            custom_event_name: customEventName,
+            event_id: evtId
+          },
           parameters: dataPayload,
           event_id: evtId,
           pixelId: queryParams.pid || state.pixel.pixelIds[0] || null,
@@ -314,6 +320,7 @@ function processTrackingNetworkPayload(tabId, netEntry) {
     const evtName = parsedPayload.name || parsedPayload.event_name || parsedPayload.event || parsedPayload.type;
     const evtId = parsedPayload.event_id || parsedPayload.id || null;
     const evtTs = parsedPayload.timestamp_ms || parsedPayload.timestamp || Date.now();
+    const customEventName = parsedPayload.custom_event_name || (parsedPayload.data && parsedPayload.data.custom_event_name) || (parsedPayload.options && parsedPayload.options.custom_event_name) || null;
 
     if (isInternalSdkEvent(parsedPayload)) {
       state.pixel.detected = true;
@@ -345,6 +352,11 @@ function processTrackingNetworkPayload(tabId, netEntry) {
 
         const normalized = normalizeEvent({
           name: evtName,
+          custom_event_name: customEventName,
+          options: {
+            custom_event_name: customEventName,
+            event_id: evtId
+          },
           parameters: dataPayload,
           event_id: evtId,
           pixelId: queryParams.pid || parsedPayload.pixel_id || parsedPayload.pixelId || state.pixel.pixelIds[0] || null,
@@ -353,6 +365,7 @@ function processTrackingNetworkPayload(tabId, netEntry) {
           caller: `network (${netEntry.source || netEntry.via || 'transport'})`,
           query: queryParams,
           batch: { obref: obrefVal },
+          eventEnvelope: parsedPayload,
           obref: obrefVal,
           oppref: state.attribution.oppref || null
         }, {
@@ -374,12 +387,14 @@ function processTrackingNetworkPayload(tabId, netEntry) {
         }
         normalized.query = queryParams;
         normalized.batch = { obref: obrefVal };
+        normalized.eventEnvelope = parsedPayload;
         normalized.attribution.obref = obrefVal || state.attribution.obref || null;
         normalized.attribution.oppref = state.attribution.oppref || null;
         store.addEvent(normalized);
       }
-      state.events = store.events;
     }
+    state.events = store.events;
+  }
   }
 
   // Recalculate stats

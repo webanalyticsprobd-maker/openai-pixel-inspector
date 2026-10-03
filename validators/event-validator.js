@@ -27,14 +27,18 @@ export function validateEvent(event) {
 
   const isBuiltin = STANDARD_EVENT_NAMES.includes(canonicalName);
   const isCustomEvent = canonicalName === 'custom' || !isBuiltin;
-  const customEventName = options.custom_event_name || (isCustomEvent && canonicalName !== 'custom' ? canonicalName : null);
+  const customEventName = options.custom_event_name ||
+    event.custom_event_name ||
+    (event.eventEnvelope && event.eventEnvelope.custom_event_name) ||
+    parameters.custom_event_name ||
+    (isCustomEvent && canonicalName !== 'custom' ? canonicalName : null);
 
   // Retrieve declarative schema
   const schema = EVENT_SCHEMAS[canonicalName] || EVENT_SCHEMAS['custom'] || {
     dataShape: 'custom',
-    required: ['type'],
+    required: [],
     optional: [],
-    parameters: { type: { type: 'string', expected: 'custom', required: true } }
+    parameters: { type: { type: 'string', expected: 'custom', required: false } }
   };
 
   const validation = {
@@ -110,8 +114,18 @@ export function validateEvent(event) {
   // 3. Validate All Provided Parameters Against Schema Rules
   for (const [paramKey, paramVal] of Object.entries(parameters)) {
     const paramRule = schema.parameters ? schema.parameters[paramKey] : null;
-    const res = validateParameter(paramKey, paramVal, paramRule, parameters);
+    let res = validateParameter(paramKey, paramVal, paramRule, parameters);
     
+    // For custom events, non-standard parameter keys are valid custom attributes
+    if (isCustomEvent && res && res.code === 'PARAM_UNSUPPORTED') {
+      res = {
+        valid: true,
+        severity: 'valid',
+        code: 'CUSTOM_PARAM_VALID',
+        message: `Custom parameter "${paramKey}".`
+      };
+    }
+
     validation.parameterResults[paramKey] = res || {
       valid: true,
       severity: 'valid',
@@ -156,7 +170,7 @@ export function validateEvent(event) {
 
   // 4. Custom Event Validations
   if (isCustomEvent) {
-    if (canonicalName === 'custom' && !options.custom_event_name) {
+    if (canonicalName === 'custom' && !customEventName) {
       validation.errorsCount++;
       validation.issues.push({
         code: 'MISSING_CUSTOM_EVENT_NAME',

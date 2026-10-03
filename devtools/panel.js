@@ -785,7 +785,9 @@ function processIncomingBatch(batchData) {
 
   if (events.length > 0) {
     events.forEach((evt, idx) => {
-      const evName = evt.type || evt.name || 'openai::event';
+      const rawType = evt.type || evt.name || 'openai::event';
+      const customName = evt.custom_event_name || (evt.data && evt.data.custom_event_name) || (evt.options && evt.options.custom_event_name) || null;
+      const evName = (rawType === 'custom' && customName) ? customName : (customName || rawType);
       const evTs = evt.timestamp_ms || evt.timestamp || reqTimestamp;
       const evId = evt.id || evt.eventId || (requestId + '_' + idx);
       
@@ -794,7 +796,8 @@ function processIncomingBatch(batchData) {
         uniqueKey: evId + '_' + evTs,
         requestId: requestId,
         eventName: evName,
-        type: evName,
+        type: rawType,
+        customEventName: customName,
         data: evt.data || {},
         parameters: evt.data || {},
         sourceUrl: evt.source_url || evt.url || batchData.sourceUrl || 'https://lizenzdeals24.de/',
@@ -823,13 +826,16 @@ function processIncomingBatch(batchData) {
     });
   } else {
     // Single event or raw request
-    const evName = batchData.name || batchData.type || 'openai::event';
+    const rawType = batchData.name || batchData.type || 'openai::event';
+    const customName = batchData.custom_event_name || (batchData.data && batchData.data.custom_event_name) || (batchData.options && batchData.options.custom_event_name) || null;
+    const evName = (rawType === 'custom' && customName) ? customName : (customName || rawType);
     const item = {
       id: requestId,
       uniqueKey: requestId,
       requestId: requestId,
       eventName: evName,
-      type: evName,
+      type: rawType,
+      customEventName: customName,
       data: batchData.data || {},
       parameters: batchData.parameters || {},
       sourceUrl: batchData.sourceUrl || 'https://lizenzdeals24.de/',

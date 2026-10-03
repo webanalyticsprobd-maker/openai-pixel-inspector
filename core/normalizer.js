@@ -44,6 +44,19 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     options = Object.assign({}, rawEvent.options, options);
   }
 
+  // Extract custom_event_name from all possible sources (network envelope, options, data, rawArgs, etc.)
+  const extractedCustomName = options.custom_event_name ||
+    rawEvent.custom_event_name ||
+    (rawEvent.eventEnvelope && rawEvent.eventEnvelope.custom_event_name) ||
+    properties.custom_event_name ||
+    (rawEvent.data && rawEvent.data.custom_event_name) ||
+    (rawArgs.length >= 3 && rawArgs[2] && typeof rawArgs[2] === 'object' && rawArgs[2].custom_event_name) ||
+    null;
+
+  if (extractedCustomName) {
+    options.custom_event_name = extractedCustomName;
+  }
+
   // Extract actual Event ID if and only if explicitly sent (Never synthetic!)
   let explicitEventId = null;
   if (options.event_id && typeof options.event_id === 'string' && options.event_id.trim() !== '') {
@@ -67,7 +80,13 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     } catch {}
   }
 
-  const displayName = (eventName === 'custom' && options.custom_event_name) ? options.custom_event_name : eventName;
+  // Determine displayName
+  let displayName = eventName;
+  if (eventName === 'custom' && extractedCustomName) {
+    displayName = extractedCustomName;
+  } else if (!eventName && extractedCustomName) {
+    displayName = extractedCustomName;
+  }
 
   const normalized = {
     _id: generateUUID(), // Internal React/DOM render key only
@@ -75,6 +94,7 @@ export function normalizeEvent(rawEvent, tabContext = {}) {
     hasEventId: Boolean(explicitEventId),
     name: eventName,
     displayName: displayName,
+    custom_event_name: extractedCustomName || null,
     timestamp: timestamp,
     url: pageUrl,
     pathname: pathname || '/',
