@@ -207,7 +207,56 @@ export function validateEvent(event) {
           recommendation: 'Use clean identifiers such as "quote_requested" or "video_completed".'
         });
       }
+      if (canonicalName === 'custom' && STANDARD_EVENT_NAMES.filter(n => n !== 'custom').includes(customEventName.toLowerCase())) {
+        validation.warningsCount++;
+        validation.issues.push({
+          code: 'CUSTOM_NAME_MATCHES_STANDARD_EVENT',
+          severity: 'warning',
+          event: eventName,
+          parameter: 'custom_event_name',
+          message: `Custom event name "${customEventName}" matches an official standard event name.`,
+          recommendation: `Use the standard event name directly (e.g. oaiq("measure", "${customEventName}", ...)) instead of measuring as a custom event.`
+        });
+      }
     }
+  }
+
+  // 5. Check options.custom_event_name on standard events
+  if (!isCustomEvent && options.custom_event_name) {
+    validation.infoCount++;
+    validation.issues.push({
+      code: 'CUSTOM_EVENT_NAME_ON_STANDARD_EVENT',
+      severity: 'info',
+      event: eventName,
+      parameter: 'options.custom_event_name',
+      message: `custom_event_name is only used for custom events and is ignored for standard event "${canonicalName}".`,
+      recommendation: 'Omit custom_event_name when measuring standard events.'
+    });
+  }
+
+  // 6. Check for App Events on Browser Pixel
+  if ((canonicalName === 'app_installed' || canonicalName === 'app_opened') && event.source?.location !== 'server') {
+    validation.warningsCount++;
+    validation.issues.push({
+      code: 'PIXEL_UNSUPPORTED_APP_EVENT',
+      severity: 'warning',
+      event: eventName,
+      message: `"${canonicalName}" is not supported by the browser Measurement Pixel. Send it server-side via the Conversions API with action_source: "mobile_app".`,
+      recommendation: 'Use Conversions API (CAPI) for mobile app install and open events.'
+    });
+  }
+
+  // 7. Check options.opt_out type
+  if (options.opt_out !== undefined && typeof options.opt_out !== 'boolean') {
+    validation.warningsCount++;
+    validation.issues.push({
+      code: 'INVALID_OPT_OUT_TYPE',
+      severity: 'warning',
+      event: eventName,
+      parameter: 'options.opt_out',
+      message: `Expected boolean for options.opt_out, got ${typeof options.opt_out}.`,
+      recommendation: 'Set options.opt_out to true or false.'
+    });
   }
 
   // 5. Scan Payload & Parameters for Unhashed PII Privacy Violations

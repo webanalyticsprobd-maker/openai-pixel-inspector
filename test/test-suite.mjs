@@ -680,6 +680,52 @@ test('Handles varied custom event naming styles and arbitrary custom payloads se
   });
 });
 
+// 32. Warns when custom_event_name reuses an official standard event name
+test('Warns when custom_event_name reuses an official standard event name', () => {
+  const norm = normalizeEvent({
+    name: 'custom',
+    options: { custom_event_name: 'order_created' },
+    data: { type: 'custom' }
+  });
+
+  assert.strictEqual(norm.validation.warningsCount > 0, true);
+  const matchIssue = norm.validation.issues.find(i => i.code === 'CUSTOM_NAME_MATCHES_STANDARD_EVENT');
+  assert.notStrictEqual(matchIssue, undefined);
+  assert.strictEqual(matchIssue.severity, 'warning');
+});
+
+// 33. Flags App Events (app_installed, app_opened) as Conversions API only when called in browser
+test('Flags app_installed / app_opened as Conversions API only when triggered in browser', () => {
+  const norm = normalizeEvent({
+    name: 'app_installed',
+    source: { location: 'browser' },
+    data: { type: 'customer_action' }
+  });
+
+  assert.strictEqual(norm.validation.warningsCount > 0, true);
+  const appIssue = norm.validation.issues.find(i => i.code === 'PIXEL_UNSUPPORTED_APP_EVENT');
+  assert.notStrictEqual(appIssue, undefined);
+});
+
+// 34. Validates opt_out boolean type in options
+test('Validates opt_out type in options parameter', () => {
+  const normValid = normalizeEvent({
+    name: 'page_viewed',
+    options: { opt_out: true },
+    data: { type: 'contents' }
+  });
+  assert.strictEqual(normValid.validation.warningsCount, 0);
+
+  const normInvalid = normalizeEvent({
+    name: 'page_viewed',
+    options: { opt_out: 'yes' },
+    data: { type: 'contents' }
+  });
+  assert.strictEqual(normInvalid.validation.warningsCount, 1);
+  const optIssue = normInvalid.validation.issues.find(i => i.code === 'INVALID_OPT_OUT_TYPE');
+  assert.notStrictEqual(optIssue, undefined);
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);
