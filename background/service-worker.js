@@ -395,7 +395,6 @@ function processTrackingNetworkPayload(tabId, netEntry) {
     }
     state.events = store.events;
   }
-  }
 
   // Recalculate stats
   let total = state.events.length;
