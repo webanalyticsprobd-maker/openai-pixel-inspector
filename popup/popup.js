@@ -931,10 +931,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       let statusDotColor = '#10b981';
       let statusTagHtml = '';
 
-      if (evt.isDuplicate || evt.hasDuplicates || (evt.requestCount && evt.requestCount > 1)) {
+      if (evt.isDuplicate) {
         statusDotClass = 'dot-yellow';
         statusDotColor = '#f59e0b';
-        statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} Double Fired (${evt.requestCount || 2}x)</span>`;
+        statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} Double Fired (Duplicate)</span>`;
+      } else if (evt.hasDuplicates || (evt.requestCount && evt.requestCount > 1)) {
+        statusDotClass = 'dot-yellow';
+        statusDotColor = '#f59e0b';
+        const count = evt.requestCount > 1 ? evt.requestCount : 2;
+        statusTagHtml = `<span class="tree-event-status-tag status-warning">${ICONS.warn} Double Fired (${count}x)</span>`;
       } else if (validation.status === 'error' || (validation.errorsCount && validation.errorsCount > 0)) {
         statusDotClass = 'dot-red';
         statusDotColor = '#ef4444';
