@@ -66,17 +66,69 @@ export const STANDARD_EVENT_NAMES = [
 ];
 
 export const STANDARD_EVENT_ALIASES = {
+  // Page View
   'PageView': 'page_viewed',
+  'pageview': 'page_viewed',
+  'page_view': 'page_viewed',
+  'Page_View': 'page_viewed',
+  
+  // Add To Cart
   'AddToCart': 'items_added',
   'add_to_cart': 'items_added',
+  'item_added': 'items_added',
+  'addtocart': 'items_added',
+
+  // View Content
   'ViewContent': 'contents_viewed',
   'view_content': 'contents_viewed',
+  'item_viewed': 'contents_viewed',
+  'viewcontent': 'contents_viewed',
+
+  // Checkout
   'BeginCheckout': 'checkout_started',
+  'begin_checkout': 'checkout_started',
+  'initiate_checkout': 'checkout_started',
+  'InitiateCheckout': 'checkout_started',
+  'checkout_start': 'checkout_started',
+  'checkout': 'checkout_started',
+
+  // Purchase / Order
   'Purchase': 'order_created',
+  'purchase': 'order_created',
+  'order_placed': 'order_created',
+  'order_completed': 'order_created',
+  'order_complete': 'order_created',
+
+  // Lead
+  'Lead': 'lead_created',
+  'lead': 'lead_created',
+  'lead_submitted': 'lead_created',
+  'contact_submitted': 'lead_created',
+  'submit_lead': 'lead_created',
+
+  // Registration
   'CompleteRegistration': 'registration_completed',
+  'complete_registration': 'registration_completed',
+  'sign_up': 'registration_completed',
+  'signup': 'registration_completed',
+  'signup_completed': 'registration_completed',
+
+  // Appointment / Schedule
   'Schedule': 'appointment_scheduled',
+  'schedule': 'appointment_scheduled',
+  'schedule_appointment': 'appointment_scheduled',
+  'book_appointment': 'appointment_scheduled',
+
+  // Subscription
   'Subscribe': 'subscription_created',
-  'StartTrial': 'trial_started'
+  'subscribe': 'subscription_created',
+  'start_subscription': 'subscription_created',
+  'subscription_start': 'subscription_created',
+
+  // Trial
+  'StartTrial': 'trial_started',
+  'start_trial': 'trial_started',
+  'free_trial_started': 'trial_started'
 };
 
 /**

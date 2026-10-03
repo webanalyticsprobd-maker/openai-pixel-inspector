@@ -637,6 +637,49 @@ test('Parses and normalizes batch containing both standard and custom events ind
   assert.strictEqual(norm2.validation.errorsCount, 0);
 });
 
+// 30. Comprehensive Standard Event Aliases Recognition
+test('Resolves all common standard event aliases to official schemas with 0 errors', () => {
+  const aliasTests = [
+    { input: 'PageView', canonical: 'page_viewed', data: { type: 'contents' } },
+    { input: 'add_to_cart', canonical: 'items_added', data: { type: 'contents', amount: 1500, currency: 'USD' } },
+    { input: 'AddToCart', canonical: 'items_added', data: { type: 'contents', amount: 1500, currency: 'USD' } },
+    { input: 'ViewContent', canonical: 'contents_viewed', data: { type: 'contents' } },
+    { input: 'InitiateCheckout', canonical: 'checkout_started', data: { type: 'contents' } },
+    { input: 'Purchase', canonical: 'order_created', data: { type: 'contents', amount: 9900, currency: 'USD' } },
+    { input: 'Lead', canonical: 'lead_created', data: { type: 'customer_action' } },
+    { input: 'CompleteRegistration', canonical: 'registration_completed', data: { type: 'customer_action' } },
+    { input: 'Schedule', canonical: 'appointment_scheduled', data: { type: 'customer_action' } },
+    { input: 'Subscribe', canonical: 'subscription_created', data: { type: 'plan_enrollment', amount: 2000, currency: 'USD' } },
+    { input: 'StartTrial', canonical: 'trial_started', data: { type: 'plan_enrollment' } }
+  ];
+
+  aliasTests.forEach(({ input, canonical, data }) => {
+    const norm = normalizeEvent({ name: input, data: data });
+    assert.strictEqual(norm.validation.canonicalName, canonical);
+    assert.strictEqual(norm.validation.errorsCount, 0);
+  });
+});
+
+// 31. Varied Custom Event Naming Styles (snake_case, camelCase, kebab-case, arbitrary payloads)
+test('Handles varied custom event naming styles and arbitrary custom payloads seamlessly', () => {
+  const customCases = [
+    { name: 'calculator_used', params: { score: 95, inputs: { age: 30, goal: 'saving' } } },
+    { name: 'pdfDownload', params: { file_name: 'brochure.pdf', size_kb: 1024 } },
+    { name: 'newsletter-signup', params: { source_placement: 'footer' } },
+    { name: 'custom', options: { custom_event_name: 'request_callback' }, params: { preferred_time: 'morning' } }
+  ];
+
+  customCases.forEach((c) => {
+    const norm = normalizeEvent(c);
+    assert.strictEqual(norm.validation.isCustom, true);
+    assert.strictEqual(norm.validation.errorsCount, 0);
+    assert.strictEqual(norm.validation.status, 'valid');
+
+    const info = getEventInfo(norm.displayName);
+    assert.strictEqual(info.category, 'custom');
+  });
+});
+
 console.log(`\nTEST RESULTS: ${passedTests}/${totalTests} tests passed!`);
 if (passedTests !== totalTests) {
   process.exit(1);

@@ -19,10 +19,12 @@ export function validateEvent(event) {
   const options = event.options || {};
   const parameters = event.parameters || {};
 
-  // Resolve alias if applicable (e.g. Purchase -> order_created)
+  // Resolve alias if applicable (e.g. Purchase -> order_created, pageview -> page_viewed)
   let canonicalName = eventName;
   if (STANDARD_EVENT_ALIASES[eventName]) {
     canonicalName = STANDARD_EVENT_ALIASES[eventName];
+  } else if (typeof eventName === 'string' && STANDARD_EVENT_ALIASES[eventName.toLowerCase()]) {
+    canonicalName = STANDARD_EVENT_ALIASES[eventName.toLowerCase()];
   }
 
   const isBuiltin = STANDARD_EVENT_NAMES.includes(canonicalName);
